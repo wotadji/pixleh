@@ -13,7 +13,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   try {
     const slot = new URL(req.url).searchParams.get("slot") || "main";
     const buffer = await getStorage().get(buildMarketingBlockImageKey(params.id, slot));
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "image/jpeg",
         "Cache-Control": "public, max-age=31536000, immutable",

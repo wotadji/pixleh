@@ -16,7 +16,7 @@ export async function GET(
 ) {
   try {
     const buffer = await getStorage().get(buildCarouselSlideKey(params.studioId, params.slideId));
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "image/jpeg",
         "Cache-Control": "public, max-age=31536000, immutable",

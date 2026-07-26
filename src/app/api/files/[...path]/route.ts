@@ -110,7 +110,7 @@ export async function GET(_req: Request, { params }: { params: { path: string[] 
       buffer = await applyWatermarkIfNeeded(buffer, watermarkText);
     }
 
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "image/jpeg",
         "Cache-Control": cacheControl,

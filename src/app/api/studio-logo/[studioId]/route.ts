@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export async function GET(_req: Request, { params }: { params: { studioId: string } }) {
   try {
     const buffer = await getStorage().get(buildStudioLogoKey(params.studioId));
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "image/jpeg",
         "Cache-Control": "public, max-age=31536000, immutable",

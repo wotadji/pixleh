@@ -92,7 +92,7 @@ export async function GET(
         });
       }
 
-      return new NextResponse(chunk, {
+      return new NextResponse(new Uint8Array(chunk), {
         status: 206,
         headers: {
           ...baseHeaders,
@@ -108,7 +108,7 @@ export async function GET(
       });
     }
 
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: { ...baseHeaders, "Content-Length": String(buffer.length) },
     });
   } catch {

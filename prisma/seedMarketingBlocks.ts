@@ -11,7 +11,7 @@
  *
  * Lancer avec : npm run prisma:seed-marketing
  */
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -175,7 +175,7 @@ async function main() {
           page,
           type: blocks[i].type as any,
           position: i,
-          data: blocks[i].data,
+          data: blocks[i].data as Prisma.InputJsonValue,
         },
       });
     }

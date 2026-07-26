@@ -34,7 +34,7 @@ export async function GET(
 
     const buffer = await getStorage().get(attachment.key);
 
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": attachment.mime || "application/octet-stream",
         "Content-Disposition": `attachment; filename="${encodeURIComponent(attachment.name)}"`,
