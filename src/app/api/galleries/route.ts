@@ -1,0 +1,78 @@
+import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
+import { requireStudioSession, handleApiError } from "@/lib/access";
+import { assertGalleryQuota } from "@/lib/quotas";
+import { gallerySchema } from "@/lib/validators";
+import { slugify, randomSuffix } from "@/lib/slug";
+
+export async function GET() {
+  try {
+    const session = await requireStudioSession();
+    const galleries = await prisma.gallery.findMany({
+      where: { studioId: session.user.studioId },
+      orderBy: { createdAt: "desc" },
+      include: { client: true, _count: { select: { photos: true } } },
+    });
+    return NextResponse.json({ galleries });
+  } catch (e) {
+    return handleApiError(e);
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const session = await requireStudioSession();
+    // [S2] Tâche #127 — refuse la création si le studio est déjà au nombre maximal de
+    // galeries autorisé par son plan (voir src/lib/quotas.ts, appliqué à tous les forfaits).
+    await assertGalleryQuota(session.user.studioId);
+
+    const body = await req.json();
+    const parsed = gallerySchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    }
+    const data = parsed.data;
+
+    let slug = slugify(data.title);
+    const existing = await prisma.gallery.findUnique({ where: { slug } });
+    if (existing) slug = `${slug}-${randomSuffix(5)}`;
+
+    // Second lien, distinct de `slug`, pour l'accès "invité" (voir /invite/[guestSlug]) —
+    // généré tout de suite pour que le lien soit disponible dès la création de la galerie,
+    // pas de bouton "générer" séparé à prévoir côté dashboard.
+    const guestSlug = `${slug}-${randomSuffix(8)}`;
+
+    const gallery = await prisma.gallery.create({
+      data: {
+        studioId: session.user.studioId,
+        title: data.title,
+        slug,
+        guestSlug,
+        clientId: data.clientId || null,
+        password: data.password || null,
+        allowDownload: data.allowDownload ?? true,
+        downloadLimit: data.downloadLimit ?? null,
+        allowFavorites: data.allowFavorites ?? true,
+        showWatermark: data.showWatermark ?? true,
+        expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
+        eventDate: data.eventDate ? new Date(data.eventDate) : null,
+        categoryTag: data.categoryTag || null,
+        defaultVisibility: data.defaultVisibility?.length ? data.defaultVisibility : ["CLIENT"],
+        status: "DRAFT",
+      },
+    });
+
+    // Sans ça, la page /dashboard/galleries (Server Component) reste sur la version qu'elle
+    // avait en cache côté client (Next.js Router Cache) : après création, l'utilisateur est
+    // redirigé vers la nouvelle galerie, mais s'il revient ensuite sur "Galeries" via un
+    // <Link>, il pouvait voir l'ancienne liste (sans la galerie qu'il vient de créer) tant
+    // qu'il ne rechargeait pas la page manuellement. `revalidatePath` invalide ce cache pour
+    // que la prochaine visite de cette page aille rechercher les données à jour.
+    revalidatePath("/dashboard/galleries");
+
+    return NextResponse.json({ gallery }, { status: 201 });
+  } catch (e) {
+    return handleApiError(e);
+  }
+}

@@ -1,0 +1,845 @@
+// Schéma Prisma — pixleh
+// Compatible PostgreSQL (par défaut) ou MySQL : changez uniquement `provider` ci-dessous
+// et le format des DATABASE_URL dans .env. Le reste du schéma fonctionne à l'identique
+// (aucun type spécifique à un moteur n'est utilisé).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===================== Comptes & multi-tenant =====================
+
+enum UserRole {
+  OWNER // propriétaire du studio (photographe)
+  TEAM // membre d'équipe invité
+}
+
+/// Statut de l'abonnement d'un Studio — reflète le statut Stripe Subscription
+/// correspondant, tenu à jour par le webhook (voir /api/webhooks/stripe).
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
+
+enum BillingInterval {
+  MONTHLY
+  ANNUAL
+}
+
+/// Un Studio = un compte photographe (tenant). Toutes les données lui appartiennent.
+model Studio {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique // utilisé pour /s/[slug] (site public) et sous-domaine
+  customDomain String? @unique
+  logoUrl     String?
+  brandColor  String?  @default("#7c3aed")
+  timezone    String   @default("Europe/Paris")
+  currency    String   @default("EUR")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // ---------- Abonnement / facturation SaaS (Sprint 2) ----------
+  /// Plan actuel — null tant que le Studio n'a jamais souscrit (traité comme le plan
+  /// gratuit par défaut côté quotas, voir src/lib/quotas.ts).
+  planId              String?
+  plan                Plan?               @relation(fields: [planId], references: [id])
+  billingInterval     BillingInterval     @default(MONTHLY)
+  subscriptionStatus  SubscriptionStatus?
+  stripeCustomerId    String?             @unique
+  stripeSubscriptionId String?            @unique
+  /// Fin de la période en cours (mensuelle ou annuelle) — utilisé pour l'affichage
+  /// "Prochain renouvellement le..." dans Facturation, tenu à jour par le webhook Stripe.
+  currentPeriodEnd    DateTime?
+  /// Fin de l'essai gratuit éventuel — voir la logique de check des quotas.
+  trialEndsAt         DateTime?
+
+  users      User[]
+  clients    Client[]
+  galleries  Gallery[]
+  products   Product[]
+  orders     Order[]
+  bookings   Booking[]
+  bookingTypes BookingType[]
+  contracts  Contract[]
+  invoices   Invoice[]
+  pages      Page[]
+  blogPosts  BlogPost[]
+  settings   StudioSettings?
+}
+
+/// Palier tarifaire — entièrement gérable depuis le panel admin plateforme (/admin/plans,
+/// réservé à User.isPlatformAdmin), pas codé en dur : Adriel peut créer/modifier/désactiver
+/// des plans, changer les prix et les quotas sans toucher au code. Chaque changement de
+/// prix crée un nouveau Stripe Price (les Price Stripe sont immuables une fois créés) et
+/// met à jour stripePriceIdMonthly/Annual — voir src/lib/stripePlanSync.ts.
+model Plan {
+  id                   String   @id @default(cuid())
+  slug                 String   @unique
+  name                 String
+  description          String?
+  /// Prix mensuel affiché en centimes, facturation mensuelle (ex: 1000 = 10,00€/mois).
+  priceMonthlyCents    Int
+  /// Prix mensuel équivalent en centimes si facturé annuellement (généralement inférieur
+  /// au prix mensuel — ex: 800 = 8,00€/mois, soit 96€ prélevés une fois par an).
+  priceAnnualCents     Int
+  currency             String   @default("eur")
+  /// null = stockage illimité.
+  storageLimitGB       Int?
+  /// null = galeries actives illimitées.
+  galleryLimit         Int?
+  /// null = membres d'équipe illimités (rôle TEAM).
+  teamMemberLimit      Int?
+  customDomainAllowed  Boolean  @default(false)
+  /// Retire la mention "Propulsé par pixleh" du pied de page galerie/site public.
+  removeBranding       Boolean  @default(false)
+  /// Commission prélevée sur les ventes boutique (0 à 100), typiquement non nulle
+  /// uniquement sur le plan gratuit — voir la page tarifs Pixieset dont on s'inspire.
+  /// L'enforcement réel (retenue Stripe) est un chantier Stripe Connect séparé, non
+  /// démarré : voir src/lib/platformFeatures.ts, clé "storeCommission".
+  storeCommissionPercent Int    @default(0)
+  /// null = contrats illimités.
+  contractLimit        Int?
+  /// null = devis/questionnaires illimités.
+  quoteLimit            Int?
+  /// null = types de séance (BookingType) illimités.
+  sessionTypeLimit      Int?
+  /// Relances automatiques (facture impayée, document non signé).
+  paymentReminders      Boolean  @default(false)
+  /// Pourboire ajoutable directement sur une facture.
+  tipOnInvoice          Boolean  @default(false)
+  /// Acompte demandé au moment de la réservation (avant la facture finale).
+  depositAtBooking      Boolean  @default(false)
+  /// Pourboire ajoutable au moment de la réservation.
+  tipAtBooking           Boolean  @default(false)
+  /// Chaque réservation reste "en attente" jusqu'à validation manuelle par le studio,
+  /// au lieu d'être confirmée automatiquement.
+  manualBookingApproval Boolean  @default(false)
+  /// Relances automatiques avant un rendez-vous de réservation.
+  bookingReminders      Boolean  @default(false)
+  /// Un seul plan doit avoir isFree=true à la fois (le plan attribué par défaut à
+  /// l'inscription) — appliqué côté application, pas en contrainte SQL.
+  isFree               Boolean  @default(false)
+  /// Masque le plan de la page tarifs publique et du choix à la souscription, sans casser
+  /// les Studios déjà abonnés dessus (permet de retirer une offre sans forcer une migration).
+  active               Boolean  @default(true)
+  sortOrder            Int      @default(0)
+  stripeProductId      String?
+  stripePriceIdMonthly String?
+  stripePriceIdAnnual  String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  studios              Studio[]
+}
+
+enum MarketingPageKey {
+  HOME
+  EXEMPLES
+  TARIFS
+  A_PROPOS
+}
+
+enum MarketingBlockType {
+  HERO
+  FEATURES
+  CATEGORIES
+  RICH_TEXT
+  CTA
+}
+
+/// Bloc de contenu éditable du site marketing pixleh (pas les sites publics des Studios,
+/// qui ont leur propre modèle Page/sections) — géré depuis /admin/site, réservé à
+/// isPlatformAdmin. Chaque page marketing (HOME, EXEMPLES, TARIFS, A_PROPOS) est composée
+/// d'une liste ordonnée (`position`) de blocs ajoutables/modifiables/supprimables ; `data`
+/// est un Json dont la forme dépend de `type` (voir src/components/marketing/
+/// MarketingBlockRenderer.tsx pour la forme exacte attendue par type, et
+/// src/app/(platform-admin)/admin/site/page.tsx pour les formulaires d'édition
+/// correspondants). `type` n'est jamais modifié après création (changer de type changerait
+/// la forme de `data` ) — on supprime et recrée plutôt.
+model MarketingBlock {
+  id        String             @id @default(cuid())
+  page      MarketingPageKey
+  type      MarketingBlockType
+  /// Ordre d'affichage au sein de la page — pas d'unicité imposée, un simple tri suffit ;
+  /// réordonné via /api/admin/marketing-blocks/[id]/move (échange avec le voisin).
+  position  Int                @default(0)
+  /// Permet de retirer un bloc de l'affichage public sans le supprimer (pour le retravailler
+  /// tranquillement, par exemple).
+  active    Boolean            @default(true)
+  data      Json
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@index([page, position])
+}
+
+/// Interrupteur global, indépendant des plans : indique si une fonctionnalité est
+/// réellement développée et active sur pixleh, quel que soit ce que les Plan cochent
+/// individuellement. Sert à préparer la grille tarifaire à l'avance (cocher une feature
+/// sur les bons plans dès maintenant) sans l'afficher/l'appliquer avant qu'elle soit
+/// vraiment livrée — Adriel n'a alors qu'un seul interrupteur à basculer par fonctionnalité
+/// une fois développée, plutôt que de repasser sur chaque plan. Voir
+/// src/lib/platformFeatures.ts (liste canonique + isFeatureLive()) et /admin/features.
+model PlatformFeature {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  label       String
+  description String?  @db.Text
+  enabled     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model StudioSettings {
+  id                 String  @id @default(cuid())
+  studioId           String  @unique
+  studio             Studio  @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  aboutTitle         String?
+  aboutBody          String? @db.Text
+  contactEmail       String?
+  contactPhone       String?
+  address            String?
+  instagramUrl       String?
+  facebookUrl        String?
+  websiteHeadline    String?
+  watermarkEnabled   Boolean @default(true)
+  watermarkText      String?
+  defaultDownloadLimit Int?  // null = illimité
+  galleryExpiryDays  Int?    // null = pas d'expiration par défaut
+  /// Slides du carrousel affiché en haut de la page d'accueil publique du studio.
+  /// Forme : Array<{ id: string; text: string; imageUrl: string | null }>, voir
+  /// src/components/public-site/HeroCarousel.tsx et Réglages > Carrousel.
+  carouselSlides     Json?
+}
+
+model User {
+  id            String    @id @default(cuid())
+  studioId      String
+  studio        Studio    @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  name          String
+  email         String    @unique
+  /// Optionnel : null pour un compte créé uniquement via Social Login (Google, GitHub...),
+  /// qui n'a jamais défini de mot de passe. Voir authorize() dans src/lib/auth.ts, qui
+  /// renvoie un message dédié dans ce cas plutôt que "mot de passe incorrect".
+  passwordHash  String?
+  role          UserRole  @default(OWNER)
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  /// Accès au panel admin plateforme (/admin, distinct du dashboard studio) — réservé à
+  /// l'équipe pixleh (Adriel), aucun rapport avec UserRole.OWNER qui ne concerne que la
+  /// gestion d'UN studio. Volontairement mis à false par défaut : aucun studio ne doit
+  /// jamais obtenir cet accès automatiquement, y compris à sa création.
+  isPlatformAdmin Boolean @default(false)
+
+  /// Jeton "mot de passe oublié" (voir /api/auth/forgot-password et /api/auth/reset-password) —
+  /// hex aléatoire à usage unique, effacé après utilisation ou expiration. Nullable : absent
+  /// tant qu'aucune demande de réinitialisation n'est en cours.
+  resetToken           String?   @unique
+  resetTokenExpiresAt  DateTime?
+  /// Jeton de vérification d'adresse email, envoyé avec l'email de bienvenue à l'inscription
+  /// (voir provisionStudioWithOwner) — absent pour les comptes Social Login, dont l'adresse
+  /// est déjà confirmée par le fournisseur OAuth (emailVerified posé directement à la création).
+  verifyToken          String?   @unique
+  verifyTokenExpiresAt DateTime?
+
+  accounts      Account[]
+}
+
+/// Lien vers un compte OAuth externe (Google, GitHub, Microsoft, Facebook, LinkedIn, Apple).
+/// Un même User peut avoir plusieurs Account (un par fournisseur lié) — voir la logique de
+/// liaison/création dans le callback signIn() de src/lib/auth.ts. Ce modèle suit la forme
+/// conventionnelle attendue par l'écosystème NextAuth mais n'utilise PAS le PrismaAdapter
+/// (incompatible avec notre exigence : un nouvel utilisateur OAuth doit aussi créer un
+/// Studio, ce que l'adapter standard ne sait pas faire) — la liaison est gérée à la main.
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  createdAt         DateTime @default(now())
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+// ===================== Clients (CRM) =====================
+
+/// Statut relationnel d'un Client — distingue un simple contact non qualifié (PROSPECT,
+/// créé automatiquement par le formulaire de contact public) d'un vrai client validé par le
+/// studio (CLIENT). Un client ajouté manuellement depuis le panel démarre directement à
+/// CLIENT (le studio l'ajoute délibérément), voir /api/clients POST. Demandé par Adriel :
+/// beaucoup de messages de contact ne débouchent pas sur une vente, donc on ne veut pas les
+/// mélanger d'office avec la vraie liste de clients tant qu'ils n'ont pas été "validés".
+enum ClientStatus {
+  PROSPECT
+  CLIENT
+}
+
+model Client {
+  id        String       @id @default(cuid())
+  studioId  String
+  studio    Studio       @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  name      String
+  email     String
+  phone     String?
+  notes     String?      @db.Text
+  status    ClientStatus @default(CLIENT)
+  /// true dès qu'un message de contact (nouveau ou répété) arrive et n'a pas encore été
+  /// ouvert dans le panel studio — alimente la bulle de notification sur le lien "Clients"
+  /// de la sidebar. Remise à false via PATCH /api/clients/[id] quand le studio lit le
+  /// message. Ne concerne QUE les messages du formulaire de contact, pas les clients
+  /// ajoutés manuellement (jamais mis à true dans ce cas).
+  unreadMessage Boolean    @default(false)
+  createdAt DateTime @default(now())
+
+  galleries  Gallery[]
+  orders     Order[]
+  bookings   Booking[]
+  contracts  Contract[]
+  invoices   Invoice[]
+  messages   ClientMessage[]
+
+  @@unique([studioId, email])
+  @@index([studioId])
+}
+
+/// INBOUND = message reçu (formulaire de contact public). OUTBOUND = réponse envoyée par le
+/// studio depuis le panel — voir POST /api/clients/[id]/messages, qui envoie aussi un vrai
+/// email à `Client.email` (via sendMail) en plus de créer cette ligne.
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+/// Fil de conversation par client — remplace le blob texte `Client.notes` pour les nouveaux
+/// messages (conservé tel quel pour l'historique déjà accumulé avant cette migration, encore
+/// affiché en lecture seule dans le panel). Introduit pour permettre : répondre à un message
+/// (email réel envoyé au client) et chercher/parcourir les échanges comme une petite boîte de
+/// réception, demandé par Adriel.
+///
+/// `body` : texte brut pour INBOUND (saisi par un visiteur anonyme via le formulaire de
+/// contact — jamais rendu comme HTML côté panel, pour éviter une injection XSS stockée).
+/// HTML (texte enrichi) pour OUTBOUND, saisi par le studio via RichTextEditor — même
+/// convention que Client.notes/StudioSettings.aboutBody : contenu auteur de confiance.
+model ClientMessage {
+  id        String           @id @default(cuid())
+  clientId  String
+  client    Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  direction MessageDirection
+  body      String           @db.Text
+  /// Pièces jointes (0 à N) : Array<{ id, name, mime, size, key }>. `key` est la clé de
+  /// stockage interne (voir buildClientMessageAttachmentKey) — jamais exposée telle quelle à
+  /// l'API, qui reconstruit une URL de téléchargement studio-only à la volée.
+  attachments Json?
+  /// true si l'envoi de l'email a échoué (SMTP non configuré ou erreur) — affiché comme une
+  /// icône d'alerte sur la bulle correspondante, en plus du bandeau ponctuel affiché juste
+  /// après l'envoi. Toujours false pour INBOUND (pas d'email sortant sur ces messages-là).
+  emailFailed Boolean         @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([clientId])
+}
+
+// ===================== Galeries & proofing =====================
+
+enum GalleryStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model Gallery {
+  id              String        @id @default(cuid())
+  studioId        String
+  studio          Studio        @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  clientId        String?
+  client          Client?       @relation(fields: [clientId], references: [id])
+  title           String
+  slug            String        @unique
+  coverPhotoId    String?
+  status          GalleryStatus @default(DRAFT)
+  /// Tag/catégorie libre pour filtrer les galeries dans la liste (ex: "Mariage", "Portrait").
+  categoryTag     String?
+  /// Épinglage manuel ("favoris") pour retrouver rapidement une galerie dans la liste.
+  starred         Boolean       @default(false)
+  /// Mise en avant sur la page d'accueil du site public du studio (aperçu "Portfolio",
+  /// voir /s/[studioSlug]) : au maximum 3 galeries à la fois, contrainte appliquée côté
+  /// API (PATCH /api/galleries/[id]) — distinct de `starred`, qui n'est qu'un repère
+  /// pratique dans la liste du dashboard sans effet sur le site public.
+  featuredHome    Boolean       @default(false)
+  password        String?       // mot de passe optionnel pour accès client
+  allowDownload   Boolean       @default(true)
+  downloadLimit   Int?          // nb de téléchargements HD autorisés, null = illimité
+  allowFavorites  Boolean       @default(true)
+  showWatermark   Boolean       @default(true)
+  expiresAt       DateTime?
+  eventDate       DateTime?
+  /// Apparence de la galerie (cover, police, couleurs, grille) — voir src/lib/galleryDesign.ts
+  /// pour la forme exacte. Json libre pour ne pas multiplier les colonnes/migrations.
+  design          Json?
+  /// Second lien d'accès à la galerie, distinct de `slug` (voir /invite/[guestSlug]) :
+  /// pas de mot de passe, juste un email (stocké dans GalleryGuest), limité aux sets dont
+  /// `visibility` contient GUEST. Généré automatiquement à la création de la galerie.
+  guestSlug       String?       @unique
+  /// Autorise (ou non) le téléchargement des photos depuis le lien invité — indépendant
+  /// du réglage `allowDownload` qui, lui, gouverne le lien client.
+  allowGuestDownload Boolean    @default(false)
+  /// Visibilité par défaut de la galerie entière ("Visible par", choisi dès la création) :
+  /// prise en compte tant qu'aucun set (Collection) n'a été créé dans cette galerie. Dès
+  /// qu'un set existe, c'est SA visibilité (Collection.visibility) qui gouverne à la place
+  /// et ce champ n'est plus consulté — évite d'avoir à créer un set immédiatement juste
+  /// pour rendre une galerie visible sur le lien invité ou le portfolio public.
+  defaultVisibility SetVisibility[] @default([CLIENT])
+  /// Ordre d'affichage des photos, appliqué à la fois dans le panel studio et sur la
+  /// galerie publiée : "manual" (glissé/déposé, position asc, par défaut), ou l'une des
+  /// valeurs de PhotoSortKey (voir src/lib/photoSort.ts) — stocké en String plutôt qu'en
+  /// enum pour ne pas nécessiter de migration à chaque nouvel ordre de tri ajouté.
+  photoSortOrder  String        @default("manual")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  collections     Collection[]
+  photos          Photo[]
+  videos          Video[]
+  selections      Selection[]
+  downloadEvents  DownloadEvent[]
+  products        Product[]      @relation("GalleryProducts")
+  orders          Order[]
+  guests          GalleryGuest[]
+  remarks         PhotoRemark[]
+
+  @@index([studioId])
+  @@index([clientId])
+}
+
+/// Vidéo d'une galerie (film de mariage, teaser, clip...) — affichée dans un onglet
+/// "Vidéo" dédié côté panel studio ET côté galerie publique, séparé de la grille photo :
+/// une vidéo a besoin d'un lecteur (pas d'une grille de vignettes) et d'un pipeline de
+/// stockage/diffusion complètement différent d'une photo, donc ce n'est ni un set, ni
+/// une galerie à part — un même lien/mot de passe client couvre les deux.
+///
+/// Deux modes, mutuellement exclusifs selon comment le studio l'a ajoutée :
+/// - Externe (Vimeo/YouTube) : le studio colle l'URL, `provider`/`externalUrl`/`externalId`
+///   sont renseignés et les métadonnées (titre, miniature, durée) viennent de l'oEmbed du
+///   provider — voir src/lib/videoEmbed.ts. Pas de téléchargement possible (le provider ne
+///   l'autorise pas).
+/// - Auto-hébergée (upload direct) : le studio dépose le fichier, `storageKey`/`mimeType`/
+///   `sizeBytes`/`filename` sont renseignés à la place — voir
+///   /api/galleries/[id]/videos/upload. C'est le mode qui permet au client de télécharger
+///   la vidéo, comme pour une photo (voir /api/galleries/[id]/videos/[videoId]/file).
+model Video {
+  id           String   @id @default(cuid())
+  galleryId    String
+  gallery      Gallery  @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  title        String
+  position     Int      @default(0)
+  /// "vimeo" | "youtube" — absent pour une vidéo auto-hébergée (voir storageKey).
+  provider     String?
+  /// URL telle que collée par le studio (page Vimeo/YouTube publique ou non-listée).
+  externalUrl  String?
+  /// Identifiant extrait de l'URL, pour construire l'URL d'embed sans reparser à chaque fois.
+  externalId   String?
+  /// Miniature récupérée via oEmbed au moment de l'ajout (pas de génération côté serveur
+  /// pour une vidéo externe : Vimeo/YouTube la fournissent déjà). Vide pour l'auto-hébergé
+  /// (pas de génération de vignette vidéo en v1).
+  thumbnailUrl String?
+  /// Durée en secondes si fournie par l'oEmbed du provider (vidéo externe uniquement).
+  duration     Int?
+  /// Clé de stockage du fichier (voir src/lib/storage.ts, buildVideoKey) — uniquement pour
+  /// une vidéo auto-hébergée, absente pour une vidéo externe.
+  storageKey   String?
+  /// Nom de fichier original tel qu'uploadé, pour le nom du fichier téléchargé.
+  filename     String?
+  /// Type MIME du fichier uploadé (ex. "video/mp4"), pour le Content-Type à la diffusion.
+  mimeType     String?
+  /// Taille du fichier en octets (vidéo auto-hébergée uniquement).
+  sizeBytes    Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([galleryId])
+}
+
+enum SetVisibility {
+  CLIENT
+  GUEST
+  PORTFOLIO
+}
+
+/// Sous-dossiers à l'intérieur d'une galerie (ex : "Cérémonie", "Cocktail", "Soirée")
+model Collection {
+  id         String           @id @default(cuid())
+  galleryId  String
+  gallery    Gallery          @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  title      String
+  position   Int              @default(0)
+  photos     Photo[]
+  /// À qui ce set est visible : le client (lien avec mot de passe), l'invité (lien
+  /// public par email) et/ou le portfolio public du studio (/s/[slug]). Un set peut
+  /// cumuler 1, 2 ou les 3 — CLIENT par défaut pour ne rien changer au comportement
+  /// existant des sets déjà créés avant cette fonctionnalité.
+  visibility SetVisibility[]  @default([CLIENT])
+
+  @@index([galleryId])
+}
+
+model Photo {
+  id           String      @id @default(cuid())
+  galleryId    String
+  gallery      Gallery     @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  collectionId String?
+  collection   Collection? @relation(fields: [collectionId], references: [id])
+  filename     String
+  storageKey   String      // chemin sur le serveur SFTP (fichier original)
+  thumbKey     String?     // miniature (grille)
+  previewKey   String?     // aperçu web (watermarké si activé)
+  width        Int?
+  height       Int?
+  sizeBytes    Int?
+  /// Empreinte SHA-256 du fichier original, calculée à l'upload — sert à détecter les
+  /// doublons (même contenu déjà présent dans la galerie) sans dépendre du nom de fichier,
+  /// qui n'est pas fiable (peut être identique pour deux photos différentes, ou différent
+  /// pour la même photo renommée). Voir POST /api/galleries/[id]/photos.
+  contentHash  String?
+  position     Int         @default(0)
+  createdAt    DateTime    @default(now())
+  /// Utilisé pour invalider le cache navigateur des miniatures/aperçus (voir la route
+  /// /api/files/[...path]) : sans ça, régénérer un thumb.jpg ou preview.jpg côté serveur
+  /// (ex: désactiver le filigrane) ne se voit pas tant que le cache HTTP n'expire pas,
+  /// puisque l'URL de l'image ne change jamais autrement.
+  updatedAt    DateTime    @default(now()) @updatedAt
+
+  selections    Selection[]
+  downloadEvents DownloadEvent[]
+  orderItems    OrderItem[]
+  remarks       PhotoRemark[]
+
+  @@index([galleryId])
+  @@index([galleryId, contentHash])
+  @@index([collectionId])
+}
+
+/// Un visiteur ayant accédé à une galerie via le lien invité (/invite/[guestSlug]) — pas
+/// de compte, juste un email capturé une fois, réutilisé pour reconnaître ce visiteur au
+/// retour (clientRef signé dans un cookie, voir gallery-session.ts).
+model GalleryGuest {
+  id        String   @id @default(cuid())
+  galleryId String
+  gallery   Gallery  @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  email     String
+  clientRef String   @unique
+  createdAt DateTime @default(now())
+
+  @@index([galleryId])
+}
+
+/// Remarque de retouche laissée par le client sur une photo précise (lien client
+/// uniquement, voir GalleryView) — le photographe la voit dans l'onglet "Remarques" du
+/// panel et peut la marquer traitée une fois la correction apportée.
+model PhotoRemark {
+  id           String   @id @default(cuid())
+  photoId      String
+  photo        Photo    @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  galleryId    String
+  gallery      Gallery  @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  clientRef    String
+  message      String   @db.Text
+  resolved     Boolean  @default(false)
+  // true dès que le client a ouvert la photo en plein écran après que le photographe a
+  // traité la remarque (icône verte) — permet à l'icône de redevenir normale une fois vue,
+  // de façon persistante (survit à un rechargement de page). Remis à false dès que le
+  // client modifie son message (voir POST /api/remarks) : une remarque éditée redevient
+  // "en attente" et doit être revue.
+  seenByClient Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([galleryId])
+  @@index([photoId])
+}
+
+enum SelectionType {
+  FAVORITE
+  PRINT
+}
+
+/// Favoris / sélection client (proofing), et sélection impression (panier "Sélection
+/// impression" de la galerie publique) — même mécanisme (clientRef = session client),
+/// distingué par `type` pour permettre à une même photo d'être à la fois favorite et
+/// sélectionnée pour impression sans collision sur la contrainte d'unicité.
+model Selection {
+  id        String        @id @default(cuid())
+  galleryId String
+  gallery   Gallery       @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  photoId   String
+  photo     Photo         @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  clientRef String        // identifiant de session client (cookie signé), pas forcément un User
+  type      SelectionType @default(FAVORITE)
+  note      String?
+  // Service d'impression choisi pour CETTE photo (uniquement pertinent pour type: PRINT —
+  // toujours null pour un favori). Permet de grouper le panneau "Sélection impression" par
+  // service (voir PrintSelectionPanel) plutôt que par une simple liste de fichiers, et de
+  // commander plusieurs services différents en une seule fois (chaque OrderItem garde son
+  // propre productId, voir /api/cart/checkout). Nullable : une photo ajoutée au panier avant
+  // qu'un service ne lui soit assigné reste dans un groupe "Non assigné" côté panneau.
+  productId String?
+  product   Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+  createdAt DateTime      @default(now())
+
+  @@unique([photoId, clientRef, type])
+  @@index([galleryId])
+  @@index([productId])
+}
+
+model DownloadEvent {
+  id        String   @id @default(cuid())
+  galleryId String
+  gallery   Gallery  @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  photoId   String?
+  photo     Photo?   @relation(fields: [photoId], references: [id])
+  clientRef String
+  type      String   // "single" | "zip"
+  createdAt DateTime @default(now())
+
+  @@index([galleryId])
+}
+
+// ===================== Boutique / e-commerce =====================
+
+enum ProductType {
+  DIGITAL_DOWNLOAD
+  PRINT
+  ALBUM
+  PACKAGE
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  studioId    String
+  studio      Studio      @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  type        ProductType
+  name        String
+  description String?     @db.Text
+  priceCents  Int
+  currency    String      @default("EUR")
+  sku         String?
+  imageUrl    String?
+  active      Boolean     @default(true)
+  galleries   Gallery[]   @relation("GalleryProducts")
+  orderItems  OrderItem[]
+  selections  Selection[]
+  createdAt   DateTime    @default(now())
+
+  @@index([studioId])
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FULFILLED
+  CANCELLED
+  REFUNDED
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  studioId      String
+  studio        Studio      @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  galleryId     String?
+  gallery       Gallery?    @relation(fields: [galleryId], references: [id])
+  clientId      String?
+  client        Client?     @relation(fields: [clientId], references: [id])
+  customerEmail String
+  customerName  String
+  status        OrderStatus @default(PENDING)
+  totalCents    Int
+  currency      String      @default("EUR")
+  stripeSessionId String?   @unique
+  shippingAddress String?   @db.Text
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  items OrderItem[]
+
+  @@index([studioId])
+  @@index([galleryId])
+}
+
+model OrderItem {
+  id         String  @id @default(cuid())
+  orderId    String
+  order      Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product @relation(fields: [productId], references: [id])
+  photoId    String?
+  photo      Photo?  @relation(fields: [photoId], references: [id])
+  quantity   Int     @default(1)
+  unitPriceCents Int
+
+  @@index([orderId])
+}
+
+// ===================== Réservation =====================
+
+model BookingType {
+  id            String   @id @default(cuid())
+  studioId      String
+  studio        Studio   @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  name          String   // ex: "Séance portrait 1h"
+  durationMinutes Int
+  priceCents    Int?
+  description   String?  @db.Text
+  active        Boolean  @default(true)
+
+  bookings Booking[]
+
+  @@index([studioId])
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+model Booking {
+  id            String        @id @default(cuid())
+  studioId      String
+  studio        Studio        @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  bookingTypeId String?
+  bookingType   BookingType?  @relation(fields: [bookingTypeId], references: [id])
+  clientId      String?
+  client        Client?       @relation(fields: [clientId], references: [id])
+  customerName  String
+  customerEmail String
+  customerPhone String?
+  startsAt      DateTime
+  endsAt        DateTime
+  status        BookingStatus @default(PENDING)
+  notes         String?       @db.Text
+  createdAt     DateTime      @default(now())
+
+  @@index([studioId])
+  @@index([startsAt])
+}
+
+// ===================== Contrats (signature électronique) =====================
+
+enum ContractStatus {
+  DRAFT
+  SENT
+  SIGNED
+  DECLINED
+}
+
+model Contract {
+  id           String         @id @default(cuid())
+  studioId     String
+  studio       Studio         @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  clientId     String?
+  client       Client?        @relation(fields: [clientId], references: [id])
+  title        String
+  bodyHtml     String         @db.Text
+  status       ContractStatus @default(DRAFT)
+  signatureDataUrl String?    @db.Text // image PNG base64 de la signature
+  signedByName String?
+  signedAt     DateTime?
+  signedIp     String?
+  pdfKey       String?        // chemin du PDF généré sur le storage
+  createdAt    DateTime       @default(now())
+
+  @@index([studioId])
+  @@index([clientId])
+}
+
+// ===================== Facturation =====================
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  studioId      String
+  studio        Studio        @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  clientId      String?
+  client        Client?       @relation(fields: [clientId], references: [id])
+  number        String        // numéro séquentiel affiché (ex: FAC-2026-0001)
+  status        InvoiceStatus @default(DRAFT)
+  lineItems     Json          // [{ description, quantity, unitPriceCents }]
+  totalCents    Int
+  currency      String        @default("EUR")
+  dueDate       DateTime?
+  stripeSessionId String?     @unique
+  paidAt        DateTime?
+  pdfKey        String?
+  createdAt     DateTime      @default(now())
+
+  @@unique([studioId, number])
+  @@index([studioId])
+  @@index([clientId])
+}
+
+// ===================== Site vitrine / portfolio public =====================
+
+enum PageType {
+  HOME
+  ABOUT
+  CONTACT
+  CUSTOM
+}
+
+model Page {
+  id        String   @id @default(cuid())
+  studioId  String
+  studio    Studio   @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  type      PageType
+  slug      String   // "" pour HOME
+  title     String
+  sections  Json     // tableau de blocs de contenu (hero, galerie, texte, etc.)
+  published Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+
+  @@unique([studioId, slug])
+  @@index([studioId])
+}
+
+model BlogPost {
+  id          String   @id @default(cuid())
+  studioId    String
+  studio      Studio   @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  slug        String
+  title       String
+  excerpt     String?
+  bodyHtml    String   @db.Text
+  coverImageUrl String?
+  published   Boolean  @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  @@unique([studioId, slug])
+  @@index([studioId])
+}

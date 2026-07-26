@@ -1,0 +1,83 @@
+name: Deploy
+
+# Se déclenche uniquement après un succès du workflow CI sur main (jamais sur une PR,
+# jamais si lint/typecheck/tests/build ont échoué) — voir ci.yml. Déploie par SSH/rsync
+# vers l'hébergement cPanel (accès Terminal confirmé), pas de plateforme serverless :
+# server.js est un serveur Node persistant pensé pour Passenger/cPanel (voir README).
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Installer les dépendances (pour build le .next ici, pas sur le serveur mutualisé)
+        run: npm ci
+
+      - name: Build de production
+        run: npm run build
+        env:
+          # Factices : ce build ne sert qu'à produire le dossier .next à envoyer sur le
+          # serveur. La vraie DATABASE_URL/NEXTAUTH_SECRET de prod vivent uniquement dans
+          # le .env du serveur (jamais dans GitHub) — voir l'étape SSH plus bas.
+          DATABASE_URL: "postgresql://build:build@localhost:5432/build"
+          NEXTAUTH_SECRET: "build-placeholder"
+          NEXTAUTH_URL: "https://placeholder.invalid"
+
+      - name: Envoyer les fichiers sur le serveur (rsync via SSH)
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: >-
+            -avzr --delete
+            --exclude=".git"
+            --exclude=".github"
+            --exclude="node_modules"
+            --exclude=".env"
+            --exclude=".env.example"
+            --exclude="storage"
+            --exclude="tsconfig.tsbuildinfo"
+          path: ./
+          remote_path: ${{ secrets.SSH_APP_PATH }}
+          remote_host: ${{ secrets.SSH_HOST }}
+          remote_port: ${{ secrets.SSH_PORT }}
+          remote_user: ${{ secrets.SSH_USER }}
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Installer les dépendances de prod, appliquer le schéma, redémarrer l'app
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd "${{ secrets.SSH_APP_PATH }}"
+            # node_modules exclu du rsync : réinstallé ICI, sur l'OS/l'architecture réelle
+            # du serveur (les binaires natifs de sharp/prisma ne sont pas portables d'une
+            # machine à l'autre — c'est justement ce qui bloque sharp dans le bac à sable
+            # de dev, voir le diagnostic).
+            npm ci --omit=dev
+            npx prisma generate
+            # Le projet n'a pas d'historique de migrations Prisma (prisma/migrations
+            # n'existe pas) : le schéma a toujours été appliqué via `db push`, pas
+            # `migrate deploy`. En CI non interactif, `db push` échoue plutôt que
+            # d'appliquer silencieusement un changement destructeur — comportement voulu.
+            npx prisma db push
+            # Convention Passenger (utilisée par "Setup Node.js App" de cPanel) :
+            # toucher tmp/restart.txt redémarre l'application au prochain hit.
+            mkdir -p tmp
+            touch tmp/restart.txt

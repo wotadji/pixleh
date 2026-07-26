@@ -1,0 +1,114 @@
+import { notFound } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import { checkGuestAccess } from "@/lib/access";
+import { EmailGate } from "@/components/gallery/EmailGate";
+import { GalleryView } from "@/components/gallery/GalleryView";
+import { sortPhotos, resolvePhotoSortKey } from "@/lib/photoSort";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Lien "invité" (/invite/[guestSlug]) : accès public sans mot de passe, protégé par un
+ * simple email (voir EmailGate + /api/guest-access). Contrairement au lien client
+ * (/g/[slug]), il ne montre que les photos des sets marqués "Invité" (Collection.visibility)
+ * et n'affiche jamais l'icône de remarque (allowRemarks reste à false).
+ */
+export default async function GuestGalleryPage({
+  params,
+}: {
+  params: { guestSlug: string };
+}) {
+  const gallery = await prisma.gallery.findUnique({
+    where: { guestSlug: params.guestSlug },
+    include: {
+      photos: { orderBy: { position: "asc" } },
+      collections: true,
+      studio: { select: { name: true, slug: true, logoUrl: true, settings: true } },
+    },
+  });
+
+  if (!gallery || gallery.status === "DRAFT") notFound();
+
+  if (gallery.expiresAt && gallery.expiresAt < new Date()) {
+    return (
+      <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
+        <h1 className="font-serif text-2xl font-semibold">Galerie expirée</h1>
+        <p className="mt-2 text-sm text-gray-600">
+          Cette sélection n&apos;est plus disponible. Contactez le photographe pour plus
+          d&apos;informations.
+        </p>
+      </div>
+    );
+  }
+
+  const access = await checkGuestAccess(gallery);
+  if (!access.granted) {
+    return <EmailGate guestSlug={params.guestSlug} title={gallery.title} />;
+  }
+
+  // Seuls les sets explicitement marqués "Invité" sont visibles ici — les photos non
+  // rattachées à un set (ou rattachées à un set uniquement Client/Portfolio) restent
+  // masquées, le lien invité étant une sélection volontaire du studio. Tant qu'aucun set
+  // n'a été créé dans la galerie, c'est la visibilité par défaut choisie à la création
+  // (Gallery.defaultVisibility) qui décide à la place : toutes les photos sont montrées
+  // si "Invités" en fait partie, aucune sinon.
+  // Sets à proposer dans le filtre par set (voir GalleryView) : uniquement ceux marqués
+  // "Invité" — un set Client/Portfolio-only n'a aucune photo dans `guestPhotos` de toute
+  // façon, l'y proposer comme filtre ne ferait que montrer une case toujours vide.
+  let guestPhotos: typeof gallery.photos;
+  let guestCollections: { id: string; title: string }[] = [];
+  if (gallery.collections.length === 0) {
+    guestPhotos = gallery.defaultVisibility.includes("GUEST") ? gallery.photos : [];
+  } else {
+    const guestSets = gallery.collections.filter((c: { id: string; visibility: string[] }) =>
+      c.visibility.includes("GUEST")
+    );
+    guestCollections = guestSets.map((c: { id: string; title: string }) => ({ id: c.id, title: c.title }));
+    const guestCollectionIds = new Set(guestSets.map((c: { id: string }) => c.id));
+    guestPhotos = gallery.photos.filter(
+      (p: { id: string; collectionId: string | null }) =>
+        p.collectionId && guestCollectionIds.has(p.collectionId)
+    );
+  }
+
+  const coverPhotoId =
+    gallery.coverPhotoId && guestPhotos.some((p: { id: string }) => p.id === gallery.coverPhotoId)
+      ? gallery.coverPhotoId
+      : guestPhotos[0]?.id ?? null;
+
+  return (
+    <GalleryView
+      gallery={{
+        id: gallery.id,
+        slug: gallery.slug,
+        title: gallery.title,
+        allowDownload: gallery.allowGuestDownload,
+        allowFavorites: gallery.allowFavorites,
+        coverPhotoId,
+        design: gallery.design,
+        studioName: gallery.studio.name,
+        studioSlug: gallery.studio.slug,
+        studioLogoUrl: gallery.studio.logoUrl,
+        studioContactEmail: gallery.studio.settings?.contactEmail || null,
+        studioContactPhone: gallery.studio.settings?.contactPhone || null,
+        studioInstagramUrl: gallery.studio.settings?.instagramUrl || null,
+        studioFacebookUrl: gallery.studio.settings?.facebookUrl || null,
+        eventDate: gallery.eventDate ? gallery.eventDate.toISOString() : null,
+      }}
+      studioId={gallery.studioId}
+      photos={sortPhotos(guestPhotos, resolvePhotoSortKey(gallery.photoSortOrder)).map((p) => ({
+        id: p.id,
+        filename: p.filename,
+        width: p.width,
+        height: p.height,
+        updatedAt: p.updatedAt.toISOString(),
+        collectionId: p.collectionId,
+      }))}
+      collections={guestCollections}
+      initialFavorites={[]}
+      initialPrintSelection={[]}
+      printProducts={[]}
+      allowRemarks={false}
+    />
+  );
+}

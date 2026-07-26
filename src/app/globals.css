@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand: #7c3aed;
+}
+
+body {
+  @apply bg-white text-gray-900 antialiased;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors;
+}
+
+.input {
+  @apply w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500;
+}
+
+.card {
+  @apply rounded-xl border border-gray-200 bg-white p-6 shadow-sm;
+}
+
+/* ===================== Hero mockup animé (accueil marketing) =====================
+   En l'absence de vraie vidéo produit (voir HeroMockup.tsx), un mockup CSS pur qui
+   simule un défilement de galerie : la grille de vignettes est triplée et translatée
+   en boucle infinie (translateY à -33.333%, soit exactement une copie), et le cadre
+   flotte légèrement pour donner une impression de vie sans fichier vidéo à charger. */
+@keyframes hero-grid-pan {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-33.3333%);
+  }
+}
+
+@keyframes hero-float {
+  0%,
+  100% {
+    transform: rotate(-2.5deg) translateY(0);
+  }
+  50% {
+    transform: rotate(-2.5deg) translateY(-12px);
+  }
+}
+
+.hero-grid-pan {
+  animation: hero-grid-pan 22s linear infinite;
+}
+
+.hero-float {
+  animation: hero-float 7s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-grid-pan,
+  .hero-float {
+    animation: none;
+  }
+}

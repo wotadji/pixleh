@@ -1,0 +1,44 @@
+name: CI
+
+# Vérifie chaque push et chaque pull request avant tout déploiement : lint, typecheck,
+# tests unitaires, puis build complet. Le déploiement (deploy.yml) ne se déclenche
+# QUE si ce workflow réussit sur main — voir workflow_run dans deploy.yml.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      # Valeurs factices : suffisent à `prisma generate` (qui ne se connecte pas à une
+      # vraie base) et à `next build` (rendu dynamique partout dans cette app — pas de
+      # génération statique qui interrogerait la base au build). Les vraies valeurs de
+      # production ne vivent que sur le serveur (.env), jamais dans le dépôt ni dans CI.
+      DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci"
+      NEXTAUTH_SECRET: "ci-placeholder-secret"
+      NEXTAUTH_URL: "http://localhost:3000"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Vérification des types
+        run: npm run typecheck
+
+      - name: Tests unitaires
+        run: npm test
+
+      - name: Build
+        run: npm run build
