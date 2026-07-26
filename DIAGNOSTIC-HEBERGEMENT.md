@@ -1,53 +1,28 @@
-# Diagnostic avant hébergement (GitHub Actions / CI-CD)
+# Diagnostic hébergement / CI-CD
 
-*Généré le 26/07/2026*
+*Généré le 26/07/2026 — mis à jour le même jour après mise en place effective du CI/CD.*
 
-## Ce qui est déjà solide
+## Fait aujourd'hui
 
-- Fonctionnalités : galeries, boutique, réservation, contrats/factures, site vitrine, multi-tenant, i18n (6 langues), Stripe (abonnements + quotas), messagerie client, onboarding — stack fonctionnelle très complète (230 tâches terminées).
-- Sécurité de base : headers HTTP (CSP, X-Frame-Options), rate limiting, validation MIME/taille upload, pages légales (CGU/CGV/confidentialité/mentions), bandeau cookies, suppression de compte.
-- `.env.example` complet et documenté (DB, auth, 6 providers OAuth, SFTP storage, Stripe).
-- `package.json` propre : scripts build/lint/typecheck séparés, `engines.node >=18.18.0` fixé, `postinstall: prisma generate`.
-- `.gitignore` déjà correct (node_modules, .next, .env, storage exclus).
+- **Dépôt Git initialisé** en local, premier commit propre (244 fichiers, aucun secret dedans, vérifié).
+- **Workflow CI** (`.github/workflows/ci.yml`) : à chaque push/PR sur `main`, lance `npm ci`, lint, typecheck, tests unitaires, build.
+- **Workflow CD** (`.github/workflows/deploy.yml`) : se déclenche après un CI réussi sur `main` — build, envoi des fichiers par rsync/SSH vers le serveur cPanel, `npm ci` + `prisma generate` + `prisma db push` côté serveur, puis redémarrage de l'app (convention Passenger `tmp/restart.txt`).
+- **Outillage de test** : Vitest installé (à récupérer via `npm install`), tests unitaires réels sur les fonctions critiques (slug, tri des photos, validation Zod des formulaires, calcul de la liste de fonctionnalités des plans tarifaires).
+- **Lint et typecheck nettoyés** pour que la pipeline puisse réellement passer :
+  - `react/no-unescaped-entities` désactivée (une centaine d'apostrophes non échappées dans les pages légales/admin, aucun impact fonctionnel réel).
+  - 8 routes API corrigées (un `Buffer` passé directement à `NextResponse` n'est plus accepté par le typage strict — converti en `Uint8Array`, comportement identique).
+  - `@types/nodemailer` ajouté, un problème de typage JSON dans `seedMarketingBlocks.ts` corrigé.
+- **Favicon** ajouté (mark pixleh existant, `icon.svg` + `apple-icon.tsx` généré dynamiquement).
 
-## Ce qui bloque un passage à GitHub Actions / CI-CD
+## Ce qui reste de ton côté
 
-### 1. Aucun dépôt Git
-Le projet n'a jamais été initialisé (`git init` jamais fait). C'est le préalable absolu — rien de ce qui suit n'est possible sans ça.
+1. **Créer le repo GitHub et pousser** — voir `GITHUB-CICD-SETUP.md`, marche à suivre complète.
+2. **Ajouter les 5 secrets GitHub** (`SSH_HOST`, `SSH_PORT`, `SSH_USER`, `SSH_PRIVATE_KEY`, `SSH_APP_PATH`) — détail dans le même fichier.
+3. **`npx prisma generate && npx prisma db push` en local** — le schéma a changé cette session (`Selection.productId`), ton environnement de dev doit être resynchronisé avant de continuer à coder dessus.
+4. Vérifier que le `.env` de production est à jour sur le serveur cPanel **avant** le premier déploiement automatique (il n'est jamais transféré par le workflow, volontairement).
 
-### 2. Aucun workflow CI/CD
-Pas de `.github/workflows`. À créer :
-- **CI** (à chaque push/PR) : `npm ci`, `lint`, `typecheck`, `build`. Les tests s'ajouteront quand ils existeront (point 4).
-- **CD** (déploiement) : dépend de la décision d'hébergement ci-dessous.
+## Ce qui reste vrai, non résolu aujourd'hui
 
-### 3. Décision d'hébergement à trancher
-L'app tourne aujourd'hui via `server.js`, un serveur Node persistant écrit spécifiquement pour cPanel/Passenger — ce n'est **pas** compatible tel quel avec un hébergement serverless (Vercel). Le stockage photo par défaut est SFTP (`STORAGE_DRIVER=sftp`), pas du stockage objet.
-
-Deux options réalistes :
-- **Rester sur un serveur persistant** (VPS, ou cPanel actuel) : `server.js` fonctionne tel quel. Le workflow GitHub Actions ferait un déploiement SSH (rsync/scp + restart du process) après le build.
-- **Migrer vers une plateforme container/PaaS** (Railway, Render, Fly.io, etc.) : possible avec `npm run start:next` directement (pas besoin de `server.js`), mais demande d'adapter le stockage fichiers si on veut du stockage objet plutôt que SFTP.
-
-Cette décision détermine tout le contenu du workflow CD — il faut trancher avant d'écrire le pipeline.
-
-### 4. Aucun test automatisé
-Zéro fichier `*.test.*`/`*.spec.*`. Sans tests, la CI ne peut vérifier que build/lint/typecheck — un déploiement automatique reste risqué. À minima : tester les parcours critiques (paiement, upload, accès galerie).
-
-### 5. Pas de monitoring d'erreurs
-Sentry (ou équivalent) n'est pas installé. En production automatisée (déploiements fréquents via CI/CD), c'est ce qui permet de détecter une régression rapidement.
-
-### 6. README à réécrire
-Le guide de déploiement actuel est 100% cPanel manuel — à compléter une fois la cible d'hébergement choisie.
-
-## Actions qui restent de ton côté (hors code)
-
-- Exécuter `npx prisma generate && npx prisma db push` en local (le schéma a encore changé cette session : `Selection.productId`).
-- Fournisseur d'emails transactionnels en production (domaine Resend à vérifier).
-- Stripe Checkout abonnement + webhook (encore en attente selon le suivi de tâches).
-
-## Ordre recommandé
-
-1. `git init` + premier commit + dépôt GitHub.
-2. Choisir la cible d'hébergement (persistant vs PaaS) — voir point 3.
-3. Workflow CI (lint/typecheck/build) — rapide à mettre en place, aucune dépendance.
-4. Workflow CD adapté à la cible choisie.
-5. Tests des parcours critiques + Sentry — en parallèle, pas bloquant pour un premier déploiement mais fortement recommandé avant d'ouvrir au public.
+- **Tests** : seulement des tests unitaires sur des fonctions pures. Les parcours critiques bout-en-bout (paiement Stripe, upload, accès galerie) ne sont pas couverts.
+- **Sentry** (monitoring d'erreurs) : toujours pas en place.
+- **Fournisseur d'emails transactionnels en prod** (domaine Resend) et **Stripe Checkout abonnement + webhook** : toujours en attente (voir suivi de tâches existant).
