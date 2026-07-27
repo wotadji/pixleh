@@ -67,7 +67,14 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           script: |
             set -e
+            # Une session SSH non-interactive (comme celle-ci) ne charge pas le même
+            # PATH que le terminal Web SSH interactif du panel — sans ça, "node"/"npm"
+            # retombent sur une très vieille version par défaut du compte. On force
+            # explicitement le bon chemin (confirmé via `which node`/`which npm`).
+            export PATH="/home/.nvm/versions/node/v20.0.0/bin:$PATH"
             cd "${{ secrets.SSH_APP_PATH_UAT }}"
+            node -v
+            npm -v
             npm ci --omit=dev
             npx prisma generate
             npx prisma db push
