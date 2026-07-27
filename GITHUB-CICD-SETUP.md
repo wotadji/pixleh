@@ -34,18 +34,45 @@ Le panel SSH de cet hébergeur (cloudlogin.co) ne propose que l'authentification
 
 Une fois ces 5 secrets ajoutés, chaque `git push` sur `main` déclenche automatiquement : CI (lint/typecheck/tests/build) puis, si tout passe, déploiement (build → envoi des fichiers → `npm ci` côté serveur → `prisma db push` → redémarrage de l'app).
 
-## 4. Pré-prod sur le sous-domaine temporaire (optionnel mais recommandé)
+## 4. Flux complet : dev → UAT → prod
 
-Pour tester une évolution sur `te.us.tempcloudsite.com` avant de la mettre en prod :
+Trois branches, mais **deux environnements déployés seulement** — `dev` ne déploie nulle part, c'est juste ta branche de travail quotidienne (sauvegarde + vérification CI).
 
-1. Dans cPanel → "Setup Node.js App", crée une **2e app** avec un "Application root" différent (ex: `pixleh-staging`), pointant vers le sous-domaine temporaire. Dépose-y aussi un `.env` — idéalement avec une base de données séparée (cPanel → Bases SQL → crée-en une deuxième) pour ne jamais risquer les vraies données clients pendant les tests.
-2. Ajoute un 6e secret GitHub : `SSH_APP_PATH_STAGING` = le "Application root" de cette 2e app.
-3. Crée une branche `staging` :
+| Branche | Où ça vit | Base de données | Déploiement |
+|---|---|---|---|
+| `dev` | ton Mac (`npm run dev`) | locale (ou réutilise celle d'UAT) | aucun — juste CI |
+| `uat` | sous-domaine temporaire `te.us.tempcloudsite.com` | dédiée, séparée de la prod | automatique sur push |
+| `main` | ton vrai domaine | prod | automatique sur push |
+
+**Mise en place (une fois) :**
+
+1. cPanel → "Setup Node.js App" → crée une **2e app**, "Application root" différent (ex: `pixleh-uat`), pointant vers le sous-domaine temporaire. Dépose-y un `.env` pointant vers une base de données séparée (cPanel → Bases SQL → crée-en une deuxième).
+2. Ajoute le 6e secret GitHub : `SSH_APP_PATH_UAT` = le "Application root" de cette 2e app.
+3. Crée les branches :
    ```bash
-   git checkout -b staging
-   git push -u origin staging
+   git checkout -b uat
+   git push -u origin uat
+   git checkout -b dev
+   git push -u origin dev
    ```
-4. Désormais : tout push sur `staging` déploie automatiquement sur le sous-domaine temporaire (`.github/workflows/deploy-staging.yml`). Une fois que tu as vérifié que tout va bien, `git checkout main && git merge staging && git push` déploie la même chose sur le vrai domaine.
+
+**Au quotidien :**
+
+```bash
+git checkout dev
+# ... tu codes, tu commits ...
+git push                              # sauvegarde + CI, rien n'est déployé
+
+# Un lot de changements est prêt à tester en conditions réelles :
+git checkout uat
+git merge dev
+git push                              # déploie sur te.us.tempcloudsite.com
+
+# Tout est validé sur UAT :
+git checkout main
+git merge uat
+git push                              # déploie sur ton vrai domaine
+```
 
 ## Ce que ça ne couvre pas encore
 

@@ -1,14 +1,15 @@
-name: Deploy (staging)
+name: Deploy (UAT)
 
-# Même principe que deploy.yml (prod), mais pour la branche "staging" et le sous-domaine
+# Même principe que deploy.yml (prod), mais pour la branche "uat" et le sous-domaine
 # temporaire — permet de valider une évolution avant de la pousser sur le vrai domaine.
 # Utilise les mêmes secrets SSH_HOST/PORT/USER/PASSWORD que la prod (même serveur), mais
-# un dossier différent : SSH_APP_PATH_STAGING (à créer en plus de SSH_APP_PATH).
+# un dossier (et idéalement une base de données) différents : SSH_APP_PATH_UAT (à créer
+# en plus de SSH_APP_PATH).
 on:
   workflow_run:
     workflows: ["CI"]
     types: [completed]
-    branches: [staging]
+    branches: [uat]
 
 jobs:
   deploy:
@@ -17,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: staging
+          ref: uat
 
       - uses: actions/setup-node@v4
         with:
@@ -48,7 +49,7 @@ jobs:
             --exclude="storage" \
             --exclude="tsconfig.tsbuildinfo" \
             -e "ssh -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no" \
-            ./ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_APP_PATH_STAGING }}"
+            ./ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_APP_PATH_UAT }}"
 
       - name: Installer les dépendances de prod, appliquer le schéma, redémarrer l'app
         uses: appleboy/ssh-action@v1.0.3
@@ -59,7 +60,7 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           script: |
             set -e
-            cd "${{ secrets.SSH_APP_PATH_STAGING }}"
+            cd "${{ secrets.SSH_APP_PATH_UAT }}"
             npm ci --omit=dev
             npx prisma generate
             npx prisma db push
