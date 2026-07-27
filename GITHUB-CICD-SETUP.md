@@ -40,13 +40,15 @@ Trois branches, mais **deux environnements déployés seulement** — `dev` ne d
 
 | Branche | Où ça vit | Base de données | Déploiement |
 |---|---|---|---|
-| `dev` | ton Mac (`npm run dev`) | locale (ou réutilise celle d'UAT) | aucun — juste CI |
-| `uat` | sous-domaine temporaire `te.us.tempcloudsite.com` | dédiée, séparée de la prod | automatique sur push |
-| `main` | ton vrai domaine | prod | automatique sur push |
+| `dev` | ton Mac (`npm run dev`) | PostgreSQL cPanel, base dédiée (`pixleh_dev`), accès distant | aucun — juste CI |
+| `uat` | sous-domaine temporaire `te.us.tempcloudsite.com` | PostgreSQL cPanel, base dédiée (`pixleh_uat`) | automatique sur push |
+| `main` | ton vrai domaine | PostgreSQL cPanel, base dédiée (`pixleh_prod`) | automatique sur push |
+
+Les 3 bases vivent sur le même serveur PostgreSQL cPanel (illimité chez toi) — jamais de PostgreSQL à installer en local. Pour dev, active l'accès distant (cPanel → Bases SQL → Accès distant, autorise ton IP) et mets la chaîne de connexion dans ton `.env` local.
 
 **Mise en place (une fois) :**
 
-1. cPanel → "Setup Node.js App" → crée une **2e app**, "Application root" différent (ex: `pixleh-uat`), pointant vers le sous-domaine temporaire. Dépose-y un `.env` pointant vers une base de données séparée (cPanel → Bases SQL → crée-en une deuxième).
+1. cPanel → "Setup Node.js App" → crée une **2e app**, "Application root" différent (ex: `pixleh-uat`), pointant vers le sous-domaine temporaire. Dépose-y un `.env` pointant vers la base `pixleh_uat` (cPanel → Bases SQL → crée-la).
 2. Ajoute le 6e secret GitHub : `SSH_APP_PATH_UAT` = le "Application root" de cette 2e app.
 3. Crée les branches :
    ```bash
