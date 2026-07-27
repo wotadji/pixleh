@@ -40,17 +40,18 @@ Trois branches, mais **deux environnements déployés seulement** — `dev` ne d
 
 | Branche | Où ça vit | Base de données | Déploiement |
 |---|---|---|---|
-| `dev` | ton Mac (`npm run dev`) | PostgreSQL cPanel, base dédiée (`pixleh_dev`), accès distant | aucun — juste CI |
-| `uat` | sous-domaine temporaire `te.us.tempcloudsite.com` | PostgreSQL cPanel, base dédiée (`pixleh_uat`) | automatique sur push |
-| `main` | ton vrai domaine | PostgreSQL cPanel, base dédiée (`pixleh_prod`) | automatique sur push |
+| `dev` | ton Mac (`npm run dev`) | `wotadji_pix` (existante, inchangée — on garde tes données actuelles) | aucun — juste CI |
+| `uat` | sous-domaine temporaire `te.us.tempcloudsite.com` | `wotadji_pix_uat` (nouvelle, à créer) | automatique sur push |
+| `main` | ton vrai domaine | `wotadji_pix_prod` (nouvelle, à créer) | automatique sur push |
 
-Les 3 bases vivent sur le même serveur PostgreSQL cPanel (illimité chez toi) — jamais de PostgreSQL à installer en local. Pour dev, active l'accès distant (cPanel → Bases SQL → Accès distant, autorise ton IP) et mets la chaîne de connexion dans ton `.env` local.
+Les 3 bases vivent sur le même serveur PostgreSQL cPanel (illimité chez toi) — jamais de PostgreSQL à installer en local. `wotadji_pix` reste ta base dev telle qu'elle est aujourd'hui ; assure-toi juste que son accès distant (cPanel → Bases SQL → Accès distant, autorise ton IP) est actif si ce n'est pas déjà le cas pour que `npm run dev` continue de s'y connecter comme avant.
 
 **Mise en place (une fois) :**
 
-1. cPanel → "Setup Node.js App" → crée une **2e app**, "Application root" différent (ex: `pixleh-uat`), pointant vers le sous-domaine temporaire. Dépose-y un `.env` pointant vers la base `pixleh_uat` (cPanel → Bases SQL → crée-la).
-2. Ajoute le 6e secret GitHub : `SSH_APP_PATH_UAT` = le "Application root" de cette 2e app.
-3. Crée les branches :
+1. cPanel → Bases SQL → PgSQL : crée `wotadji_pix_uat` et `wotadji_pix_prod`.
+2. cPanel → "Setup Node.js App" → crée une **2e app** pour UAT, "Application root" différent (ex: `pixleh-uat`), pointant vers le sous-domaine temporaire. Dépose-y un `.env` avec `DATABASE_URL` sur `wotadji_pix_uat`.
+3. Ajoute le 6e secret GitHub : `SSH_APP_PATH_UAT` = le "Application root" de cette 2e app.
+4. Crée les branches :
    ```bash
    git checkout -b uat
    git push -u origin uat
