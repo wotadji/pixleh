@@ -74,6 +74,23 @@ git merge uat
 git push                              # déploie sur ton vrai domaine
 ```
 
+## 5. Si quelqu'un d'autre travaille sur le projet
+
+Dès qu'une 2e personne (ou une session Claude à qui tu délègues une tâche) touche au code, pousser directement sur `dev` devient risqué : conflits, personne ne voit ce qui a changé avant que ce soit fait. On ajoute un niveau : **une branche de fonctionnalité par tâche**, fusionnée dans `dev` via une Pull Request (jamais en push direct).
+
+```bash
+git checkout dev
+git pull                              # récupère le dev le plus à jour
+git checkout -b feature/nom-de-la-tache
+
+# ... la personne (ou Claude) travaille, commit ...
+git push -u origin feature/nom-de-la-tache
+```
+
+Puis sur GitHub : **Pull requests → New pull request**, base `dev` ← compare `feature/nom-de-la-tache`. La CI tourne automatiquement sur cette PR (déjà configuré). Tu relis le diff, et si tout va bien : **Merge pull request**. La branche de fonctionnalité peut ensuite être supprimée (bouton proposé automatiquement après la fusion).
+
+**Pour empêcher un push direct accidentel sur `dev`/`uat`/`main`** (le tien ou celui de quelqu'un d'autre), active la protection de branche : Settings → Branches → Add branch ruleset → sélectionne les 3 branches → coche "Require a pull request before merging". Ça force tout le monde (toi y compris) à passer par une PR, ce qui garde un historique propre de qui a changé quoi et pourquoi.
+
 ## Ce que ça ne couvre pas encore
 
 - **Prisma** : le schéma a changé cette session (`Selection.productId`) — pense à faire `npx prisma generate && npx prisma db push` en local avant de pousser, sinon ton environnement de dev ne sera plus synchro avec le code.
