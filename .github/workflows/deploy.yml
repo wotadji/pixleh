@@ -73,7 +73,15 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           script: |
             set -e
+            # Une session SSH non-interactive (comme celle-ci) ne charge pas le même
+            # PATH que le terminal Web SSH interactif du panel — sans ça, "node"/"npm"
+            # retombent sur une très vieille version par défaut du compte. On force
+            # explicitement le bon chemin (confirmé via `which node`/`which npm` sur
+            # l'instance UAT — à revérifier si l'instance prod utilise un autre chemin).
+            export PATH="/home/.nvm/versions/node/v20.0.0/bin:$PATH"
             cd "${{ secrets.SSH_APP_PATH }}"
+            node -v
+            npm -v
             # node_modules exclu du rsync : réinstallé ICI, sur l'OS/l'architecture réelle
             # du serveur (les binaires natifs de sharp/prisma ne sont pas portables d'une
             # machine à l'autre — c'est justement ce qui bloque sharp dans le bac à sable
