@@ -1,0 +1,67 @@
+name: Deploy (staging)
+
+# Même principe que deploy.yml (prod), mais pour la branche "staging" et le sous-domaine
+# temporaire — permet de valider une évolution avant de la pousser sur le vrai domaine.
+# Utilise les mêmes secrets SSH_HOST/PORT/USER/PASSWORD que la prod (même serveur), mais
+# un dossier différent : SSH_APP_PATH_STAGING (à créer en plus de SSH_APP_PATH).
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [staging]
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: staging
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Installer les dépendances (pour build le .next ici, pas sur le serveur mutualisé)
+        run: npm ci
+
+      - name: Build de production
+        run: npm run build
+        env:
+          DATABASE_URL: "postgresql://build:build@localhost:5432/build"
+          NEXTAUTH_SECRET: "build-placeholder"
+          NEXTAUTH_URL: "https://placeholder.invalid"
+
+      - name: Envoyer les fichiers sur le serveur (rsync via SSH, mot de passe)
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+          sshpass -e rsync -avzr --delete \
+            --exclude=".git" \
+            --exclude=".github" \
+            --exclude="node_modules" \
+            --exclude=".env" \
+            --exclude=".env.example" \
+            --exclude="storage" \
+            --exclude="tsconfig.tsbuildinfo" \
+            -e "ssh -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no" \
+            ./ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_APP_PATH_STAGING }}"
+
+      - name: Installer les dépendances de prod, appliquer le schéma, redémarrer l'app
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          script: |
+            set -e
+            cd "${{ secrets.SSH_APP_PATH_STAGING }}"
+            npm ci --omit=dev
+            npx prisma generate
+            npx prisma db push
+            mkdir -p tmp
+            touch tmp/restart.txt

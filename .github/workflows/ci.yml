@@ -1,13 +1,14 @@
 name: CI
 
 # Vérifie chaque push et chaque pull request avant tout déploiement : lint, typecheck,
-# tests unitaires, puis build complet. Le déploiement (deploy.yml) ne se déclenche
-# QUE si ce workflow réussit sur main — voir workflow_run dans deploy.yml.
+# tests unitaires, puis build complet. Le déploiement ne se déclenche QUE si ce workflow
+# réussit — voir workflow_run dans deploy.yml (prod, branche main) et
+# deploy-staging.yml (pré-prod, branche staging).
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
   pull_request:
-    branches: [main]
+    branches: [main, staging]
 
 jobs:
   ci:

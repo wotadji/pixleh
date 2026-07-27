@@ -34,6 +34,19 @@ Le panel SSH de cet hébergeur (cloudlogin.co) ne propose que l'authentification
 
 Une fois ces 5 secrets ajoutés, chaque `git push` sur `main` déclenche automatiquement : CI (lint/typecheck/tests/build) puis, si tout passe, déploiement (build → envoi des fichiers → `npm ci` côté serveur → `prisma db push` → redémarrage de l'app).
 
+## 4. Pré-prod sur le sous-domaine temporaire (optionnel mais recommandé)
+
+Pour tester une évolution sur `te.us.tempcloudsite.com` avant de la mettre en prod :
+
+1. Dans cPanel → "Setup Node.js App", crée une **2e app** avec un "Application root" différent (ex: `pixleh-staging`), pointant vers le sous-domaine temporaire. Dépose-y aussi un `.env` — idéalement avec une base de données séparée (cPanel → Bases SQL → crée-en une deuxième) pour ne jamais risquer les vraies données clients pendant les tests.
+2. Ajoute un 6e secret GitHub : `SSH_APP_PATH_STAGING` = le "Application root" de cette 2e app.
+3. Crée une branche `staging` :
+   ```bash
+   git checkout -b staging
+   git push -u origin staging
+   ```
+4. Désormais : tout push sur `staging` déploie automatiquement sur le sous-domaine temporaire (`.github/workflows/deploy-staging.yml`). Une fois que tu as vérifié que tout va bien, `git checkout main && git merge staging && git push` déploie la même chose sur le vrai domaine.
+
 ## Ce que ça ne couvre pas encore
 
 - **Prisma** : le schéma a changé cette session (`Selection.productId`) — pense à faire `npx prisma generate && npx prisma db push` en local avant de pousser, sinon ton environnement de dev ne sera plus synchro avec le code.
