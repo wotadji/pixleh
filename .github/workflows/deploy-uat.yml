@@ -25,6 +25,13 @@ jobs:
           node-version: "20"
           cache: "npm"
 
+      - name: Vérifier que le chemin de déploiement est configuré
+        run: |
+          if [ -z "${{ secrets.SSH_APP_PATH_UAT }}" ]; then
+            echo "::error::SSH_APP_PATH_UAT n'est pas configuré (secret vide) — abandon du déploiement pour éviter d'écraser le mauvais dossier (rsync --delete vers un chemin vide écrirait dans le répertoire personnel du compte SSH)."
+            exit 1
+          fi
+
       - name: Installer les dépendances (pour build le .next ici, pas sur le serveur mutualisé)
         run: npm ci
 
