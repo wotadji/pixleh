@@ -4,6 +4,10 @@ name: Deploy
 # jamais si lint/typecheck/tests/build ont échoué) — voir ci.yml. Déploie par SSH/rsync
 # vers l'hébergement cPanel (accès Terminal confirmé), pas de plateforme serverless :
 # server.js est un serveur Node persistant pensé pour Passenger/cPanel (voir README).
+#
+# Authentification par mot de passe (pas par clé) : le panel SSH de l'hébergeur
+# (cloudlogin.co) ne propose que "Générer un mot de passe", pas de gestion de clés
+# SSH — voir SSH_PASSWORD dans les secrets du repo GitHub.
 on:
   workflow_run:
     workflows: ["CI"]
@@ -37,24 +41,21 @@ jobs:
           NEXTAUTH_SECRET: "build-placeholder"
           NEXTAUTH_URL: "https://placeholder.invalid"
 
-      - name: Envoyer les fichiers sur le serveur (rsync via SSH)
-        uses: burnett01/rsync-deployments@7.0.1
-        with:
-          switches: >-
-            -avzr --delete
-            --exclude=".git"
-            --exclude=".github"
-            --exclude="node_modules"
-            --exclude=".env"
-            --exclude=".env.example"
-            --exclude="storage"
-            --exclude="tsconfig.tsbuildinfo"
-          path: ./
-          remote_path: ${{ secrets.SSH_APP_PATH }}
-          remote_host: ${{ secrets.SSH_HOST }}
-          remote_port: ${{ secrets.SSH_PORT }}
-          remote_user: ${{ secrets.SSH_USER }}
-          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Envoyer les fichiers sur le serveur (rsync via SSH, mot de passe)
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+          sshpass -e rsync -avzr --delete \
+            --exclude=".git" \
+            --exclude=".github" \
+            --exclude="node_modules" \
+            --exclude=".env" \
+            --exclude=".env.example" \
+            --exclude="storage" \
+            --exclude="tsconfig.tsbuildinfo" \
+            -e "ssh -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no" \
+            ./ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_APP_PATH }}"
 
       - name: Installer les dépendances de prod, appliquer le schéma, redémarrer l'app
         uses: appleboy/ssh-action@v1.0.3
@@ -62,7 +63,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           port: ${{ secrets.SSH_PORT }}
           username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          password: ${{ secrets.SSH_PASSWORD }}
           script: |
             set -e
             cd "${{ secrets.SSH_APP_PATH }}"

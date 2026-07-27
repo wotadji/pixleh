@@ -24,11 +24,13 @@ Dans le repo GitHub : **Settings → Secrets and variables → Actions → New r
 
 | Secret | Valeur | Où la trouver |
 |---|---|---|
-| `SSH_HOST` | l'adresse de ton serveur | cPanel → cherche "Terminal" ou "Accès SSH" dans Avancé, ou demande-la à ton hébergeur |
-| `SSH_PORT` | souvent `22` (parfois un port custom chez certains hébergeurs mutualisés) | idem |
-| `SSH_USER` | ton nom d'utilisateur cPanel | visible en haut à droite de cPanel |
-| `SSH_PRIVATE_KEY` | la clé privée SSH correspondante | cPanel → "Accès SSH" → génère une paire de clés si tu n'en as pas encore, autorise la clé publique, colle la clé **privée** ici |
-| `SSH_APP_PATH` | le chemin absolu vers le dossier de l'app sur le serveur | cPanel → "Setup Node.js App" → c'est le "Application root" de ton app pixleh |
+| `SSH_HOST` | `ssh.web17.us.cloudlogin.co` | déjà trouvé (page "Accès SSH" cPanel) |
+| `SSH_PORT` | `2222` | déjà trouvé |
+| `SSH_USER` | `wotadji` | déjà trouvé |
+| `SSH_PASSWORD` | le mot de passe SSH | cPanel → "Accès SSH" → "Générer un mot de passe" puis "Changer le mot de passe" — colle ensuite ce même mot de passe ici |
+| `SSH_APP_PATH` | le chemin absolu vers le dossier de l'app sur le serveur | cPanel → "Setup Node.js App" → clique sur l'app pixleh → c'est le "Application root" |
+
+Le panel SSH de cet hébergeur (cloudlogin.co) ne propose que l'authentification par mot de passe, pas de gestion de clés — le workflow `deploy.yml` a été adapté en conséquence.
 
 Une fois ces 5 secrets ajoutés, chaque `git push` sur `main` déclenche automatiquement : CI (lint/typecheck/tests/build) puis, si tout passe, déploiement (build → envoi des fichiers → `npm ci` côté serveur → `prisma db push` → redémarrage de l'app).
 
