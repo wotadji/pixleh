@@ -15,7 +15,11 @@ const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOST || "0.0.0.0";
 const port = parseInt(process.env.PORT || "3000", 10);
 
-const app = next({ dev, hostname, port });
+// dir: __dirname est nécessaire pour que Next.js retrouve le dossier .next même
+// quand le script est lancé avec un répertoire de travail différent de celui de
+// l'app (cas du "NodeJS Selector" du panel d'hébergement, qui ne se place pas
+// forcément dans le dossier de l'app avant d'exécuter server.js).
+const app = next({ dev, hostname, port, dir: __dirname });
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
