@@ -94,6 +94,34 @@ Puis sur GitHub : **Pull requests → New pull request**, base `dev` ← compare
 
 **Pour empêcher un push direct accidentel sur `dev`/`uat`/`main`** (le tien ou celui de quelqu'un d'autre), active la protection de branche : Settings → Branches → Add branch ruleset → sélectionne les 3 branches → coche "Require a pull request before merging". Ça force tout le monde (toi y compris) à passer par une PR, ce qui garde un historique propre de qui a changé quoi et pourquoi.
 
+## Configuration serveur spécifique à cet hébergeur (Hepsia)
+
+Cet hébergeur ne fonctionne pas comme un cPanel classique pour Node.js — deux points ne sont **pas** dans le dépôt Git (ils vivent uniquement sur le serveur) et devront être refaits à l'identique si l'instance NodeJS ou le `.htaccess` sont un jour supprimés/recréés :
+
+**1. `.htaccess` (reverse proxy manuel) — indispensable, sinon le domaine affiche une liste de fichiers.**
+
+Le panel n'associe pas automatiquement un domaine à une instance Node.js sans IP dédiée (option payante). On redirige donc manuellement via `.htaccess`, à la racine de l'app (`/home/www/te.us.tempcloudsite.com/.htaccess` pour l'UAT) :
+
+```
+DirectoryIndex disabled
+
+RewriteEngine On
+RewriteCond %{REQUEST_URI} !^/\.well-known
+
+RewriteRule ^$ http://127.0.0.1:<PORT>/ [P,L]
+RewriteRule ^(.+)$ http://127.0.0.1:<PORT>/$1 [P,L]
+```
+
+Remplacer `<PORT>` par le port affiché dans Avancé → NodeJS pour cette instance. `DirectoryIndex disabled` est **crucial** : sans ça, Apache substitue silencieusement `/` par `/index.html` avant nos règles, et Next.js renvoie 404 sur la page d'accueil (bug découvert le 28/07/2026 après plusieurs heures de diagnostic — tout le reste du site fonctionnait, seule `/` était cassée).
+
+`rsync --delete` exclut déjà `.htaccess` du transfert (voir workflows), donc un déploiement normal ne l'efface plus.
+
+**2. pm2 au lieu du "NodeJS Selector" du panel pour garder l'app en vie.**
+
+Le lanceur de processus intégré au panel (façon Passenger) s'est montré peu fiable en pratique : après un déploiement, il reste parfois bloqué en boucle ("Script ... failed to run too many times. Pausing for awhile.") même quand le code et le build sont corrects — `touch tmp/restart.txt` (convention Passenger) n'a d'ailleurs aucun effet réel sur ce panel. Le workflow de déploiement (`deploy-uat.yml`) gère donc le process lui-même avec **pm2** (gratuit, installé automatiquement si absent) : `pm2 start server.js --name pixleh-uat`, relancé à chaque déploiement.
+
+Secret GitHub à ajouter : `SSH_APP_PORT_UAT` = le port de l'instance NodeJS UAT (visible dans Avancé → NodeJS). C'est ce même port qui doit être utilisé dans le `.htaccess` ci-dessus — si l'instance est un jour supprimée/recréée, le port change, il faut mettre à jour les deux (le secret GitHub et le `.htaccess`).
+
 ## Ce que ça ne couvre pas encore
 
 - **Prisma** : le schéma a changé cette session (`Selection.productId`) — pense à faire `npx prisma generate && npx prisma db push` en local avant de pousser, sinon ton environnement de dev ne sera plus synchro avec le code.
