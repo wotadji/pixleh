@@ -39,12 +39,21 @@ interface TranslationFields {
   body?: string;
 }
 
+/** crypto.randomUUID n'existe que dans un contexte sécurisé (HTTPS ou localhost) — sur un
+ * environnement HTTP comme l'UAT tant qu'aucun certificat SSL n'est configuré, l'appel
+ * planterait ("crypto.randomUUID is not a function"). On retombe sur un id "assez unique"
+ * généré à la main dans ce cas. */
+function makeId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 function newCategoryItem(): NormalizedCategoryItem {
-  return { id: crypto.randomUUID(), translations: {} };
+  return { id: makeId(), translations: {} };
 }
 
 function newFeatureItem(): NormalizedFeatureItem {
-  return { id: crypto.randomUUID(), translations: {} };
+  return { id: makeId(), translations: {} };
 }
 
 const PAGES: MarketingPageKey[] = ["HOME", "EXEMPLES", "TARIFS", "A_PROPOS"];
