@@ -79,7 +79,9 @@ jobs:
             # retombent sur une très vieille version par défaut du compte. On force
             # explicitement le bon chemin (confirmé via `which node`/`which npm` sur
             # l'instance UAT — à revérifier si l'instance prod utilise un autre chemin).
-            export PATH="/home/.nvm/versions/node/v20.0.0/bin:$PATH"
+            # v20.0.0 (ancienne version par défaut du compte) ne satisfait pas la
+            # contrainte de "sharp" (^20.3.0 minimum) — utiliser v20.19.0.
+            export PATH="/home/.nvm/versions/node/v20.19.0/bin:$PATH"
             cd "${{ secrets.SSH_APP_PATH }}"
             node -v
             npm -v
