@@ -76,17 +76,20 @@ jobs:
             cd "${{ secrets.SSH_APP_PATH_UAT }}"
             node -v
             npm -v
-            npm ci --omit=dev
-            npx prisma generate
-            npx prisma db push
             # Le "NodeJS Selector" du panel (Passenger-like) s'est révélé peu fiable :
             # après un déploiement, il reste parfois bloqué en boucle de redémarrage
             # ("Pausing for awhile") même quand le code est correct — touch tmp/restart.txt
             # ne fait d'ailleurs rien ici (ce n'est pas vraiment Passenger). On gère donc
             # le process nous-mêmes avec pm2, beaucoup plus fiable, indépendant du panel.
             command -v pm2 >/dev/null 2>&1 || npm install -g pm2
+            # Arrêter le process AVANT de réinstaller les dépendances : sinon npm ci
+            # échoue (ENOTEMPTY) en essayant de remplacer des fichiers de node_modules
+            # encore ouverts par le process Node en cours d'exécution.
+            pm2 delete pixleh-uat 2>/dev/null || true
+            npm ci --omit=dev
+            npx prisma generate
+            npx prisma db push
             export PORT="${{ secrets.SSH_APP_PORT_UAT }}"
             export NODE_ENV=production
-            pm2 delete pixleh-uat 2>/dev/null || true
             pm2 start server.js --name pixleh-uat
             pm2 save
