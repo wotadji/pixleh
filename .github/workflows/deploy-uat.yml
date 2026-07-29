@@ -72,7 +72,11 @@ jobs:
             # PATH que le terminal Web SSH interactif du panel — sans ça, "node"/"npm"
             # retombent sur une très vieille version par défaut du compte. On force
             # explicitement le bon chemin (confirmé via `which node`/`which npm`).
-            export PATH="/home/.nvm/versions/node/v20.0.0/bin:$PATH"
+            # v20.0.0 (ancienne version par défaut du compte) ne satisfait pas la
+            # contrainte de "sharp" (^20.3.0 minimum) — utiliser v20.19.0, installée sur
+            # le serveur via `nvm install 20.19.0` (bug découvert le 29/07/2026 : upload
+            # d'image en échec, 502 Bad Gateway, "Could not load the sharp module").
+            export PATH="/home/.nvm/versions/node/v20.19.0/bin:$PATH"
             cd "${{ secrets.SSH_APP_PATH_UAT }}"
             node -v
             npm -v
