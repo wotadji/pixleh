@@ -858,6 +858,12 @@ model Contract {
   /// limitation de sandbox que les champs ci-dessus (lu/écrit via $queryRaw/$executeRaw tant
   /// qu'Adriel n'a pas relancé `prisma generate && prisma db push`).
   place        String?
+  /// Archivage (demandé par Adriel, 31/07/2026) : un contrat signé peut être archivé pour ne
+  /// plus apparaître dans la liste principale, tout en restant consultable via le bouton
+  /// "Archivés" de /dashboard/contracts. Même limitation de sandbox que les champs ci-dessus
+  /// (lu/écrit via $queryRaw/$executeRaw tant qu'Adriel n'a pas relancé `prisma generate &&
+  /// prisma db push`).
+  archived     Boolean        @default(false)
   createdAt    DateTime       @default(now())
 
   @@index([studioId])

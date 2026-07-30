@@ -12,7 +12,17 @@ export async function GET() {
       include: { client: true },
       orderBy: { createdAt: "desc" },
     });
-    return NextResponse.json({ contracts });
+
+    // archived n'existe pas encore dans le Prisma Client généré du sandbox (voir commentaire
+    // sur ce champ dans schema.prisma) — lu à part via $queryRaw, même workaround que
+    // studioSignatureDataUrl/place, puis fusionné dans la liste typée ci-dessus.
+    const archivedRows = await prisma.$queryRaw<{ id: string; archived: boolean }[]>`
+      SELECT id, archived FROM "Contract" WHERE "studioId" = ${session.user.studioId}
+    `;
+    const archivedById = new Map(archivedRows.map((r) => [r.id, r.archived]));
+    const withArchived = contracts.map((c) => ({ ...c, archived: archivedById.get(c.id) ?? false }));
+
+    return NextResponse.json({ contracts: withArchived });
   } catch (e) {
     return handleError(e);
   }

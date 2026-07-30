@@ -11,6 +11,7 @@ interface ContractDTO {
   status: "DRAFT" | "SENT" | "SIGNED" | "DECLINED";
   createdAt: string;
   client: { name: string } | null;
+  archived: boolean;
 }
 
 const PAGE_SIZE = 8;
@@ -51,6 +52,11 @@ export default function ContractsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ContractDTO["status"] | "ALL">("ALL");
   const [page, setPage] = useState(1);
+  // Bascule "Contrats actifs" / "Archivés" (demandé par Adriel, 31/07/2026) : la liste
+  // principale ne montre que les contrats non archivés par défaut, les archivés restent
+  // consultables via ce bouton plutôt que supprimés.
+  const [showArchived, setShowArchived] = useState(false);
+  const [archiving, setArchiving] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/contracts")
@@ -59,22 +65,42 @@ export default function ContractsPage() {
       .finally(() => setPageLoading(false));
   }, []);
 
+  async function toggleArchived(contract: ContractDTO, archived: boolean) {
+    setArchiving(contract.id);
+    try {
+      const res = await fetch(`/api/contracts/${contract.id}/archive`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived }),
+      });
+      if (res.ok) {
+        setContracts((prev) => prev.map((c) => (c.id === contract.id ? { ...c, archived } : c)));
+      }
+    } finally {
+      setArchiving(null);
+    }
+  }
+
+  const activeCount = useMemo(() => contracts.filter((c) => !c.archived).length, [contracts]);
+  const archivedCount = useMemo(() => contracts.filter((c) => c.archived).length, [contracts]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return contracts.filter((c) => {
+      if (c.archived !== showArchived) return false;
       const matchesSearch =
         !q || c.title.toLowerCase().includes(q) || (c.client?.name || "").toLowerCase().includes(q);
       const matchesStatus = statusFilter === "ALL" || c.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [contracts, search, statusFilter]);
+  }, [contracts, search, statusFilter, showArchived]);
 
-  // Revenir en page 1 dès que la recherche ou le filtre change (même logique que
-  // OrdersView/ClientGalleriesView), sinon on peut se retrouver sur une page qui n'existe
-  // plus dans le résultat filtré.
+  // Revenir en page 1 dès que la recherche, le filtre ou l'onglet actif/archivés change
+  // (même logique que OrdersView/ClientGalleriesView), sinon on peut se retrouver sur une
+  // page qui n'existe plus dans le résultat filtré.
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter]);
+  }, [search, statusFilter, showArchived]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -88,7 +114,7 @@ export default function ContractsPage() {
         <div>
           <h1 className="font-serif text-2xl font-semibold">{t("contracts.title")}</h1>
           <p className="mt-1 text-sm text-gray-500">
-            {t("contracts.subtitle").replace("{count}", String(contracts.length))}
+            {t("contracts.subtitle").replace("{count}", String(activeCount))}
           </p>
         </div>
         <Link href="/dashboard/contracts/new" className="btn-primary">
@@ -96,7 +122,28 @@ export default function ContractsPage() {
         </Link>
       </div>
 
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="mt-5 flex gap-1 rounded-lg bg-gray-100 p-1 sm:w-fit">
+        <button
+          type="button"
+          onClick={() => setShowArchived(false)}
+          className={`flex-1 rounded-md px-4 py-1.5 text-sm font-medium transition sm:flex-none ${
+            !showArchived ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          {t("contracts.activeTab")} ({activeCount})
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowArchived(true)}
+          className={`flex-1 rounded-md px-4 py-1.5 text-sm font-medium transition sm:flex-none ${
+            showArchived ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          {t("contracts.archivedTab")} ({archivedCount})
+        </button>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div className="w-56 shrink-0">
           <input
             type="text"
@@ -129,7 +176,13 @@ export default function ContractsPage() {
               <IconDoc />
             </div>
             <p className="text-sm text-gray-500">
-              {contracts.length === 0 ? t("contracts.empty") : t("contracts.emptyFiltered")}
+              {showArchived
+                ? archivedCount === 0
+                  ? t("contracts.emptyArchived")
+                  : t("contracts.emptyFiltered")
+                : activeCount === 0
+                  ? t("contracts.empty")
+                  : t("contracts.emptyFiltered")}
             </p>
           </div>
         )}
@@ -178,6 +231,28 @@ export default function ContractsPage() {
               >
                 {t("contracts.viewLink")}
               </Link>
+              {c.archived ? (
+                <button
+                  type="button"
+                  disabled={archiving === c.id}
+                  onClick={() => toggleArchived(c, false)}
+                  className="rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                >
+                  {t("contracts.unarchive")}
+                </button>
+              ) : (
+                c.status === "SIGNED" && (
+                  <button
+                    type="button"
+                    disabled={archiving === c.id}
+                    onClick={() => toggleArchived(c, true)}
+                    className="flex items-center gap-1 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                  >
+                    <IconArchive />
+                    {t("contracts.archive")}
+                  </button>
+                )
+              )}
             </div>
           </div>
         ))}
@@ -213,6 +288,17 @@ function IconDownload() {
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M4 19h16" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconArchive() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M4 7h16" strokeLinecap="round" />
+      <path d="M5 7v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7" strokeLinejoin="round" />
+      <rect x="3" y="4" width="18" height="3" rx="1" />
+      <path d="M10 12h4" strokeLinecap="round" />
     </svg>
   );
 }
