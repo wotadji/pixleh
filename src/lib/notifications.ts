@@ -196,6 +196,76 @@ export async function sendContractSignEmail(params: {
   });
 }
 
+/** Envoyé au client quand le studio crée une facture en la rattachant à un client (voir POST
+ * /api/invoices) : contient le lien de paiement (/i/[id]). Même patron que
+ * sendContractSignEmail (lien direct + signature de contact du studio) — refonte facturation
+ * du 31/07/2026 demandée par Adriel. */
+export async function sendInvoiceEmail(params: {
+  clientName: string;
+  clientEmail: string;
+  invoiceNumber: string;
+  invoiceId: string;
+  totalCents: number;
+  currency: string;
+  dueDate: Date | null;
+  studio: { name: string; slug: string; logoUrl: string | null; brandColor: string | null };
+  settings: { contactEmail: string | null; contactPhone: string | null } | null;
+}) {
+  const link = appUrl(`/i/${params.invoiceId}`);
+  const signature = buildEmailSignature(params.studio, params.settings);
+  const amount = formatAmount(params.totalCents, params.currency);
+  const dueLine = params.dueDate ? ` — échéance le ${params.dueDate.toLocaleDateString("fr-FR")}` : "";
+
+  const html = wrapEmail(`
+    <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Nouvelle facture</h2>
+    <p>Bonjour ${escapeHtml(params.clientName)},</p>
+    <p><strong>${escapeHtml(params.studio.name)}</strong> vous a envoyé la facture
+    <strong>${escapeHtml(params.invoiceNumber)}</strong> d'un montant de <strong>${amount}</strong>${dueLine}.</p>
+    <a href="${link}" style="${BUTTON_STYLE}">Consulter et payer</a>
+  `);
+
+  // Renvoie le résultat de sendMail (voir sendContractSignEmail ci-dessus) pour que l'appelant
+  // (POST /api/invoices) puisse prévenir le studio si l'envoi échoue plutôt que de le croire
+  // réussi à tort.
+  return sendMail({
+    to: params.clientEmail,
+    subject: `Facture ${params.invoiceNumber} — ${amount}`,
+    text: [
+      `Bonjour ${params.clientName}, ${params.studio.name} vous a envoyé la facture ${params.invoiceNumber} (${amount})${dueLine}. Consultez-la et payez ici : ${link}`,
+      signature.text,
+    ].join("\n\n"),
+    html: `${html}${signature.html}`,
+  });
+}
+
+/** Relance manuelle d'une facture en attente (bouton "Relancer" sur /dashboard/invoices) —
+ * même contenu que sendInvoiceEmail mais formulé comme un rappel plutôt qu'un premier envoi. */
+export async function sendInvoiceReminderEmail(params: Parameters<typeof sendInvoiceEmail>[0]) {
+  const link = appUrl(`/i/${params.invoiceId}`);
+  const signature = buildEmailSignature(params.studio, params.settings);
+  const amount = formatAmount(params.totalCents, params.currency);
+  const dueLine = params.dueDate ? ` — échéance le ${params.dueDate.toLocaleDateString("fr-FR")}` : "";
+
+  const html = wrapEmail(`
+    <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Rappel : facture en attente</h2>
+    <p>Bonjour ${escapeHtml(params.clientName)},</p>
+    <p>Petit rappel : la facture <strong>${escapeHtml(params.invoiceNumber)}</strong> de
+    <strong>${amount}</strong>${dueLine} envoyée par <strong>${escapeHtml(params.studio.name)}</strong>
+    est toujours en attente de règlement.</p>
+    <a href="${link}" style="${BUTTON_STYLE}">Consulter et payer</a>
+  `);
+
+  return sendMail({
+    to: params.clientEmail,
+    subject: `Rappel — Facture ${params.invoiceNumber} en attente (${amount})`,
+    text: [
+      `Bonjour ${params.clientName}, rappel : la facture ${params.invoiceNumber} (${amount})${dueLine} de ${params.studio.name} est toujours en attente de règlement. Consultez-la et payez ici : ${link}`,
+      signature.text,
+    ].join("\n\n"),
+    html: `${html}${signature.html}`,
+  });
+}
+
 /** Confirme l'email d'un ClientAccount (espace Client unifié, voir /client/login) avant
  * d'activer le mot de passe qu'il vient de créer — même patron que sendVerificationEmail
  * (compte studio), lien géré par /api/client-portal/verify-email. */

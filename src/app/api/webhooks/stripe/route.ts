@@ -61,6 +61,13 @@ export async function POST(req: Request) {
           data: { status: "PAID", paidAt: new Date() },
           include: { client: true },
         });
+        // amountPaidCents n'existe pas encore dans le Prisma Client généré du sandbox (voir
+        // schema.prisma) — écrit à part via $executeRaw. Un paiement Stripe Checkout est
+        // toujours intégral (pas de paiement partiel en ligne, contrairement au règlement
+        // manuel via /api/invoices/[id]/mark-paid) : on aligne donc amountPaidCents sur le
+        // total, pour que le suivi facturé/payé (voir Contract.amountCents) reste cohérent
+        // entre les deux modes de paiement.
+        await prisma.$executeRaw`UPDATE "Invoice" SET "amountPaidCents" = ${invoice.totalCents} WHERE id = ${invoice.id}`;
         sendStudioInvoicePaidEmail({
           studioId: invoice.studioId,
           invoiceNumber: invoice.number,

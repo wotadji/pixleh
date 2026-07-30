@@ -2,7 +2,16 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireStudioSession, AccessError } from "@/lib/access";
 import { invoiceSchema } from "@/lib/validators";
+import { sendInvoiceEmail } from "@/lib/notifications";
+import { isInvoiceTemplateId } from "@/lib/invoiceTemplates";
 
+/**
+ * Liste des factures du studio — refonte du 31/07/2026 (demande d'Adriel : amener la
+ * facturation au même niveau de rigueur que les contrats). contractId/notes/amountPaidCents/
+ * paymentMethod/template/archived/sentAt n'existent pas encore dans le Prisma Client généré du
+ * sandbox (voir schema.prisma) : lus à part via $queryRaw et fusionnés dans la liste typée,
+ * même workaround que pour /api/contracts.
+ */
 export async function GET() {
   try {
     const session = await requireStudioSession();
@@ -11,7 +20,39 @@ export async function GET() {
       include: { client: true },
       orderBy: { createdAt: "desc" },
     });
-    return NextResponse.json({ invoices });
+
+    const extraRows = await prisma.$queryRaw<
+      {
+        id: string;
+        contractId: string | null;
+        notes: string | null;
+        amountPaidCents: number;
+        paymentMethod: string | null;
+        template: string;
+        archived: boolean;
+        sentAt: Date | null;
+      }[]
+    >`
+      SELECT id, "contractId", notes, "amountPaidCents", "paymentMethod", template, archived, "sentAt"
+      FROM "Invoice" WHERE "studioId" = ${session.user.studioId}
+    `;
+    const extraById = new Map(extraRows.map((r) => [r.id, r]));
+
+    const withExtra = invoices.map((inv) => {
+      const extra = extraById.get(inv.id);
+      return {
+        ...inv,
+        contractId: extra?.contractId ?? null,
+        notes: extra?.notes ?? null,
+        amountPaidCents: extra?.amountPaidCents ?? 0,
+        paymentMethod: extra?.paymentMethod ?? null,
+        template: extra?.template ?? "classic",
+        archived: extra?.archived ?? false,
+        sentAt: extra?.sentAt ?? null,
+      };
+    });
+
+    return NextResponse.json({ invoices: withExtra });
   } catch (e) {
     return handleError(e);
   }
@@ -27,11 +68,25 @@ export async function POST(req: Request) {
     }
     const data = parsed.data;
 
+    const studio = await prisma.studio.findUnique({
+      where: { id: session.user.studioId },
+      include: { settings: true },
+    });
+    if (!studio) throw new AccessError("Studio introuvable", 404);
+
+    // Numérotation : préfixe personnalisable (StudioSettings.invoiceNumberPrefix, voir
+    // Réglages > Facturation), "FAC" par défaut. Champ pas encore dans le Prisma Client généré
+    // du sandbox (voir schema.prisma) — lu à part via $queryRaw, même workaround que les
+    // autres champs récents de StudioSettings.
+    const [settingsRow] = await prisma.$queryRaw<{ invoiceNumberPrefix: string | null }[]>`
+      SELECT "invoiceNumberPrefix" FROM "StudioSettings" WHERE "studioId" = ${session.user.studioId}
+    `;
+    const prefix = settingsRow?.invoiceNumberPrefix || "FAC";
     const year = new Date().getFullYear();
     const countThisYear = await prisma.invoice.count({
-      where: { studioId: session.user.studioId, number: { startsWith: `FAC-${year}-` } },
+      where: { studioId: session.user.studioId, number: { startsWith: `${prefix}-${year}-` } },
     });
-    const number = `FAC-${year}-${String(countThisYear + 1).padStart(4, "0")}`;
+    const number = `${prefix}-${year}-${String(countThisYear + 1).padStart(4, "0")}`;
 
     const totalCents = data.lineItems.reduce(
       (sum, item) => sum + item.quantity * item.unitPriceCents,
@@ -50,7 +105,48 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json({ invoice }, { status: 201 });
+    // contractId/notes/template/sentAt n'existent pas encore dans le Prisma Client généré du
+    // sandbox (voir schema.prisma) — écrits à part via $executeRaw, même workaround que pour
+    // les contrats (studioSignatureDataUrl/place/template).
+    if (data.contractId) {
+      await prisma.$executeRaw`UPDATE "Invoice" SET "contractId" = ${data.contractId} WHERE id = ${invoice.id}`;
+    }
+    if (data.notes) {
+      await prisma.$executeRaw`UPDATE "Invoice" SET notes = ${data.notes} WHERE id = ${invoice.id}`;
+    }
+    if (isInvoiceTemplateId(data.template)) {
+      await prisma.$executeRaw`UPDATE "Invoice" SET template = ${data.template} WHERE id = ${invoice.id}`;
+    }
+    const sentAt = new Date();
+    await prisma.$executeRaw`UPDATE "Invoice" SET "sentAt" = ${sentAt} WHERE id = ${invoice.id}`;
+
+    // Si le studio a choisi un client, on lui envoie directement le lien de paiement par email
+    // (même logique que POST /api/contracts) — pas d'échec bloquant si l'envoi rate, la
+    // facture est de toute façon créée et le lien reste consultable/partageable manuellement.
+    let emailSent = false;
+    let emailError: string | undefined;
+    if (data.clientId) {
+      const client = await prisma.client.findUnique({ where: { id: data.clientId } });
+      if (client?.email) {
+        const result = await sendInvoiceEmail({
+          clientName: client.name,
+          clientEmail: client.email,
+          invoiceNumber: number,
+          invoiceId: invoice.id,
+          totalCents,
+          currency: invoice.currency,
+          dueDate: invoice.dueDate,
+          studio: { name: studio.name, slug: studio.slug, logoUrl: studio.logoUrl, brandColor: studio.brandColor },
+          settings: studio.settings
+            ? { contactEmail: studio.settings.contactEmail, contactPhone: studio.settings.contactPhone }
+            : null,
+        });
+        emailSent = result.ok;
+        emailError = result.error;
+      }
+    }
+
+    return NextResponse.json({ invoice: { ...invoice, sentAt }, emailSent, emailError }, { status: 201 });
   } catch (e) {
     return handleError(e);
   }

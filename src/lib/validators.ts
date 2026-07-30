@@ -83,6 +83,11 @@ export const contractSchema = z.object({
 
 export const invoiceSchema = z.object({
   clientId: z.string().optional().nullable(),
+  // Rattachement optionnel à un contrat (31/07/2026, refonte facturation demandée par Adriel :
+  // "une qui nous permet de créer une facture à la demande et l'autre lié au contrat") — sert
+  // au suivi facturé/payé affiché sur le contrat (voir Contract.amountCents) et permet le
+  // schéma acompte + solde (plusieurs factures liées à un même contrat).
+  contractId: z.string().optional().nullable(),
   lineItems: z
     .array(
       z.object({
@@ -93,6 +98,8 @@ export const invoiceSchema = z.object({
     )
     .min(1),
   dueDate: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  template: z.string().optional().nullable(),
 });
 
 /// Grille tarifaire (panel admin plateforme /admin/plans) — voir modèle Plan dans le
