@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { PublicPortfolioGallery } from "@/components/public-site/PublicPortfolioGallery";
+import { GalleryView } from "@/components/gallery/GalleryView";
+import { sortPhotos, resolvePhotoSortKey } from "@/lib/photoSort";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +14,14 @@ export const dynamic = "force-dynamic";
  * galerie n'a pas de mot de passe. Voir /api/files/[...path]/route.ts (isPublicPortfolioPhoto)
  * pour la même règle appliquée à la diffusion des fichiers eux-mêmes.
  *
+ * Réutilise GalleryView (même couverture/grille/police/couleurs que la galerie normale, voir
+ * Design > Couverture dans le panel studio) plutôt qu'une mise en page maison — demandé par
+ * Adriel le 30/07/2026 : "la présentation de la galerie du portfolio doit être comme dans
+ * galerie". Le panier impression et le favoris n'ont pas de sens sans session (aucun cookie
+ * de galerie n'est jamais posé ici) : `allowDownload`/`allowFavorites` sont donc forcés à
+ * false et `allowPrintStore` masque le lien "Print Store" + l'icône panier, quels que soient
+ * les réglages réels de la galerie (allowGuestDownload etc.).
+ *
  * URL choisie par Adriel le 30/07/2026 : /[studioSlug]/portfolio/[gallerySlug] — un studio ne
  * peut jamais obtenir le slug "portfolio" pour lui-même (voir RESERVED_STUDIO_SLUGS), mais
  * cette route n'en a de toute façon pas besoin : c'est le DEUXIÈME segment ("portfolio") qui
@@ -25,7 +33,10 @@ export default async function PublicPortfolioGalleryPage({
 }: {
   params: { studioSlug: string; gallerySlug: string };
 }) {
-  const studio = await prisma.studio.findUnique({ where: { slug: params.studioSlug } });
+  const studio = await prisma.studio.findUnique({
+    where: { slug: params.studioSlug },
+    include: { settings: true },
+  });
   if (!studio) notFound();
 
   const gallery = await prisma.gallery.findFirst({
@@ -53,48 +64,46 @@ export default async function PublicPortfolioGalleryPage({
   // désactivé depuis) : on ne laisse pas deviner que la galerie existe malgré tout.
   if (portfolioPhotos.length === 0) notFound();
 
-  const photos = portfolioPhotos.map((p) => ({
-    id: p.id,
-    width: p.width,
-    height: p.height,
-    thumbUrl: `/api/files/studios/${studio.id}/galleries/${gallery.id}/${p.id}/thumb.jpg?v=${p.updatedAt.getTime()}`,
-    previewUrl: `/api/files/studios/${studio.id}/galleries/${gallery.id}/${p.id}/preview.jpg?v=${p.updatedAt.getTime()}`,
-  }));
+  const coverPhotoId =
+    gallery.coverPhotoId && portfolioPhotos.some((p) => p.id === gallery.coverPhotoId)
+      ? gallery.coverPhotoId
+      : portfolioPhotos[0]?.id ?? null;
 
   return (
-    <div className="min-h-screen bg-white">
-      <header className="mx-auto flex max-w-6xl flex-col items-center px-6 pb-8 pt-14 text-center">
-        <Link
-          href={`/s/${studio.slug}/portfolio`}
-          className="mb-6 flex items-center gap-2 text-xs uppercase tracking-widest text-gray-400 hover:text-gray-700"
-        >
-          {studio.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={studio.logoUrl} alt={studio.name} className="h-6 w-6 rounded-full object-cover" />
-          ) : (
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-[10px] font-semibold text-gray-600">
-              {studio.name.trim()[0]?.toUpperCase() || "?"}
-            </span>
-          )}
-          {studio.name}
-        </Link>
-        <h1 className="font-serif text-2xl font-semibold sm:text-3xl">{gallery.title}</h1>
-        {gallery.eventDate && (
-          <p className="mt-2 text-xs uppercase tracking-wide text-gray-400">
-            {new Date(gallery.eventDate).toLocaleDateString("fr-FR", {
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            })}
-          </p>
-        )}
-      </header>
-
-      <PublicPortfolioGallery photos={photos} />
-
-      <footer className="mt-16 border-t border-gray-100 py-8 text-center text-sm text-gray-400">
-        © {new Date().getFullYear()} {studio.name} — Propulsé par pixleh
-      </footer>
-    </div>
+    <GalleryView
+      gallery={{
+        id: gallery.id,
+        slug: gallery.slug,
+        title: gallery.title,
+        allowDownload: false,
+        allowFavorites: false,
+        coverPhotoId,
+        design: gallery.design,
+        studioName: studio.name,
+        studioSlug: studio.slug,
+        studioLogoUrl: studio.logoUrl,
+        studioContactEmail: studio.settings?.contactEmail || null,
+        studioContactPhone: studio.settings?.contactPhone || null,
+        studioInstagramUrl: studio.settings?.instagramUrl || null,
+        studioFacebookUrl: studio.settings?.facebookUrl || null,
+        eventDate: gallery.eventDate ? gallery.eventDate.toISOString() : null,
+      }}
+      studioId={studio.id}
+      photos={sortPhotos(portfolioPhotos, resolvePhotoSortKey(gallery.photoSortOrder)).map((p) => ({
+        id: p.id,
+        filename: p.filename,
+        width: p.width,
+        height: p.height,
+        updatedAt: p.updatedAt.toISOString(),
+        collectionId: p.collectionId,
+      }))}
+      collections={[]}
+      initialFavorites={[]}
+      initialPrintSelection={[]}
+      printProducts={[]}
+      allowRemarks={false}
+      allowPrintStore={false}
+      shareBaseUrl={`/${studio.slug}/portfolio/${gallery.slug}`}
+    />
   );
 }

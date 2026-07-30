@@ -61,6 +61,8 @@ export function GalleryView({
   initialPrintSelection,
   printProducts,
   allowRemarks = false,
+  allowPrintStore = true,
+  shareBaseUrl,
 }: {
   gallery: {
     id: string;
@@ -92,6 +94,16 @@ export function GalleryView({
   printProducts: PrintProductDTO[];
   /** Icône "remarque" sur chaque vignette — lien client uniquement (jamais côté invité). */
   allowRemarks?: boolean;
+  /** Lien "Print Store" + icône panier impression de la barre du haut — désactivés sur le
+   * portfolio public (/[studioSlug]/portfolio/[gallerySlug]) où il n'y a ni session ni
+   * commande possible, contrairement au lien client normal (/g/[slug]), seul contexte où
+   * ils gardent un sens. */
+  allowPrintStore?: boolean;
+  /** Base du lien utilisé par le bouton "Partager" (icône + modale) — par défaut
+   * `/g/[slug]` (lien client protégé). Le portfolio public passe sa propre URL
+   * (`/[studioSlug]/portfolio/[gallerySlug]`) pour ne jamais partager un lien qui mène en
+   * fait à la galerie complète protégée. */
+  shareBaseUrl?: string;
 }) {
   const [favorites, setFavorites] = useState<Set<string>>(new Set(initialFavorites));
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -325,7 +337,7 @@ export function GalleryView({
   // barre du haut), soit pour une photo précise (icône sur une vignette ou dans la
   // visionneuse), auquel cas le lien contient `?photo=<id>` pour rouvrir directement dessus.
   function openShare(photoId?: string) {
-    const base = `${window.location.origin}/g/${gallery.slug}`;
+    const base = `${window.location.origin}${shareBaseUrl ?? `/g/${gallery.slug}`}`;
     const url = photoId ? `${base}?photo=${photoId}` : base;
     setShareTarget({ url, title: photoId ? `${gallery.title} — photo` : gallery.title });
   }
@@ -527,29 +539,33 @@ export function GalleryView({
           )}
           {mainView === "photos" && (
             <>
-              <Link
-                href={`/g/${gallery.slug}/store`}
-                className="hidden text-xs uppercase tracking-wide opacity-70 hover:opacity-100 sm:inline"
-              >
-                Print Store
-              </Link>
-              <span className="hidden h-4 w-px opacity-20 sm:inline" style={{ backgroundColor: palette.text }} />
-              <button
-                onClick={() => setPrintPanelOpen(true)}
-                title="Sélection impression"
-                aria-label="Sélection impression"
-                className="relative flex h-8 w-8 items-center justify-center rounded-full opacity-70 transition-colors hover:bg-black/5 hover:opacity-100"
-              >
-                <IconPrinter />
-                {printSelection.size > 0 && (
-                  <span
-                    className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-semibold text-white"
-                    style={{ backgroundColor: palette.accent }}
+              {allowPrintStore && (
+                <>
+                  <Link
+                    href={`/g/${gallery.slug}/store`}
+                    className="hidden text-xs uppercase tracking-wide opacity-70 hover:opacity-100 sm:inline"
                   >
-                    {printSelection.size}
-                  </span>
-                )}
-              </button>
+                    Print Store
+                  </Link>
+                  <span className="hidden h-4 w-px opacity-20 sm:inline" style={{ backgroundColor: palette.text }} />
+                  <button
+                    onClick={() => setPrintPanelOpen(true)}
+                    title="Sélection impression"
+                    aria-label="Sélection impression"
+                    className="relative flex h-8 w-8 items-center justify-center rounded-full opacity-70 transition-colors hover:bg-black/5 hover:opacity-100"
+                  >
+                    <IconPrinter />
+                    {printSelection.size > 0 && (
+                      <span
+                        className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-semibold text-white"
+                        style={{ backgroundColor: palette.accent }}
+                      >
+                        {printSelection.size}
+                      </span>
+                    )}
+                  </button>
+                </>
+              )}
               {gallery.allowFavorites && (
                 <IconButton
                   label={favoritesOnly ? "Toutes les photos" : "Mes favoris"}
@@ -643,6 +659,7 @@ export function GalleryView({
                   onShare={() => openShare(photo.id)}
                   isSelectedForPrint={printSelection.has(photo.id)}
                   onTogglePrint={() => togglePrintSelection(photo.id)}
+                  allowPrint={allowPrintStore}
                   allowRemarks={allowRemarks}
                   hasRemark={remarks.has(photo.id)}
                   remarkState={remarkStateFor(photo.id)}
@@ -692,6 +709,7 @@ export function GalleryView({
                       onShare={() => openShare(photo.id)}
                       isSelectedForPrint={printSelection.has(photo.id)}
                       onTogglePrint={() => togglePrintSelection(photo.id)}
+                      allowPrint={allowPrintStore}
                       allowRemarks={allowRemarks}
                       hasRemark={remarks.has(photo.id)}
                       remarkState={remarkStateFor(photo.id)}
@@ -1550,6 +1568,7 @@ function PhotoOverlay({
   onShare,
   isSelectedForPrint,
   onTogglePrint,
+  allowPrint = true,
   allowRemarks,
   hasRemark,
   remarkState,
@@ -1564,6 +1583,9 @@ function PhotoOverlay({
   onShare: () => void;
   isSelectedForPrint: boolean;
   onTogglePrint: () => void;
+  /** Icône panier impression (hover sur la vignette) — masquée sur le portfolio public, voir
+   * allowPrintStore dans GalleryView. */
+  allowPrint?: boolean;
   allowRemarks?: boolean;
   hasRemark?: boolean;
   /** "pending" (photographe n'a pas encore traité) ou "resolved" (modifications appliquées). */
@@ -1583,20 +1605,22 @@ function PhotoOverlay({
   return (
     <>
     <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center gap-5 bg-gradient-to-t from-black/55 via-black/15 to-transparent pb-3 pt-10 opacity-0 transition-opacity group-hover:opacity-100">
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onTogglePrint();
-        }}
-        aria-label={isSelectedForPrint ? "Retirer de la sélection impression" : "Ajouter à la sélection impression"}
-        className={
-          isSelectedForPrint
-            ? "pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-900 shadow transition-transform hover:scale-110"
-            : iconClass
-        }
-      >
-        {isSelectedForPrint ? <IconCheck /> : <IconPrinter />}
-      </button>
+      {allowPrint && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePrint();
+          }}
+          aria-label={isSelectedForPrint ? "Retirer de la sélection impression" : "Ajouter à la sélection impression"}
+          className={
+            isSelectedForPrint
+              ? "pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-900 shadow transition-transform hover:scale-110"
+              : iconClass
+          }
+        >
+          {isSelectedForPrint ? <IconCheck /> : <IconPrinter />}
+        </button>
+      )}
       {allowFavorites && (
         <button
           onClick={(e) => {
