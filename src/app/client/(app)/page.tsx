@@ -45,9 +45,18 @@ export default async function ClientPortalPage() {
     orderBy: { createdAt: "desc" },
   });
 
+  const totalGalleries = clientRows.reduce((sum, row) => sum + row.galleries.length, 0);
+
   return (
     <div className="px-6 py-10">
-      <h1 className="font-serif text-2xl font-semibold">Mes galeries</h1>
+      <div className="flex items-center gap-2">
+        <h1 className="font-serif text-2xl font-semibold">Mes galeries</h1>
+        {totalGalleries > 0 && (
+          <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-sm font-medium text-gray-600">
+            {totalGalleries}
+          </span>
+        )}
+      </div>
 
       {clientRows.length === 0 && (
         <p className="mt-8 text-sm text-gray-600">Aucune galerie ne vous a encore été partagée.</p>
@@ -99,20 +108,22 @@ export default async function ClientPortalPage() {
                         </span>
                       )}
                     </span>
-                    <span className="flex shrink-0 items-center gap-4">
+                    <span className="flex shrink-0 items-center gap-2">
                       {g.status !== "DRAFT" && (
                         <>
                           <a
                             href={`/client/galleries/${g.id}/view`}
-                            className="text-xs text-gray-400 underline-offset-2 hover:text-gray-700 hover:underline"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn-secondary px-3 py-1.5 text-xs"
                           >
                             Voir galerie
                           </a>
                           <ShareGalleryButton gallerySlug={g.slug} />
                         </>
                       )}
-                      <Link href={`/client/galleries/${g.id}`} className="text-gray-400 hover:text-gray-700">
-                        Gérer →
+                      <Link href={`/client/galleries/${g.id}`} className="btn-secondary px-3 py-1.5 text-xs">
+                        Gérer
                       </Link>
                     </span>
                   </li>

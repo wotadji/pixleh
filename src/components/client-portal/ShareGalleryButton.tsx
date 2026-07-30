@@ -22,11 +22,7 @@ export function ShareGalleryButton({ gallerySlug }: { gallerySlug: string }) {
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="text-xs text-gray-400 underline-offset-2 hover:text-gray-700 hover:underline"
-    >
+    <button type="button" onClick={handleClick} className="btn-secondary px-3 py-1.5 text-xs">
       {copied ? "Lien copié" : "Partager"}
     </button>
   );
