@@ -219,6 +219,26 @@ model StudioSettings {
   /// Forme : Array<{ id: string; text: string; imageUrl: string | null }>, voir
   /// src/components/public-site/HeroCarousel.tsx et Réglages > Carrousel.
   carouselSlides     Json?
+  /// --- Facturation (31/07/2026, demande d'Adriel : refonte pro de la facturation) ---
+  /// Informations légales/bancaires affichées sur le PDF des factures (mentions obligatoires
+  /// en France : forme juridique, SIRET, mention de TVA). Toutes nullable/optionnelles : un
+  /// studio peut ne pas les avoir encore renseignées, le PDF s'adapte (ligne omise si vide).
+  /// Même limitation de sandbox que les champs Contract/Invoice récents (lus/écrits via
+  /// $queryRaw/$executeRaw tant qu'Adriel n'a pas relancé `prisma generate && prisma db push`).
+  legalForm          String? // ex: "Auto-entrepreneur", "SASU", "EURL"
+  siret              String?
+  vatNumber          String? // n° de TVA intracommunautaire, si applicable
+  /// true par défaut : la plupart des photographes indépendants démarrent en micro-entreprise,
+  /// non assujettis à la TVA (mention obligatoire "TVA non applicable, art. 293 B du CGI").
+  vatExempt          Boolean @default(true)
+  iban               String?
+  bic                String?
+  /// Texte légal libre affiché en bas de facture (pénalités de retard, indemnité forfaitaire
+  /// de recouvrement...) — pré-rempli avec une formule standard à la création du studio,
+  /// modifiable librement dans Réglages > Facturation.
+  invoiceLegalMentions String? @db.Text
+  /// Préfixe du numéro de facture (ex: "FAC" → "FAC-2026-0001").
+  invoiceNumberPrefix  String? @default("FAC")
 }
 
 model User {
@@ -869,7 +889,18 @@ model Contract {
   /// 31/07/2026. Même limitation de sandbox que les champs ci-dessus (lu/écrit via
   /// $queryRaw/$executeRaw tant qu'Adriel n'a pas relancé `prisma generate && prisma db push`).
   template     String         @default("classic")
+  /// Montant total convenu pour ce contrat (en centimes) — demandé par Adriel, 31/07/2026 :
+  /// "est-ce que nous devons mettre un champ prix lors de la rédaction du contrat [...] pour
+  /// évaluer les paiements à partir des factures liées". Sert de référence pour le suivi
+  /// facturé/payé affiché sur le contrat (somme des Invoice.totalCents / amountPaidCents liées
+  /// via Invoice.contractId), notamment pour le schéma acompte + solde (deux factures liées à
+  /// un même contrat). Nullable : un contrat n'a pas toujours un prix figé au moment de la
+  /// rédaction. Même limitation de sandbox que les champs ci-dessus (lu/écrit via
+  /// $queryRaw/$executeRaw tant qu'Adriel n'a pas relancé `prisma generate && prisma db push`).
+  amountCents  Int?
   createdAt    DateTime       @default(now())
+
+  invoices     Invoice[]
 
   @@index([studioId])
   @@index([clientId])
@@ -885,26 +916,53 @@ enum InvoiceStatus {
   CANCELLED
 }
 
+/// Refonte complète du 31/07/2026 (demande d'Adriel : amener la facturation au même niveau de
+/// rigueur que les contrats) — tous les nouveaux champs suivent la même limitation de sandbox
+/// que ceux ajoutés sur Contract (studioSignatureDataUrl/place/archived/template/amountCents) :
+/// lus/écrits via $queryRaw/$executeRaw tant qu'Adriel n'a pas relancé
+/// `prisma generate && prisma db push` en local.
 model Invoice {
   id            String        @id @default(cuid())
   studioId      String
   studio        Studio        @relation(fields: [studioId], references: [id], onDelete: Cascade)
   clientId      String?
   client        Client?       @relation(fields: [clientId], references: [id])
+  /// Facture liée à un contrat (acompte/solde) — optionnel, une facture peut aussi être créée
+  /// "à la demande" sans contrat (voir /dashboard/invoices/new, avec ou sans ?contractId=).
+  contractId    String?
+  contract      Contract?     @relation(fields: [contractId], references: [id])
   number        String        // numéro séquentiel affiché (ex: FAC-2026-0001)
   status        InvoiceStatus @default(DRAFT)
   lineItems     Json          // [{ description, quantity, unitPriceCents }]
   totalCents    Int
   currency      String        @default("EUR")
   dueDate       DateTime?
+  /// Notes/mentions libres affichées en bas de la facture (conditions de paiement, message de
+  /// remerciement...) — en plus des mentions légales fixes du studio (StudioSettings).
+  notes         String?       @db.Text
   stripeSessionId String?     @unique
   paidAt        DateTime?
+  /// Montant déjà réglé (en centimes) — permet un paiement partiel/acompte enregistré
+  /// manuellement (virement, chèque, espèces) en plus du paiement intégral via Stripe.
+  /// status passe à PAID seulement quand amountPaidCents >= totalCents.
+  amountPaidCents Int         @default(0)
+  /// Mode du dernier paiement enregistré : "stripe" | "bank_transfer" | "cash" | "check".
+  paymentMethod String?
+  /// Template de mise en page PDF ("classic" | "minimal" | "elegant", voir
+  /// src/lib/invoiceTemplates.ts) — même mécanisme que Contract.template.
+  template      String        @default("classic")
+  /// Archivage (même logique que Contract.archived) : masquée de la liste principale sans
+  /// être supprimée.
+  archived      Boolean       @default(false)
+  /// Horodatage du dernier envoi par email au client (création ou renvoi manuel).
+  sentAt        DateTime?
   pdfKey        String?
   createdAt     DateTime      @default(now())
 
   @@unique([studioId, number])
   @@index([studioId])
   @@index([clientId])
+  @@index([contractId])
 }
 
 // ===================== Site vitrine / portfolio public =====================

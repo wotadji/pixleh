@@ -6,6 +6,11 @@ import {
   DEFAULT_CONTRACT_TEMPLATE,
   isContractTemplateId,
 } from "@/lib/contractTemplates";
+import {
+  type InvoiceTemplateId,
+  DEFAULT_INVOICE_TEMPLATE,
+  isInvoiceTemplateId,
+} from "@/lib/invoiceTemplates";
 
 const styles = StyleSheet.create({
   page: { padding: 64, fontSize: 11, fontFamily: "Helvetica", color: "#1f2937" },
@@ -13,14 +18,6 @@ const styles = StyleSheet.create({
   section: { marginBottom: 16 },
   row: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
   label: { color: "#666" },
-  table: { marginTop: 12, borderTop: "1px solid #ddd" },
-  tableRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 6,
-    borderBottom: "1px solid #eee",
-  },
-  total: { marginTop: 12, fontSize: 14, fontWeight: 700, textAlign: "right" },
   footer: {
     position: "absolute",
     bottom: 24,
@@ -32,15 +29,16 @@ const styles = StyleSheet.create({
     color: "#9ca3af",
     textAlign: "center",
   },
-  // --- Template "classic" (design professionnel initial, 31/07/2026) ---
+  // --- Template "classic" (design professionnel initial, 31/07/2026) — partagé
+  // contrats/factures via buildLetterhead() ---
   letterheadRow: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
   logo: { width: 36, height: 36, borderRadius: 18, marginRight: 10, objectFit: "cover" },
   logoFallback: { width: 36, height: 36, borderRadius: 18, marginRight: 10, alignItems: "center", justifyContent: "center" },
   logoFallbackText: { color: "#ffffff", fontSize: 15, fontFamily: "Times-Bold" },
   letterheadName: { fontSize: 13, fontWeight: 700, color: "#111827" },
-  contractTitleWrap: { alignItems: "center", marginBottom: 18 },
-  contractTitle: { fontFamily: "Times-Bold", fontSize: 21, textAlign: "center", color: "#111827", lineHeight: 1.35 },
-  contractTitleRule: { width: 60, height: 3, borderRadius: 2, marginTop: 12 },
+  docTitleWrap: { alignItems: "center", marginBottom: 18 },
+  docTitle: { fontFamily: "Times-Bold", fontSize: 21, textAlign: "center", color: "#111827", lineHeight: 1.35 },
+  docTitleRule: { width: 60, height: 3, borderRadius: 2, marginTop: 12 },
   metaBar: {
     alignSelf: "center",
     backgroundColor: "#f9fafb",
@@ -95,6 +93,48 @@ const styles = StyleSheet.create({
   elegantSignatureBlock: { width: "47%", alignItems: "center", borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingTop: 12 },
   elegantSignatureLabel: { fontSize: 8.5, fontFamily: "Times-Italic", color: "#6b7280", marginBottom: 10, textAlign: "center" },
   elegantSignatureLine: { borderBottomWidth: 1, borderBottomColor: "#d1d5db", width: "70%", marginBottom: 8 },
+
+  // --- Facture : bloc "Facturé à" + tableau de lignes + totaux + tampon payé (31/07/2026,
+  // refonte pro de la facturation demandée par Adriel) ---
+  invoiceMetaRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 24 },
+  billToLabel: { fontSize: 8.5, textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 700, marginBottom: 6, color: "#9ca3af" },
+  billToName: { fontSize: 11, fontWeight: 700, color: "#111827" },
+  billToLine: { fontSize: 9.5, color: "#6b7280", marginTop: 2 },
+  invoiceMetaBlock: { alignItems: "flex-end" },
+  invoiceMetaLine: { fontSize: 9.5, color: "#6b7280", marginTop: 2 },
+  tableHeaderRow: { flexDirection: "row", borderBottomWidth: 1.5, paddingBottom: 6, marginBottom: 4 },
+  tableHeaderCell: { fontSize: 8.5, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700, color: "#9ca3af" },
+  lineRow: { flexDirection: "row", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#f3f4f6" },
+  lineDescCell: { flex: 1, fontSize: 10.5, color: "#1f2937", paddingRight: 8 },
+  lineQtyCell: { width: 44, fontSize: 10.5, color: "#6b7280", textAlign: "center" },
+  lineUnitCell: { width: 78, fontSize: 10.5, color: "#6b7280", textAlign: "right" },
+  lineTotalCell: { width: 78, fontSize: 10.5, fontWeight: 700, color: "#111827", textAlign: "right" },
+  totalsBlock: { marginTop: 16, alignSelf: "flex-end", width: 230 },
+  totalsRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 },
+  totalsLabel: { fontSize: 10, color: "#6b7280" },
+  totalsValue: { fontSize: 10, color: "#111827" },
+  grandTotalRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 6, paddingTop: 8, borderTopWidth: 1.5 },
+  grandTotalLabel: { fontSize: 12, fontWeight: 700, color: "#111827" },
+  grandTotalValue: { fontSize: 14, fontWeight: 700, color: "#111827" },
+  balanceDueRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
+  balanceDueLabel: { fontSize: 10, fontWeight: 700, color: "#b45309" },
+  balanceDueValue: { fontSize: 10, fontWeight: 700, color: "#b45309" },
+  paidStamp: {
+    position: "absolute",
+    top: 68,
+    right: 64,
+    borderWidth: 2,
+    borderColor: "#16a34a",
+    borderRadius: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    transform: "rotate(-8deg)",
+  },
+  paidStampText: { fontSize: 14, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#16a34a" },
+  notesBlock: { marginTop: 26, paddingTop: 12, borderTopWidth: 1, borderTopColor: "#e5e7eb" },
+  notesLabel: { fontSize: 8.5, textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 700, color: "#9ca3af", marginBottom: 4 },
+  notesText: { fontSize: 9.5, color: "#4b5563", lineHeight: 1.5 },
+  legalMentions: { marginTop: 18, fontSize: 8, color: "#9ca3af", lineHeight: 1.5 },
 });
 
 /** Thèmes du corps HTML (titres/citations/puces/liens — voir htmlToPdf.tsx) par template.
@@ -129,6 +169,89 @@ const CONTRACT_TEMPLATE_HTML_THEMES: Record<ContractTemplateId, Partial<HtmlPdfT
 function absoluteUrl(path: string) {
   const base = (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
   return `${base}${path}`;
+}
+
+/**
+ * Lettrine + titre + ligne méta partagés entre le contrat et la facture (31/07/2026, refonte
+ * de la facturation demandée par Adriel : même identité visuelle sur les deux documents, 3
+ * templates au choix). `metaLine` est le texte affiché sous le titre — "Fait à ..., le ..."
+ * pour un contrat, "Émise le ..." pour une facture.
+ */
+function buildLetterhead(
+  tmpl: "classic" | "minimal" | "elegant",
+  params: { studioName: string; title: string; metaLine?: string | null; logoAbsoluteUrl: string | null; accent: string }
+): React.ReactNode {
+  const { studioName, title, metaLine, logoAbsoluteUrl, accent } = params;
+
+  if (tmpl === "minimal") {
+    return (
+      <>
+        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 14 }}>
+          {logoAbsoluteUrl ? (
+            <Image src={logoAbsoluteUrl} style={styles.logoSquare} />
+          ) : (
+            <View style={[styles.logoFallbackSquare, { backgroundColor: "#e5e7eb" }]}>
+              <Text style={{ color: "#6b7280", fontSize: 13, fontFamily: "Helvetica-Bold" }}>
+                {studioName.slice(0, 1).toUpperCase()}
+              </Text>
+            </View>
+          )}
+          <Text style={styles.minimalStudioName}>{studioName}</Text>
+        </View>
+        <Text style={styles.minimalTitle}>{title}</Text>
+        <View style={styles.minimalDivider} />
+        {metaLine && <Text style={styles.minimalMetaText}>{metaLine}</Text>}
+      </>
+    );
+  }
+
+  if (tmpl === "elegant") {
+    return (
+      <View style={styles.elegantFrame}>
+        {logoAbsoluteUrl ? (
+          <Image src={logoAbsoluteUrl} style={styles.elegantLogo} />
+        ) : (
+          <View style={[styles.elegantLogoFallback, { backgroundColor: accent }]}>
+            <Text style={{ color: "#ffffff", fontSize: 13, fontFamily: "Times-Bold" }}>
+              {studioName.slice(0, 1).toUpperCase()}
+            </Text>
+          </View>
+        )}
+        <Text style={styles.elegantStudioName}>{studioName}</Text>
+        <View style={styles.elegantRule} />
+        <Text style={styles.elegantTitle}>{title}</Text>
+        <View style={styles.elegantRule} />
+        {metaLine && <Text style={styles.elegantMetaText}>{metaLine}</Text>}
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <View style={styles.letterheadRow}>
+        {logoAbsoluteUrl ? (
+          <Image src={logoAbsoluteUrl} style={styles.logo} />
+        ) : (
+          <View style={[styles.logoFallback, { backgroundColor: accent }]}>
+            <Text style={styles.logoFallbackText}>{studioName.slice(0, 1).toUpperCase()}</Text>
+          </View>
+        )}
+        <Text style={styles.letterheadName}>{studioName}</Text>
+      </View>
+      <View style={{ height: 2, backgroundColor: accent, marginBottom: 26 }} />
+
+      <View style={styles.docTitleWrap}>
+        <Text style={styles.docTitle}>{title}</Text>
+        <View style={[styles.docTitleRule, { backgroundColor: accent }]} />
+      </View>
+
+      {metaLine && (
+        <View style={styles.metaBar}>
+          <Text style={styles.metaBarText}>{metaLine}</Text>
+        </View>
+      )}
+    </>
+  );
 }
 
 /** Génère le PDF d'un contrat signé (texte + image de signature). */
@@ -199,74 +322,7 @@ export async function renderContractPdf(params: {
   const htmlTheme: Partial<HtmlPdfTheme> = { accent, ...CONTRACT_TEMPLATE_HTML_THEMES[tmpl] };
   const bodyContent = <View style={styles.section}>{renderHtmlToPdf(bodyHtml, htmlTheme)}</View>;
 
-  let headerBlock: React.ReactNode;
-  if (tmpl === "minimal") {
-    headerBlock = (
-      <>
-        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 14 }}>
-          {logoAbsoluteUrl ? (
-            <Image src={logoAbsoluteUrl} style={styles.logoSquare} />
-          ) : (
-            <View style={[styles.logoFallbackSquare, { backgroundColor: "#e5e7eb" }]}>
-              <Text style={{ color: "#6b7280", fontSize: 13, fontFamily: "Helvetica-Bold" }}>
-                {studioName.slice(0, 1).toUpperCase()}
-              </Text>
-            </View>
-          )}
-          <Text style={styles.minimalStudioName}>{studioName}</Text>
-        </View>
-        <Text style={styles.minimalTitle}>{title}</Text>
-        <View style={styles.minimalDivider} />
-        {madeAtLine && <Text style={styles.minimalMetaText}>{madeAtLine}</Text>}
-      </>
-    );
-  } else if (tmpl === "elegant") {
-    headerBlock = (
-      <View style={styles.elegantFrame}>
-        {logoAbsoluteUrl ? (
-          <Image src={logoAbsoluteUrl} style={styles.elegantLogo} />
-        ) : (
-          <View style={[styles.elegantLogoFallback, { backgroundColor: accent }]}>
-            <Text style={{ color: "#ffffff", fontSize: 13, fontFamily: "Times-Bold" }}>
-              {studioName.slice(0, 1).toUpperCase()}
-            </Text>
-          </View>
-        )}
-        <Text style={styles.elegantStudioName}>{studioName}</Text>
-        <View style={styles.elegantRule} />
-        <Text style={styles.elegantTitle}>{title}</Text>
-        <View style={styles.elegantRule} />
-        {madeAtLine && <Text style={styles.elegantMetaText}>{madeAtLine}</Text>}
-      </View>
-    );
-  } else {
-    headerBlock = (
-      <>
-        <View style={styles.letterheadRow}>
-          {logoAbsoluteUrl ? (
-            <Image src={logoAbsoluteUrl} style={styles.logo} />
-          ) : (
-            <View style={[styles.logoFallback, { backgroundColor: accent }]}>
-              <Text style={styles.logoFallbackText}>{studioName.slice(0, 1).toUpperCase()}</Text>
-            </View>
-          )}
-          <Text style={styles.letterheadName}>{studioName}</Text>
-        </View>
-        <View style={{ height: 2, backgroundColor: accent, marginBottom: 26 }} />
-
-        <View style={styles.contractTitleWrap}>
-          <Text style={styles.contractTitle}>{title}</Text>
-          <View style={[styles.contractTitleRule, { backgroundColor: accent }]} />
-        </View>
-
-        {madeAtLine && (
-          <View style={styles.metaBar}>
-            <Text style={styles.metaBarText}>{madeAtLine}</Text>
-          </View>
-        )}
-      </>
-    );
-  }
+  const headerBlock = buildLetterhead(tmpl, { studioName, title, metaLine: madeAtLine, logoAbsoluteUrl, accent });
 
   let signatureBlock: React.ReactNode = null;
   if (studioSignatureDataUrl || signedByName) {
@@ -381,7 +437,15 @@ export async function renderContractPdf(params: {
   return renderToBuffer(doc);
 }
 
-/** Génère le PDF d'une facture. */
+/**
+ * Génère le PDF d'une facture — refonte complète du 31/07/2026 (demande d'Adriel : amener la
+ * facturation au même niveau de rigueur professionnelle que les contrats). Reprend la même
+ * lettrine à 3 templates (classic/minimal/elegant, voir buildLetterhead ci-dessus), ajoute un
+ * bloc "Facturé à", un tableau de lignes stylé, un récapitulatif des totaux (avec acompte déjà
+ * réglé / solde dû le cas échéant), un tampon "PAYÉE" quand la facture est intégralement
+ * réglée, des notes libres et les mentions légales du studio (SIRET/TVA/IBAN...) en pied de
+ * page — mentions obligatoires sur une facture française, absentes du document précédent.
+ */
 export async function renderInvoicePdf(params: {
   studioName: string;
   number: string;
@@ -389,53 +453,177 @@ export async function renderInvoicePdf(params: {
   clientEmail?: string | null;
   lineItems: { description: string; quantity: number; unitPriceCents: number }[];
   totalCents: number;
+  /** Déjà réglé (Invoice.amountPaidCents) — permet d'afficher un solde dû si > 0 et < total,
+   * ou le tampon "PAYÉE" si >= total. */
+  amountPaidCents?: number;
+  paidAt?: Date | null;
   currency: string;
   dueDate?: Date | null;
+  createdAt?: Date | null;
+  notes?: string | null;
+  studioLogoUrl?: string | null;
+  brandColor?: string | null;
+  studioAddress?: string | null;
+  studioContactEmail?: string | null;
+  studioContactPhone?: string | null;
+  /** Mentions légales du studio (StudioSettings) — voir prisma/schema.prisma. */
+  studioLegalForm?: string | null;
+  studioSiret?: string | null;
+  studioVatNumber?: string | null;
+  studioVatExempt?: boolean;
+  studioIban?: string | null;
+  studioBic?: string | null;
+  studioLegalMentions?: string | null;
+  /** Template de mise en page choisi par le studio (Invoice.template — voir
+   * src/lib/invoiceTemplates.ts). Repli sur "classic" si absent ou invalide. */
+  template?: string | null;
 }) {
-  const { studioName, number, clientName, clientEmail, lineItems, totalCents, currency, dueDate } =
-    params;
+  const {
+    studioName,
+    number,
+    clientName,
+    clientEmail,
+    lineItems,
+    totalCents,
+    amountPaidCents = 0,
+    paidAt,
+    currency,
+    dueDate,
+    createdAt,
+    notes,
+    studioLogoUrl,
+    brandColor,
+    studioAddress,
+    studioContactEmail,
+    studioContactPhone,
+    studioLegalForm,
+    studioSiret,
+    studioVatNumber,
+    studioVatExempt,
+    studioIban,
+    studioBic,
+    studioLegalMentions,
+    template,
+  } = params;
 
+  const tmpl: InvoiceTemplateId = isInvoiceTemplateId(template) ? template : DEFAULT_INVOICE_TEMPLATE;
+  const accent = brandColor || "#7c3aed";
+  const logoAbsoluteUrl = studioLogoUrl ? absoluteUrl(studioLogoUrl) : null;
+  const footerLine = [studioName, studioAddress, studioContactEmail, studioContactPhone]
+    .filter(Boolean)
+    .join(" · ");
   const format = (cents: number) => `${(cents / 100).toFixed(2)} ${currency}`;
+  const isPaid = amountPaidCents >= totalCents && totalCents > 0;
+  const balanceDue = totalCents - amountPaidCents;
+
+  const metaLine = [
+    createdAt ? `Émise le ${createdAt.toLocaleDateString("fr-FR")}` : null,
+    dueDate ? `Échéance le ${dueDate.toLocaleDateString("fr-FR")}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const headerBlock = buildLetterhead(tmpl, {
+    studioName,
+    title: `Facture ${number}`,
+    metaLine: metaLine || null,
+    logoAbsoluteUrl,
+    accent,
+  });
+
+  const tableAccent = tmpl === "classic" ? accent : tmpl === "elegant" ? "#d4d4d8" : "#e5e7eb";
+  const grandTotalFontFamily = tmpl === "elegant" ? "Times-Bold" : "Helvetica-Bold";
+
+  const legalMentionsLines = [
+    studioLegalForm,
+    studioSiret ? `SIRET : ${studioSiret}` : null,
+    studioVatExempt ? "TVA non applicable, art. 293 B du CGI" : studioVatNumber ? `TVA intracommunautaire : ${studioVatNumber}` : null,
+    studioIban ? `IBAN : ${studioIban}${studioBic ? `  ·  BIC : ${studioBic}` : ""}` : null,
+  ].filter(Boolean);
 
   const doc = (
     <Document>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.title}>Facture {number}</Text>
-        <Text style={{ marginBottom: 16, color: "#666" }}>{studioName}</Text>
+        {headerBlock}
 
-        <View style={styles.section}>
-          {clientName && (
-            <View style={styles.row}>
-              <Text style={styles.label}>Client</Text>
-              <Text>{clientName}</Text>
-            </View>
-          )}
-          {clientEmail && (
-            <View style={styles.row}>
-              <Text style={styles.label}>Email</Text>
-              <Text>{clientEmail}</Text>
-            </View>
-          )}
-          {dueDate && (
-            <View style={styles.row}>
-              <Text style={styles.label}>Échéance</Text>
-              <Text>{dueDate.toLocaleDateString("fr-FR")}</Text>
-            </View>
-          )}
-        </View>
+        {isPaid && (
+          <View style={styles.paidStamp} fixed>
+            <Text style={styles.paidStampText}>Payée</Text>
+          </View>
+        )}
 
-        <View style={styles.table}>
+        {(clientName || clientEmail) && (
+          <View style={styles.invoiceMetaRow}>
+            <View>
+              <Text style={styles.billToLabel}>Facturé à</Text>
+              {clientName && <Text style={styles.billToName}>{clientName}</Text>}
+              {clientEmail && <Text style={styles.billToLine}>{clientEmail}</Text>}
+            </View>
+          </View>
+        )}
+
+        <View>
+          <View style={[styles.tableHeaderRow, { borderBottomColor: tableAccent }]}>
+            <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Description</Text>
+            <Text style={[styles.tableHeaderCell, { width: 44, textAlign: "center" }]}>Qté</Text>
+            <Text style={[styles.tableHeaderCell, { width: 78, textAlign: "right" }]}>Prix unit.</Text>
+            <Text style={[styles.tableHeaderCell, { width: 78, textAlign: "right" }]}>Total</Text>
+          </View>
           {lineItems.map((item, i) => (
-            <View key={i} style={styles.tableRow}>
-              <Text>
-                {item.description} × {item.quantity}
-              </Text>
-              <Text>{format(item.unitPriceCents * item.quantity)}</Text>
+            <View key={i} style={styles.lineRow} wrap={false}>
+              <Text style={styles.lineDescCell}>{item.description}</Text>
+              <Text style={styles.lineQtyCell}>{item.quantity}</Text>
+              <Text style={styles.lineUnitCell}>{format(item.unitPriceCents)}</Text>
+              <Text style={styles.lineTotalCell}>{format(item.unitPriceCents * item.quantity)}</Text>
             </View>
           ))}
         </View>
 
-        <Text style={styles.total}>Total : {format(totalCents)}</Text>
+        <View style={styles.totalsBlock} wrap={false}>
+          <View style={[styles.grandTotalRow, { borderTopColor: tableAccent }]}>
+            <Text style={[styles.grandTotalLabel, { fontFamily: grandTotalFontFamily }]}>Total</Text>
+            <Text style={[styles.grandTotalValue, { fontFamily: grandTotalFontFamily }]}>{format(totalCents)}</Text>
+          </View>
+          {amountPaidCents > 0 && !isPaid && (
+            <>
+              <View style={styles.totalsRow}>
+                <Text style={styles.totalsLabel}>Déjà réglé</Text>
+                <Text style={styles.totalsValue}>{format(amountPaidCents)}</Text>
+              </View>
+              <View style={styles.balanceDueRow}>
+                <Text style={styles.balanceDueLabel}>Solde dû</Text>
+                <Text style={styles.balanceDueValue}>{format(balanceDue)}</Text>
+              </View>
+            </>
+          )}
+          {isPaid && paidAt && (
+            <View style={styles.totalsRow}>
+              <Text style={[styles.totalsLabel, { color: "#16a34a" }]}>Payée le {paidAt.toLocaleDateString("fr-FR")}</Text>
+            </View>
+          )}
+        </View>
+
+        {notes && (
+          <View style={styles.notesBlock} wrap={false}>
+            <Text style={styles.notesLabel}>Notes</Text>
+            <Text style={styles.notesText}>{notes}</Text>
+          </View>
+        )}
+
+        {(legalMentionsLines.length > 0 || studioLegalMentions) && (
+          <View style={styles.legalMentions}>
+            {legalMentionsLines.length > 0 && <Text>{legalMentionsLines.join("  ·  ")}</Text>}
+            {studioLegalMentions && <Text>{studioLegalMentions}</Text>}
+          </View>
+        )}
+
+        <Text
+          style={styles.footer}
+          fixed
+          render={({ pageNumber, totalPages }) =>
+            footerLine ? `${footerLine}   ·   Page ${pageNumber} / ${totalPages}` : `Page ${pageNumber} / ${totalPages}`
+          }
+        />
       </Page>
     </Document>
   );
