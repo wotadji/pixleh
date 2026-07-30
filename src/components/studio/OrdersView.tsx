@@ -215,7 +215,7 @@ export function OrdersView({ orders }: { orders: OrderRow[] }) {
         })}
       </div>
 
-      {filtered.length > PAGE_SIZE && (
+      {filtered.length > 0 && (
         <div className="mt-4 flex items-center justify-center gap-4 text-sm">
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
