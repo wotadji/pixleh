@@ -27,6 +27,11 @@ export const dynamic = "force-dynamic";
  * Illimité" (le nombre réellement consommé n'est PAS affiché : chaque clic sur "Voir galerie"
  * émet un nouveau clientRef, voir /client/galleries/[id]/view/route.ts, donc un décompte par
  * client stable façon Studio n'est pas fiable ici).
+ *
+ * `publishedAt` (date de publication, affichée sur chaque carte) est un champ trop récent pour
+ * le Prisma Client généré du sandbox (voir le commentaire sur Gallery.publishedAt dans
+ * schema.prisma) : il n'existe donc pas dans le `select` typé ci-dessous et est récupéré à part
+ * via $queryRaw, comme le fait déjà /api/client-portal/account pour ClientAccount.name.
  */
 export default async function ClientPortalPage() {
   const session = getClientPortalSession();
@@ -64,6 +69,16 @@ export default async function ClientPortalPage() {
     : [];
   const coverById = new Map(coverPhotos.map((p) => [p.id, p]));
 
+  // Voir la note en tête de fichier : `publishedAt` n'est pas encore dans le Prisma Client
+  // généré du sandbox, donc récupéré à part via $queryRaw plutôt que dans le `select` ci-dessus.
+  const galleryIds = clientRows.flatMap((row) => row.galleries.map((g) => g.id));
+  const publishedRows = galleryIds.length
+    ? await prisma.$queryRaw<{ id: string; publishedAt: Date | null }[]>`
+        SELECT "id", "publishedAt" FROM "Gallery" WHERE "id" = ANY(${galleryIds})
+      `
+    : [];
+  const publishedAtById = new Map(publishedRows.map((r) => [r.id, r.publishedAt]));
+
   const rows = clientRows.map((row) => ({
     id: row.id,
     studioId: row.studio.id,
@@ -79,6 +94,7 @@ export default async function ClientPortalPage() {
         coverPhotoId: cover?.id || null,
         coverUpdatedAt: cover?.updatedAt.toISOString() || null,
         downloadLimit: g.downloadLimit,
+        publishedAt: publishedAtById.get(g.id)?.toISOString() || null,
         approvedCount: g.guests.filter((x) => x.status === "APPROVED").length,
         pendingCount: g.guests.filter((x) => x.status === "PENDING").length,
       };

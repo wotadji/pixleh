@@ -437,6 +437,7 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "client.galleries.prevPage": "Précédent",
     "client.galleries.nextPage": "Suivant",
     "client.galleries.pageInfo": "Page {page} sur {total}",
+    "client.galleries.publishedOn": "Publiée le {date}",
 
     "client.settings.title": "Paramètres",
     "client.settings.name.label": "Nom",
@@ -1039,6 +1040,7 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "client.galleries.prevPage": "Previous",
     "client.galleries.nextPage": "Next",
     "client.galleries.pageInfo": "Page {page} of {total}",
+    "client.galleries.publishedOn": "Published on {date}",
 
     "client.settings.title": "Settings",
     "client.settings.name.label": "Name",
@@ -1641,6 +1643,7 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "client.galleries.prevPage": "Anterior",
     "client.galleries.nextPage": "Siguiente",
     "client.galleries.pageInfo": "Página {page} de {total}",
+    "client.galleries.publishedOn": "Publicada el {date}",
 
     "client.settings.title": "Ajustes",
     "client.settings.name.label": "Nombre",
@@ -2243,6 +2246,7 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "client.galleries.prevPage": "Anterior",
     "client.galleries.nextPage": "Próximo",
     "client.galleries.pageInfo": "Página {page} de {total}",
+    "client.galleries.publishedOn": "Publicada em {date}",
 
     "client.settings.title": "Configurações",
     "client.settings.name.label": "Nome",
@@ -2845,6 +2849,7 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "client.galleries.prevPage": "上一页",
     "client.galleries.nextPage": "下一页",
     "client.galleries.pageInfo": "第 {page} 页，共 {total} 页",
+    "client.galleries.publishedOn": "发布于 {date}",
 
     "client.settings.title": "设置",
     "client.settings.name.label": "姓名",
@@ -3446,6 +3451,7 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "client.galleries.prevPage": "السابق",
     "client.galleries.nextPage": "التالي",
     "client.galleries.pageInfo": "صفحة {page} من {total}",
+    "client.galleries.publishedOn": "نُشرت في {date}",
 
     "client.settings.title": "الإعدادات",
     "client.settings.name.label": "الاسم",

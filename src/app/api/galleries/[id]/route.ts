@@ -115,6 +115,16 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     // de téléchargement), à partir de la valeur de showWatermark ci-dessus. Aucune
     // régénération de fichier n'est donc nécessaire ici — le changement est immédiat.
 
+    // Horodatage de publication (Gallery.publishedAt, 30/07/2026, affiché dans l'espace
+    // Client) — sur chaque transition vers PUBLISHED (y compris une republication après
+    // archivage), pas juste la toute première fois : c'est la date de mise à disposition la
+    // plus récente qui est pertinente pour le client. Champ trop récent pour le Prisma Client
+    // généré du sandbox (voir le commentaire sur Gallery.publishedAt dans schema.prisma) :
+    // $executeRaw plutôt que le `data` typé de prisma.gallery.update ci-dessus.
+    if (body.status === "PUBLISHED" && gallery.status !== "PUBLISHED") {
+      await prisma.$executeRaw`UPDATE "Gallery" SET "publishedAt" = NOW() WHERE id = ${gallery.id}`;
+    }
+
     // Email "galerie prête" au client — uniquement sur la TRANSITION vers PUBLISHED (pas à
     // chaque sauvegarde d'une galerie déjà publiée, ex: un simple changement de design), et
     // seulement si un client est rattaché avec une adresse email (voir Gallery.clientId,

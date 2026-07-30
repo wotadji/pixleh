@@ -14,6 +14,9 @@ interface GalleryRow {
   coverPhotoId: string | null;
   coverUpdatedAt: string | null;
   downloadLimit: number | null;
+  /** Date de la dernière transition vers PUBLISHED (voir Gallery.publishedAt, schema.prisma) —
+   * null pour une galerie qui n'a jamais été publiée (toujours en DRAFT). */
+  publishedAt: string | null;
   approvedCount: number;
   pendingCount: number;
 }
@@ -68,6 +71,16 @@ function GalleryCover({ g, studioId, className }: { g: GalleryRow; studioId: str
     >
       {galleryInitials(g.title)}
     </div>
+  );
+}
+
+/** Formate Gallery.publishedAt selon la langue courante — rien si la galerie n'a jamais été
+ * publiée (toujours en DRAFT). */
+function PublishedDate({ publishedAt, locale, t }: { publishedAt: string | null; locale: string; t: (k: string) => string }) {
+  if (!publishedAt) return null;
+  const formatted = new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(publishedAt));
+  return (
+    <span className="shrink-0 text-xs text-gray-400">{t("client.galleries.publishedOn").replace("{date}", formatted)}</span>
   );
 }
 
@@ -145,7 +158,7 @@ function GalleryActions({ g, className, dense }: { g: GalleryRow; className?: st
  * confondus) se fait ensuite dans ce composant via `allGalleries`.
  */
 export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
 
   const STATUS_LABELS: Record<StatusFilter, string> = {
     any: t("galleries.allStatuses"),
@@ -226,11 +239,12 @@ export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
 
       {/* Chaque contrôle est enveloppé dans un div de largeur fixe (shrink-0) : la classe
           utilitaire .input applique w-full (voir globals.css), qui écraserait sinon toute
-          largeur passée directement sur l'<input>/<select> (même en flex-nowrap, un w-full
-          direct force chaque champ à remplir toute la ligne). overflow-x-auto permet un
-          défilement horizontal plutôt qu'un retour à la ligne si l'espace manque (mobile). */}
+          largeur passée directement sur l'<input>/<select>. justify-between garde la recherche
+          collée à gauche et les filtres + la bascule grille/liste collés à droite (demande
+          d'Adriel du 30/07/2026) ; chaque groupe peut retomber sur sa propre ligne si l'écran
+          est trop étroit (flex-wrap), plutôt qu'un défilement horizontal forcé. */}
       {allGalleries.length > 0 && (
-        <div className="mt-4 flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <div className="w-44 shrink-0">
             <input
               type="text"
@@ -240,71 +254,74 @@ export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
               className="input text-sm"
             />
           </div>
-          <div className="w-36 shrink-0">
-            <select
-              className="input text-sm"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-            >
-              <option value="any">{STATUS_LABELS.any}</option>
-              <option value="PUBLISHED">{STATUS_LABELS.PUBLISHED}</option>
-              <option value="DRAFT">{STATUS_LABELS.DRAFT}</option>
-              <option value="ARCHIVED">{STATUS_LABELS.ARCHIVED}</option>
-            </select>
-          </div>
-          <div className="w-40 shrink-0">
-            <select
-              className="input text-sm"
-              value={downloadsFilter}
-              onChange={(e) => setDownloadsFilter(e.target.value as DownloadsFilter)}
-            >
-              <option value="any">{t("client.galleries.filterDownloads")}</option>
-              <option value="limited">{t("client.galleries.downloadsLimited")}</option>
-              <option value="unlimited">{t("client.galleries.downloadsUnlimited")}</option>
-            </select>
-          </div>
-          {studioOptions.length > 1 && (
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="w-36 shrink-0">
+              <select
+                className="input text-sm"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              >
+                <option value="any">{STATUS_LABELS.any}</option>
+                <option value="PUBLISHED">{STATUS_LABELS.PUBLISHED}</option>
+                <option value="DRAFT">{STATUS_LABELS.DRAFT}</option>
+                <option value="ARCHIVED">{STATUS_LABELS.ARCHIVED}</option>
+              </select>
+            </div>
             <div className="w-40 shrink-0">
               <select
                 className="input text-sm"
-                value={studioFilter}
-                onChange={(e) => setStudioFilter(e.target.value)}
+                value={downloadsFilter}
+                onChange={(e) => setDownloadsFilter(e.target.value as DownloadsFilter)}
               >
-                <option value="any">{t("client.galleries.allStudios")}</option>
-                {studioOptions.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
+                <option value="any">{t("client.galleries.filterDownloads")}</option>
+                <option value="limited">{t("client.galleries.downloadsLimited")}</option>
+                <option value="unlimited">{t("client.galleries.downloadsUnlimited")}</option>
               </select>
             </div>
-          )}
-          <div className="flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 p-0.5">
-            <button
-              type="button"
-              onClick={() => changeView("grid")}
-              title={t("galleries.viewGrid")}
-              className={`rounded-md p-1.5 ${viewMode === "grid" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
-            >
-              <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-                <rect x="2" y="2" width="7" height="7" rx="1" fill="currentColor" />
-                <rect x="11" y="2" width="7" height="7" rx="1" fill="currentColor" />
-                <rect x="2" y="11" width="7" height="7" rx="1" fill="currentColor" />
-                <rect x="11" y="11" width="7" height="7" rx="1" fill="currentColor" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={() => changeView("list")}
-              title={t("galleries.viewList")}
-              className={`rounded-md p-1.5 ${viewMode === "list" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
-            >
-              <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-                <rect x="2" y="3" width="16" height="3" rx="1" fill="currentColor" />
-                <rect x="2" y="8.5" width="16" height="3" rx="1" fill="currentColor" />
-                <rect x="2" y="14" width="16" height="3" rx="1" fill="currentColor" />
-              </svg>
-            </button>
+            {studioOptions.length > 1 && (
+              <div className="w-40 shrink-0">
+                <select
+                  className="input text-sm"
+                  value={studioFilter}
+                  onChange={(e) => setStudioFilter(e.target.value)}
+                >
+                  <option value="any">{t("client.galleries.allStudios")}</option>
+                  {studioOptions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 p-0.5">
+              <button
+                type="button"
+                onClick={() => changeView("grid")}
+                title={t("galleries.viewGrid")}
+                className={`rounded-md p-1.5 ${viewMode === "grid" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+              >
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                  <rect x="2" y="2" width="7" height="7" rx="1" fill="currentColor" />
+                  <rect x="11" y="2" width="7" height="7" rx="1" fill="currentColor" />
+                  <rect x="2" y="11" width="7" height="7" rx="1" fill="currentColor" />
+                  <rect x="11" y="11" width="7" height="7" rx="1" fill="currentColor" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => changeView("list")}
+                title={t("galleries.viewList")}
+                className={`rounded-md p-1.5 ${viewMode === "list" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+              >
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                  <rect x="2" y="3" width="16" height="3" rx="1" fill="currentColor" />
+                  <rect x="2" y="8.5" width="16" height="3" rx="1" fill="currentColor" />
+                  <rect x="2" y="14" width="16" height="3" rx="1" fill="currentColor" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -368,6 +385,7 @@ export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
                         {t("client.galleries.downloadLimitBadge").replace("{count}", String(g.downloadLimit))}
                       </span>
                     )}
+                    <PublishedDate publishedAt={g.publishedAt} locale={locale} t={t} />
                   </div>
                 </div>
               </div>
@@ -415,7 +433,10 @@ export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
                     </span>
                   )}
                 </div>
-                <GalleryActions g={g} className="mt-3" dense />
+                <div className="mt-1">
+                  <PublishedDate publishedAt={g.publishedAt} locale={locale} t={t} />
+                </div>
+                <GalleryActions g={g} className="mt-2" dense />
               </div>
             </div>
           ))}

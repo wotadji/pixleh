@@ -407,6 +407,14 @@ model Gallery {
   slug            String        @unique
   coverPhotoId    String?
   status          GalleryStatus @default(DRAFT)
+  /// Date de la dernière transition vers PUBLISHED (voir PATCH /api/galleries/[id]), affichée
+  /// dans l'espace Client (30/07/2026, demande d'Adriel). Ajouté après le dernier
+  /// `prisma generate` du sandbox (même limitation que ClientAccount.name, voir ce champ plus
+  /// haut dans le schéma) : tant qu'Adriel n'a pas relancé `prisma generate && prisma db push`
+  /// en local, ce champ est lu/écrit via `$queryRaw`/`$executeRaw` (table "Gallery", pas de
+  /// @@map dans ce schéma) plutôt que via l'API typée du Prisma Client généré, qui ne le
+  /// connaît pas encore.
+  publishedAt     DateTime?
   /// Tag/catégorie libre pour filtrer les galeries dans la liste (ex: "Mariage", "Portrait").
   categoryTag     String?
   /// Épinglage manuel ("favoris") pour retrouver rapidement une galerie dans la liste.
