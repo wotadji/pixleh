@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
-import { sendMail } from "@/lib/mailer";
+import { sendMail, type SendMailResult } from "@/lib/mailer";
 import { buildEmailSignature } from "@/lib/emailSignature";
 
 /**
@@ -359,9 +359,19 @@ export async function sendStudioContractSignedEmail(params: {
   contractId: string;
   contractTitle: string;
   signedByName: string;
-}) {
+}): Promise<SendMailResult> {
   const to = await resolveStudioNotifyEmail(params.studioId);
-  if (!to) return;
+  // `sendMail` ne lève jamais d'exception en cas d'échec (voir mailer.ts) : sans ce log, un
+  // échec silencieux ici (pas d'adresse de notification, ou SMTP en échec) ne laissait
+  // absolument aucune trace — symptôme rapporté par Adriel ("le studio ne reçoit pas le
+  // mail"). On journalise donc explicitement les deux cas d'échec possibles.
+  if (!to) {
+    console.warn(
+      `Email "contrat signé" non envoyé : aucune adresse de notification pour le studio ${params.studioId} ` +
+        `(ni StudioSettings.contactEmail, ni utilisateur OWNER avec un email).`
+    );
+    return { ok: false, error: "Aucune adresse de notification configurée pour ce studio." };
+  }
 
   const html = wrapEmail(`
     <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Contrat signé</h2>
@@ -370,12 +380,16 @@ export async function sendStudioContractSignedEmail(params: {
     <a href="${appUrl("/dashboard/contracts")}" style="${BUTTON_STYLE}">Voir le contrat</a>
   `);
 
-  await sendMail({
+  const result = await sendMail({
     to,
     subject: `Contrat signé — ${params.contractTitle}`,
     text: `${params.signedByName} vient de signer le contrat « ${params.contractTitle} ». Voir : ${appUrl("/dashboard/contracts")}`,
     html,
   });
+  if (!result.ok) {
+    console.error(`Email "contrat signé" non envoyé à ${to} :`, result.error);
+  }
+  return result;
 }
 
 export async function sendStudioOrderPaidEmail(params: {

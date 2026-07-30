@@ -27,7 +27,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const signedAt = new Date();
   const clientIp = req.headers.get("x-forwarded-for") || "inconnu";
-  const bodyText = contract.bodyHtml.replace(/<[^>]+>/g, "");
 
   // studioSignatureDataUrl et place n'existent pas encore dans le Prisma Client généré du
   // sandbox (voir commentaires sur ces champs dans schema.prisma) — lus à part via
@@ -39,7 +38,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const pdfBuffer = await renderContractPdf({
     studioName: contract.studio.name,
     title: contract.title,
-    bodyText,
+    bodyHtml: contract.bodyHtml,
     signedByName,
     signedAt,
     signatureDataUrl,
@@ -68,13 +67,21 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   // Notification interne au studio — fire-and-forget (comme sendStudioOrderPaidEmail/
   // sendStudioInvoicePaidEmail) : un échec d'envoi ne doit pas faire échouer la signature,
-  // qui est déjà actée en base et dans le PDF à ce stade.
+  // qui est déjà actée en base et dans le PDF à ce stade. `sendMail` ne rejette jamais (voir
+  // mailer.ts, il renvoie { ok:false, error } en cas d'échec) : on vérifie donc explicitement
+  // le résultat en plus du .catch(), sinon un échec SMTP silencieux ne laisse aucune trace.
   sendStudioContractSignedEmail({
     studioId: contract.studioId,
     contractId: contract.id,
     contractTitle: contract.title,
     signedByName,
-  }).catch((e) => console.error("Échec de l'email de notification studio (contrat signé) :", e));
+  })
+    .then((result) => {
+      if (!result.ok) {
+        console.error("Échec de l'email de notification studio (contrat signé) :", result.error);
+      }
+    })
+    .catch((e) => console.error("Échec de l'email de notification studio (contrat signé) :", e));
 
   return NextResponse.json({ contract: updated });
 }

@@ -1,5 +1,6 @@
 import React from "react";
 import { Document, Page, Text, View, StyleSheet, Image, renderToBuffer } from "@react-pdf/renderer";
+import { renderHtmlToPdf } from "@/lib/htmlToPdf";
 
 const styles = StyleSheet.create({
   page: { padding: 40, fontSize: 11, fontFamily: "Helvetica" },
@@ -33,7 +34,10 @@ const styles = StyleSheet.create({
 export async function renderContractPdf(params: {
   studioName: string;
   title: string;
-  bodyText: string;
+  /** HTML produit par RichTextEditor.tsx (corps du contrat) — rendu via htmlToPdf.tsx pour
+   * conserver la mise en forme (gras, titres, alignement, listes...) dans le PDF final,
+   * au lieu du texte brut aplati utilisé auparavant. */
+  bodyHtml: string;
   signedByName?: string | null;
   signedAt?: Date | null;
   signatureDataUrl?: string | null;
@@ -54,7 +58,7 @@ export async function renderContractPdf(params: {
   const {
     studioName,
     title,
-    bodyText,
+    bodyHtml,
     signedByName,
     signedAt,
     signatureDataUrl,
@@ -78,9 +82,7 @@ export async function renderContractPdf(params: {
         <Text style={styles.title}>{title}</Text>
         <Text style={{ marginBottom: 4, color: "#666" }}>{studioName}</Text>
         {madeAtLine && <Text style={{ marginBottom: 16, fontSize: 10, color: "#9ca3af" }}>{madeAtLine}</Text>}
-        <View style={styles.section}>
-          <Text>{bodyText}</Text>
-        </View>
+        <View style={styles.section}>{renderHtmlToPdf(bodyHtml)}</View>
         {studioSignatureDataUrl && (
           <View style={styles.section}>
             <Text>Signé par : {studioName}</Text>
