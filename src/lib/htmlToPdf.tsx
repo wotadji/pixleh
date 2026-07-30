@@ -160,8 +160,50 @@ interface BlockCtx {
   lineHeight?: number;
 }
 
-function inlineStyle(ctx: InlineCtx, extra?: Record<string, unknown>) {
+/**
+ * Les 14 polices "standard" PDF (Helvetica/Times/Courier) n'ont PAS de résolution automatique
+ * gras/italique à partir de `fontWeight`/`fontStyle` dans @react-pdf/renderer — contrairement
+ * aux polices personnalisées enregistrées via `Font.register` avec plusieurs variantes, cette
+ * résolution ne s'applique qu'aux familles enregistrées. Pour les polices standard, il faut
+ * référencer directement le nom PostScript de la variante voulue (ex: "Helvetica-Bold"), sinon
+ * `fontWeight: 700` est silencieusement ignoré et le texte reste en graisse normale. C'est la
+ * cause du bug rapporté par Adriel le 31/07/2026 : "quand je choisis le bold/italic [...] cela
+ * ne s'affiche pas dans le pdf" (repéré en comparant un rendu de test : le gras/italique ne
+ * s'appliquaient pas alors que le souligné — une propriété CSS indépendante de la police —
+ * fonctionnait déjà). `resolveFontFamily` calcule donc explicitement le nom de variante à
+ * utiliser selon la famille de base (Helvetica pour le corps de texte, Times pour les titres
+ * quand le template choisi utilise une police à empattements).
+ */
+type BaseFamily = "Helvetica" | "Times";
+
+function resolveFontFamily(base: BaseFamily, bold?: boolean, italic?: boolean): string {
+  if (base === "Times") {
+    if (bold && italic) return "Times-BoldItalic";
+    if (bold) return "Times-Bold";
+    if (italic) return "Times-Italic";
+    return "Times-Roman";
+  }
+  if (bold && italic) return "Helvetica-BoldOblique";
+  if (bold) return "Helvetica-Bold";
+  if (italic) return "Helvetica-Oblique";
+  return "Helvetica";
+}
+
+/** Déduit la famille de base ainsi que le gras/italique déjà "intégrés" au nom de variante
+ * choisi pour les titres (ex: theme.headingFontFamily = "Times-BoldItalic" pour le template
+ * élégant) — utilisé pour que les éventuelles balises <b>/<i> imbriquées dans un titre gardent
+ * la bonne variante (empattements + italique) au lieu de retomber sur du Helvetica par défaut. */
+function parseStandardFamily(family: string): { base: BaseFamily; bold: boolean; italic: boolean } {
   return {
+    base: family.startsWith("Times") ? "Times" : "Helvetica",
+    bold: /Bold/i.test(family),
+    italic: /Italic|Oblique/i.test(family),
+  };
+}
+
+function inlineStyle(ctx: InlineCtx, base: BaseFamily, extra?: Record<string, unknown>) {
+  return {
+    fontFamily: resolveFontFamily(base, ctx.bold, ctx.italic),
     fontWeight: ctx.bold ? 700 : undefined,
     fontStyle: ctx.italic ? ("italic" as const) : undefined,
     textDecoration: ctx.underline ? ("underline" as const) : undefined,
@@ -175,7 +217,8 @@ function renderInline(
   nodes: HtmlNode[],
   ctx: InlineCtx,
   keyPrefix: string,
-  theme: HtmlPdfTheme
+  theme: HtmlPdfTheme,
+  base: BaseFamily = "Helvetica"
 ): React.ReactNode[] {
   const out: React.ReactNode[] = [];
   nodes.forEach((node, i) => {
@@ -205,17 +248,17 @@ function renderInline(
       out.push(
         <Text
           key={key}
-          style={inlineStyle(nextCtx, { color: nextCtx.color || theme.linkColor, textDecoration: "underline" })}
+          style={inlineStyle(nextCtx, base, { color: nextCtx.color || theme.linkColor, textDecoration: "underline" })}
         >
-          {renderInline(children, nextCtx, key, theme)}
+          {renderInline(children, nextCtx, key, theme, base)}
         </Text>
       );
       return;
     }
 
     out.push(
-      <Text key={key} style={inlineStyle(nextCtx)}>
-        {renderInline(children, nextCtx, key, theme)}
+      <Text key={key} style={inlineStyle(nextCtx, base)}>
+        {renderInline(children, nextCtx, key, theme, base)}
       </Text>
     );
   });
@@ -259,13 +302,12 @@ function renderBlockElement(node: ElementNode, ctx: BlockCtx, key: string, theme
       >
         <Text
           style={{
-            fontStyle: theme.quoteItalic ? "italic" : "normal",
             color: theme.quoteColor,
             lineHeight: ctx.lineHeight,
             textAlign: align,
           }}
         >
-          {renderInline(children, {}, key, theme)}
+          {renderInline(children, { italic: theme.quoteItalic }, key, theme)}
         </Text>
       </View>
     );
@@ -273,6 +315,7 @@ function renderBlockElement(node: ElementNode, ctx: BlockCtx, key: string, theme
 
   if (tag === "h1" || tag === "h2" || tag === "h3") {
     const size = tag === "h1" ? 17 : tag === "h2" ? 14 : 12.5;
+    const headingFamily = parseStandardFamily(theme.headingFontFamily);
     return (
       <View
         key={key}
@@ -295,7 +338,7 @@ function renderBlockElement(node: ElementNode, ctx: BlockCtx, key: string, theme
             color: theme.headingColor,
           }}
         >
-          {renderInline(children, { bold: true }, key, theme)}
+          {renderInline(children, { bold: true, italic: headingFamily.italic }, key, theme, headingFamily.base)}
         </Text>
       </View>
     );
