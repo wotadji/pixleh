@@ -172,6 +172,13 @@ export function GalleryManager({
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedGuest, setCopiedGuest] = useState(false);
+  // Bouton "Partager au client" (à côté d'Aperçu) : envoie par email le lien + code de la
+  // galerie (voir POST /api/galleries/[id]/share-to-client), distinct du bouton "Partager"
+  // ci-dessus qui se contente de copier le lien dans le presse-papier sans rien envoyer.
+  const [shareToClientState, setShareToClientState] = useState<"idle" | "sending" | "sent" | "error">(
+    "idle"
+  );
+  const [shareToClientError, setShareToClientError] = useState<string | null>(null);
   const [guestSlug, setGuestSlug] = useState(gallery.guestSlug);
   const [guestSlugLoading, setGuestSlugLoading] = useState(false);
   const [remarks, setRemarks] = useState<RemarkDTO[] | null>(null);
@@ -607,6 +614,26 @@ export function GalleryManager({
     }
   }
 
+  async function handleShareToClient() {
+    if (shareToClientState === "sending") return;
+    setShareToClientState("sending");
+    setShareToClientError(null);
+    try {
+      const res = await fetch(`/api/galleries/${gallery.id}/share-to-client`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setShareToClientState("error");
+        setShareToClientError(data?.error || t("gm.shareToClientError"));
+        return;
+      }
+      setShareToClientState("sent");
+      setTimeout(() => setShareToClientState("idle"), 2500);
+    } catch {
+      setShareToClientState("error");
+      setShareToClientError(t("gm.shareToClientError"));
+    }
+  }
+
   async function ensureGuestLink() {
     if (guestSlug) return guestSlug;
     setGuestSlugLoading(true);
@@ -990,6 +1017,22 @@ export function GalleryManager({
           <a href={`/g/${gallery.slug}`} target="_blank" className="btn-secondary text-sm">
             {t("gm.preview")}
           </a>
+          {gallery.clientId && (
+            <button
+              onClick={handleShareToClient}
+              disabled={shareToClientState === "sending"}
+              title={shareToClientState === "error" ? shareToClientError || undefined : undefined}
+              className="btn-secondary text-sm disabled:opacity-50"
+            >
+              {shareToClientState === "sending"
+                ? t("gm.shareToClientSending")
+                : shareToClientState === "sent"
+                  ? t("gm.shareToClientSent")
+                  : shareToClientState === "error"
+                    ? t("gm.shareToClientError")
+                    : t("gm.shareToClient")}
+            </button>
+          )}
           <button onClick={handleShare} className="btn-secondary text-sm">
             {copied ? t("gm.linkCopied") : t("gm.share")}
           </button>

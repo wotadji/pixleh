@@ -139,7 +139,13 @@ export async function sendGalleryReadyEmail(params: {
     </p>
   `);
 
-  await sendMail({
+  // Renvoie le résultat de sendMail (plutôt qu'un simple void) pour que les appelants qui
+  // déclenchent cet envoi de façon interactive (bouton "Partager au client" dans
+  // GalleryManager, voir /api/galleries/[id]/share-to-client) puissent afficher un message
+  // d'erreur clair si le SMTP n'est pas configuré ou si l'envoi échoue — jusqu'ici cette
+  // fonction n'était appelée qu'en fire-and-forget (.catch(console.error)) depuis la
+  // transition de statut PUBLISHED, où un échec silencieux était acceptable.
+  return sendMail({
     to: params.clientEmail,
     subject: `Votre galerie « ${params.galleryTitle} » est prête !`,
     text: [
