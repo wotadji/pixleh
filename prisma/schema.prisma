@@ -839,7 +839,7 @@ model Contract {
   title        String
   bodyHtml     String         @db.Text
   status       ContractStatus @default(DRAFT)
-  signatureDataUrl String?    @db.Text // image PNG base64 de la signature
+  signatureDataUrl String?    @db.Text // image base64 de la signature (PNG dessiné à la souris ou JPEG/PNG importé, voir SignaturePad)
   signedByName String?
   signedAt     DateTime?
   signedIp     String?
