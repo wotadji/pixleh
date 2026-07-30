@@ -853,6 +853,11 @@ model Contract {
   /// `$queryRaw`/`$executeRaw` (table "Contract") plutôt que via l'API typée du Prisma Client
   /// généré, qui ne le connaît pas encore.
   studioSignatureDataUrl String? @db.Text
+  /// Lieu de rédaction du contrat (ex: "Paris") — demandé par Adriel pour la formule d'usage
+  /// "Fait à {place}, le {createdAt}" affichée sur la page de signature et dans le PDF. Même
+  /// limitation de sandbox que les champs ci-dessus (lu/écrit via $queryRaw/$executeRaw tant
+  /// qu'Adriel n'a pas relancé `prisma generate && prisma db push`).
+  place        String?
   createdAt    DateTime       @default(now())
 
   @@index([studioId])

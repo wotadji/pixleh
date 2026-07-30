@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
- * Éditeur de texte enrichi minimal (gras, italique, souligné, listes, lien), sans
- * dépendance externe : repose sur `contentEditable` + `document.execCommand`, encore
- * largement supporté par tous les navigateurs pour ce type de mise en forme basique.
- * Stocke/retourne du HTML (utilisé pour "À propos" du studio — Réglages > Profil), à
- * afficher ensuite via `dangerouslySetInnerHTML` (contenu saisi par le photographe
- * lui-même sur son propre profil, pas une entrée utilisateur tierce).
+ * Éditeur de texte enrichi (gras/italique/souligné, titres, alignement, interligne, listes,
+ * retrait, citation, séparateur, lien, vue source...), sans dépendance externe : repose sur
+ * `contentEditable` + `document.execCommand`, encore largement supporté par tous les
+ * navigateurs pour ce type de mise en forme. Stocke/retourne du HTML (utilisé pour "À propos"
+ * du studio et le corps des contrats), à afficher ensuite via `dangerouslySetInnerHTML`
+ * (contenu saisi par le photographe lui-même, pas une entrée utilisateur tierce).
  */
 export function RichTextEditor({
   value,
@@ -28,6 +28,10 @@ export function RichTextEditor({
   minHeightClassName?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Bascule vers un <textarea> affichant le HTML brut, éditable directement — utile pour
+  // corriger/copier-coller une mise en forme précise sans dépendre des commandes du navigateur.
+  const [sourceMode, setSourceMode] = useState(false);
+  const [sourceText, setSourceText] = useState("");
 
   // Ne pousse le HTML dans le DOM qu'au montage (valeur initiale chargée depuis le
   // serveur) : le resynchroniser à chaque frappe ferait sauter le curseur au début du
@@ -63,104 +67,157 @@ export function RichTextEditor({
     onChange(ref.current.innerHTML);
   }
 
+  function toggleSourceMode() {
+    if (!sourceMode) {
+      setSourceText(ref.current?.innerHTML || "");
+      setSourceMode(true);
+    } else {
+      if (ref.current) ref.current.innerHTML = sourceText;
+      onChange(sourceText);
+      setSourceMode(false);
+    }
+  }
+
   const btnClass = "flex h-7 w-7 items-center justify-center rounded text-sm text-gray-600 hover:bg-gray-200";
+  const selectClass =
+    "h-7 rounded border-0 bg-transparent text-xs text-gray-600 hover:bg-gray-200 focus:outline-none";
+  const sep = <span className="mx-1 h-4 w-px shrink-0 bg-gray-300" />;
 
   return (
     <div className="overflow-hidden rounded-md border border-gray-300 focus-within:border-gray-500">
-      <div className="flex items-center gap-0.5 border-b border-gray-200 bg-gray-50 px-1.5 py-1">
+      <div className="flex flex-wrap items-center gap-0.5 border-b border-gray-200 bg-gray-50 px-1.5 py-1">
+        <button
+          type="button"
+          title="Annuler"
+          disabled={sourceMode}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => exec("undo")}
+          className={`${btnClass} disabled:opacity-30`}
+        >
+          ↶
+        </button>
+        <button
+          type="button"
+          title="Rétablir"
+          disabled={sourceMode}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => exec("redo")}
+          className={`${btnClass} disabled:opacity-30`}
+        >
+          ↷
+        </button>
+        {sep}
+        <select
+          title="Format"
+          defaultValue=""
+          disabled={sourceMode}
+          onMouseDown={(e) => e.preventDefault()}
+          onChange={(e) => {
+            if (e.target.value) exec("formatBlock", e.target.value);
+            e.target.value = "";
+          }}
+          className={`${selectClass} disabled:opacity-30`}
+        >
+          <option value="" disabled>
+            Format
+          </option>
+          <option value="<p>">Paragraphe</option>
+          <option value="<h1>">Titre 1</option>
+          <option value="<h2>">Titre 2</option>
+          <option value="<h3>">Titre 3</option>
+        </select>
+        {sep}
         <button
           type="button"
           title="Gras"
+          disabled={sourceMode}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => exec("bold")}
-          className={`${btnClass} font-bold`}
+          className={`${btnClass} font-bold disabled:opacity-30`}
         >
           B
         </button>
         <button
           type="button"
           title="Italique"
+          disabled={sourceMode}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => exec("italic")}
-          className={`${btnClass} italic`}
+          className={`${btnClass} italic disabled:opacity-30`}
         >
           I
         </button>
         <button
           type="button"
           title="Souligné"
+          disabled={sourceMode}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => exec("underline")}
-          className={`${btnClass} underline`}
+          className={`${btnClass} underline disabled:opacity-30`}
         >
           U
         </button>
-        <span className="mx-1 h-4 w-px bg-gray-300" />
         <button
           type="button"
-          title="Liste à puces"
+          title="Effacer la mise en forme"
+          disabled={sourceMode}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => exec("insertUnorderedList")}
-          className={btnClass}
+          onClick={() => exec("removeFormat")}
+          className={`${btnClass} text-xs disabled:opacity-30`}
         >
-          •
+          ✕
         </button>
-        <button
-          type="button"
-          title="Liste numérotée"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => exec("insertOrderedList")}
-          className={btnClass}
-        >
-          1.
-        </button>
-        <span className="mx-1 h-4 w-px bg-gray-300" />
+        {sep}
         <button
           type="button"
           title="Aligner à gauche"
+          disabled={sourceMode}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => exec("justifyLeft")}
-          className={`${btnClass} text-xs`}
+          className={`${btnClass} text-xs disabled:opacity-30`}
         >
           G
         </button>
         <button
           type="button"
           title="Centrer"
+          disabled={sourceMode}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => exec("justifyCenter")}
-          className={`${btnClass} text-xs`}
+          className={`${btnClass} text-xs disabled:opacity-30`}
         >
           C
         </button>
         <button
           type="button"
           title="Aligner à droite"
+          disabled={sourceMode}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => exec("justifyRight")}
-          className={`${btnClass} text-xs`}
+          className={`${btnClass} text-xs disabled:opacity-30`}
         >
           D
         </button>
         <button
           type="button"
           title="Justifier"
+          disabled={sourceMode}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => exec("justifyFull")}
-          className={`${btnClass} text-xs`}
+          className={`${btnClass} text-xs disabled:opacity-30`}
         >
           J
         </button>
-        <span className="mx-1 h-4 w-px bg-gray-300" />
         <select
           title="Interligne"
           defaultValue=""
+          disabled={sourceMode}
           onMouseDown={(e) => e.preventDefault()}
           onChange={(e) => {
             if (e.target.value) setLineHeight(e.target.value);
             e.target.value = "";
           }}
-          className="h-7 rounded border-0 bg-transparent text-xs text-gray-600 hover:bg-gray-200 focus:outline-none"
+          className={`${selectClass} disabled:opacity-30`}
         >
           <option value="" disabled>
             Interligne
@@ -169,38 +226,109 @@ export function RichTextEditor({
           <option value="1.5">1,5</option>
           <option value="2">Double</option>
         </select>
-        <span className="mx-1 h-4 w-px bg-gray-300" />
+        {sep}
+        <button
+          type="button"
+          title="Liste à puces"
+          disabled={sourceMode}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => exec("insertUnorderedList")}
+          className={`${btnClass} disabled:opacity-30`}
+        >
+          •
+        </button>
+        <button
+          type="button"
+          title="Liste numérotée"
+          disabled={sourceMode}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => exec("insertOrderedList")}
+          className={`${btnClass} disabled:opacity-30`}
+        >
+          1.
+        </button>
+        <button
+          type="button"
+          title="Diminuer le retrait"
+          disabled={sourceMode}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => exec("outdent")}
+          className={`${btnClass} text-xs disabled:opacity-30`}
+        >
+          ⇤
+        </button>
+        <button
+          type="button"
+          title="Augmenter le retrait"
+          disabled={sourceMode}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => exec("indent")}
+          className={`${btnClass} text-xs disabled:opacity-30`}
+        >
+          ⇥
+        </button>
+        {sep}
+        <button
+          type="button"
+          title="Citation"
+          disabled={sourceMode}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => exec("formatBlock", "<blockquote>")}
+          className={`${btnClass} disabled:opacity-30`}
+        >
+          &ldquo;
+        </button>
+        <button
+          type="button"
+          title="Ligne de séparation"
+          disabled={sourceMode}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => exec("insertHorizontalRule")}
+          className={`${btnClass} disabled:opacity-30`}
+        >
+          —
+        </button>
         <button
           type="button"
           title="Lien"
+          disabled={sourceMode}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             const url = window.prompt("URL du lien :");
             if (url) exec("createLink", url);
           }}
-          className={btnClass}
+          className={`${btnClass} disabled:opacity-30`}
         >
           🔗
         </button>
+        {sep}
         <button
           type="button"
-          title="Effacer la mise en forme"
+          title={sourceMode ? "Revenir à l'aperçu" : "Voir le code source"}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => exec("removeFormat")}
-          className={`${btnClass} text-xs`}
+          onClick={toggleSourceMode}
+          className={`${btnClass} ${sourceMode ? "bg-gray-200" : ""}`}
         >
-          ✕
+          {"</>"}
         </button>
       </div>
-      <div
-        ref={ref}
-        contentEditable
-        suppressContentEditableWarning
-        onInput={() => onChange(ref.current?.innerHTML || "")}
-        onKeyDown={onKeyDown}
-        data-placeholder={placeholder}
-        className={`${minHeightClassName} px-3 py-2 text-sm text-gray-800 outline-none [&_a]:text-blue-600 [&_a]:underline [&_ol]:ml-5 [&_ol]:list-decimal [&_ul]:ml-5 [&_ul]:list-disc empty:before:text-gray-400 empty:before:content-[attr(data-placeholder)]`}
-      />
+      {sourceMode ? (
+        <textarea
+          value={sourceText}
+          onChange={(e) => setSourceText(e.target.value)}
+          className={`${minHeightClassName} w-full resize-none px-3 py-2 font-mono text-xs text-gray-800 outline-none`}
+        />
+      ) : (
+        <div
+          ref={ref}
+          contentEditable
+          suppressContentEditableWarning
+          onInput={() => onChange(ref.current?.innerHTML || "")}
+          onKeyDown={onKeyDown}
+          data-placeholder={placeholder}
+          className={`${minHeightClassName} px-3 py-2 text-sm text-gray-800 outline-none [&_a]:text-blue-600 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-gray-300 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-600 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_hr]:my-3 [&_hr]:border-gray-300 [&_ol]:ml-5 [&_ol]:list-decimal [&_ul]:ml-5 [&_ul]:list-disc empty:before:text-gray-400 empty:before:content-[attr(data-placeholder)]`}
+        />
+      )}
     </div>
   );
 }

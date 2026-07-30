@@ -45,6 +45,11 @@ export async function renderContractPdf(params: {
   studioAddress?: string | null;
   studioContactEmail?: string | null;
   studioContactPhone?: string | null;
+  /** Lieu de rédaction (Contract.place) — combiné à `createdAt` pour la formule d'usage
+   * "Fait à {place}, le {createdAt}" (demandé par Adriel : la date de création est "un point
+   * essentiel" du contrat, au même titre que la date de signature déjà affichée ci-dessous). */
+  place?: string | null;
+  createdAt?: Date | null;
 }) {
   const {
     studioName,
@@ -57,16 +62,22 @@ export async function renderContractPdf(params: {
     studioAddress,
     studioContactEmail,
     studioContactPhone,
+    place,
+    createdAt,
   } = params;
   const footerLine = [studioName, studioAddress, studioContactEmail, studioContactPhone]
     .filter(Boolean)
     .join(" · ");
+  const madeAtLine = createdAt
+    ? `Fait ${place ? `à ${place}, ` : ""}le ${createdAt.toLocaleDateString("fr-FR")}`
+    : null;
 
   const doc = (
     <Document>
       <Page size="A4" style={styles.page}>
         <Text style={styles.title}>{title}</Text>
-        <Text style={{ marginBottom: 16, color: "#666" }}>{studioName}</Text>
+        <Text style={{ marginBottom: 4, color: "#666" }}>{studioName}</Text>
+        {madeAtLine && <Text style={{ marginBottom: 16, fontSize: 10, color: "#9ca3af" }}>{madeAtLine}</Text>}
         <View style={styles.section}>
           <Text>{bodyText}</Text>
         </View>

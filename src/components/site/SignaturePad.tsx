@@ -80,7 +80,7 @@ export function SignaturePad({ contractId }: { contractId: string }) {
 
   if (done) {
     return (
-      <p className="mt-6 rounded-lg bg-green-50 p-4 text-green-700">
+      <p className="rounded-lg bg-green-50 p-4 text-green-700">
         Contrat signé avec succès. Une copie vous sera envoyée par email.
       </p>
     );
@@ -92,7 +92,7 @@ export function SignaturePad({ contractId }: { contractId: string }) {
     }`;
 
   return (
-    <div className="mt-8">
+    <div className="mt-3">
       <input
         placeholder="Votre nom complet"
         className="input mb-3"

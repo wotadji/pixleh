@@ -73,7 +73,7 @@ export default function NewContractPage() {
       <ContractForm
         clients={clients}
         studioName={studioName}
-        initial={{ title: "", clientId: "", bodyHtml: "", studioSignatureDataUrl: null }}
+        initial={{ title: "", clientId: "", bodyHtml: "", studioSignatureDataUrl: null, place: "" }}
         submitLabel={t("contractForm.create")}
         submittingLabel={t("common.creating")}
         submitting={loading}

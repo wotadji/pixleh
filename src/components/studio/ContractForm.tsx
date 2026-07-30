@@ -16,6 +16,7 @@ export interface ContractFormValues {
   clientId: string;
   bodyHtml: string;
   studioSignatureDataUrl: string | null;
+  place: string;
 }
 
 /**
@@ -31,6 +32,7 @@ export function ContractForm({
   submittingLabel,
   submitting,
   onSubmit,
+  createdAtDisplay,
 }: {
   clients: ClientOption[];
   studioName: string;
@@ -39,9 +41,17 @@ export function ContractForm({
   submittingLabel: string;
   submitting: boolean;
   onSubmit: (values: ContractFormValues) => void;
+  /** Date de création déjà formatée (ex: "30 juillet 2026") — non éditable, affichée à titre
+   * informatif uniquement (undefined en création : la date sera celle de l'enregistrement). */
+  createdAtDisplay?: string;
 }) {
   const { t } = useLanguage();
-  const [form, setForm] = useState({ title: initial.title, clientId: initial.clientId, bodyHtml: initial.bodyHtml });
+  const [form, setForm] = useState({
+    title: initial.title,
+    clientId: initial.clientId,
+    bodyHtml: initial.bodyHtml,
+    place: initial.place,
+  });
   const [studioSignatureDataUrl, setStudioSignatureDataUrl] = useState(initial.studioSignatureDataUrl);
   // Tant qu'une signature existe déjà (mode édition) ET n'a pas été explicitement remplacée,
   // on affiche un simple aperçu plutôt que SignatureField : celui-ci régénère automatiquement
@@ -90,6 +100,21 @@ export function ContractForm({
                 </option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">{t("contractForm.placeLabel")}</label>
+            <input
+              placeholder={t("contractForm.placePlaceholder")}
+              className="input"
+              value={form.place}
+              onChange={(e) => setForm({ ...form, place: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">{t("contractForm.createdAtLabel")}</label>
+            <p className="input flex items-center bg-gray-50 text-gray-500">
+              {createdAtDisplay || t("contractForm.createdAtOnSave")}
+            </p>
           </div>
         </div>
 

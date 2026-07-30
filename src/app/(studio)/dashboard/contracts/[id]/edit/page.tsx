@@ -18,12 +18,14 @@ interface ContractDTO {
   bodyHtml: string;
   client: { id: string } | null;
   studioSignatureDataUrl: string | null;
+  place: string | null;
+  createdAt: string;
 }
 
 export default function EditContractPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [studioName, setStudioName] = useState("");
   const [contract, setContract] = useState<ContractDTO | null>(null);
@@ -87,11 +89,13 @@ export default function EditContractPage() {
               clientId: contract.client?.id || "",
               bodyHtml: contract.bodyHtml,
               studioSignatureDataUrl: contract.studioSignatureDataUrl,
+              place: contract.place || "",
             }}
             submitLabel={t("contractForm.save")}
             submittingLabel={t("contractForm.saving")}
             submitting={loading}
             onSubmit={handleSubmit}
+            createdAtDisplay={new Intl.DateTimeFormat(locale, { dateStyle: "long" }).format(new Date(contract.createdAt))}
           />
         </>
       )}

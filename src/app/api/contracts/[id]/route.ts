@@ -18,14 +18,16 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     });
     if (!contract) throw new AccessError("Contrat introuvable", 404);
 
-    // studioSignatureDataUrl n'existe pas encore dans le Prisma Client généré du sandbox (voir
-    // commentaire sur ce champ dans schema.prisma) — lu à part via $queryRaw, même workaround
-    // que Gallery.publishedAt.
-    const [row] = await prisma.$queryRaw<{ studioSignatureDataUrl: string | null }[]>`
-      SELECT "studioSignatureDataUrl" FROM "Contract" WHERE id = ${contract.id}
+    // studioSignatureDataUrl et place n'existent pas encore dans le Prisma Client généré du
+    // sandbox (voir commentaires sur ces champs dans schema.prisma) — lus à part via
+    // $queryRaw, même workaround que Gallery.publishedAt.
+    const [row] = await prisma.$queryRaw<{ studioSignatureDataUrl: string | null; place: string | null }[]>`
+      SELECT "studioSignatureDataUrl", "place" FROM "Contract" WHERE id = ${contract.id}
     `;
 
-    return NextResponse.json({ contract: { ...contract, studioSignatureDataUrl: row?.studioSignatureDataUrl || null } });
+    return NextResponse.json({
+      contract: { ...contract, studioSignatureDataUrl: row?.studioSignatureDataUrl || null, place: row?.place || null },
+    });
   } catch (e) {
     return handleError(e);
   }
@@ -65,6 +67,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     // permettre explicitement de retirer une signature existante (valeur null envoyée).
     if (body.studioSignatureDataUrl !== undefined) {
       await prisma.$executeRaw`UPDATE "Contract" SET "studioSignatureDataUrl" = ${body.studioSignatureDataUrl} WHERE id = ${contract.id}`;
+    }
+    if (body.place !== undefined) {
+      await prisma.$executeRaw`UPDATE "Contract" SET "place" = ${body.place} WHERE id = ${contract.id}`;
     }
 
     return NextResponse.json({ contract });

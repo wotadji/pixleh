@@ -35,6 +35,10 @@ export async function POST(req: Request) {
     if (body.studioSignatureDataUrl) {
       await prisma.$executeRaw`UPDATE "Contract" SET "studioSignatureDataUrl" = ${body.studioSignatureDataUrl} WHERE id = ${contract.id}`;
     }
+    // place idem — même workaround (voir schema.prisma).
+    if (body.place) {
+      await prisma.$executeRaw`UPDATE "Contract" SET "place" = ${body.place} WHERE id = ${contract.id}`;
+    }
 
     // Si le studio a choisi un client, on lui envoie directement le lien de signature par
     // email (demande d'Adriel : "le bouton créer et générer un lien envoie aussi le mail au
