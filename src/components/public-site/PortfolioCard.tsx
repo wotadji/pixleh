@@ -11,6 +11,10 @@ export interface PortfolioGalleryItem {
    * (voir /exemples, la vitrine pixleh), absent sur le portfolio d'UN studio où c'est
    * déjà évident. */
   studioName?: string;
+  /** Requis pour construire le lien vers /[studioSlug]/portfolio/[gallerySlug] — voir cette
+   * route, qui montre uniquement les photos marquées "Portfolio" sans aucun gate, contrairement
+   * à /g/[slug] (lien client complet, protégé). */
+  studioSlug: string;
 }
 
 /**
@@ -21,7 +25,7 @@ export interface PortfolioGalleryItem {
  */
 export function PortfolioCard({ gallery }: { gallery: PortfolioGalleryItem }) {
   return (
-    <Link href={`/g/${gallery.slug}`} className="group block">
+    <Link href={`/${gallery.studioSlug}/portfolio/${gallery.slug}`} className="group block">
       <div className="relative aspect-[4/5] overflow-hidden rounded-lg bg-gray-100">
         {gallery.coverUrl && (
           // eslint-disable-next-line @next/next/no-img-element

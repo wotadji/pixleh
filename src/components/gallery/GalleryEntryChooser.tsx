@@ -122,15 +122,6 @@ export function GalleryEntryChooser({
               <span className="font-semibold">Bienvenue</span>. Choisissez l&apos;une des options suivantes pour continuer :
             </p>
             <div className="mt-6 w-full space-y-3">
-              {guestSlug && (
-                <button
-                  type="button"
-                  onClick={() => setMode("guest")}
-                  className="w-full border border-white/70 px-6 py-3 text-xs uppercase tracking-[0.15em] text-white transition hover:bg-white hover:text-gray-900"
-                >
-                  Entrer en tant qu&apos;invité
-                </button>
-              )}
               <button
                 type="button"
                 onClick={handleClientClick}
@@ -138,7 +129,22 @@ export function GalleryEntryChooser({
                 className="w-full border border-white/70 px-6 py-3 text-xs uppercase tracking-[0.15em] text-white transition hover:bg-white hover:text-gray-900"
               >
                 {loading ? "..." : "Entrer en tant que client"}
+                <span className="mt-0.5 block text-[10px] normal-case tracking-normal text-white/60">
+                  J&apos;ai le mot de passe fourni par le photographe
+                </span>
               </button>
+              {guestSlug && (
+                <button
+                  type="button"
+                  onClick={() => setMode("guest")}
+                  className="w-full border border-white/70 px-6 py-3 text-xs uppercase tracking-[0.15em] text-white transition hover:bg-white hover:text-gray-900"
+                >
+                  Entrer en tant qu&apos;invité
+                  <span className="mt-0.5 block text-[10px] normal-case tracking-normal text-white/60">
+                    Mon accès doit être validé par le client
+                  </span>
+                </button>
+              )}
             </div>
           </>
         )}

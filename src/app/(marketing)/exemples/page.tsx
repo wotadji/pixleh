@@ -32,7 +32,7 @@ export default async function ExemplesPage() {
     orderBy: { createdAt: "desc" },
     take: EXAMPLE_COUNT,
     include: {
-      studio: { select: { name: true } },
+      studio: { select: { name: true, slug: true } },
       photos: { orderBy: { position: "asc" }, select: { id: true, updatedAt: true } },
     },
   });
@@ -46,6 +46,7 @@ export default async function ExemplesPage() {
       categoryTag: gallery.categoryTag,
       eventDate: gallery.eventDate ? gallery.eventDate.toISOString() : null,
       studioName: gallery.studio.name,
+      studioSlug: gallery.studio.slug,
       coverUrl: cover
         ? `/api/files/studios/${gallery.studioId}/galleries/${gallery.id}/${cover.id}/thumb.jpg?v=${cover.updatedAt.getTime()}`
         : null,

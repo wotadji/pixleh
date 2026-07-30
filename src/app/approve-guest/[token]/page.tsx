@@ -16,7 +16,17 @@ export default async function GuestApprovalPage({ params }: { params: { token: s
     where: { approvalToken: params.token },
     include: {
       gallery: {
-        select: { title: true, collections: { orderBy: { position: "asc" }, select: { id: true, title: true } } },
+        select: {
+          title: true,
+          // isPortfolioDefault exclu : ce set n'est jamais proposé au client comme choix
+          // d'accès invité, sa visibilité publique se gère uniquement depuis le panneau
+          // studio (voir GalleryManager > togglePortfolioVisibility).
+          collections: {
+            where: { isPortfolioDefault: false },
+            orderBy: { position: "asc" },
+            select: { id: true, title: true },
+          },
+        },
       },
     },
   });

@@ -81,6 +81,7 @@ export default async function StudioPortfolioPage({
       title: gallery.title,
       categoryTag: gallery.categoryTag,
       eventDate: gallery.eventDate ? gallery.eventDate.toISOString() : null,
+      studioSlug: studio.slug,
       coverUrl: cover
         ? `/api/files/studios/${studio.id}/galleries/${gallery.id}/${cover.id}/thumb.jpg?v=${cover.updatedAt.getTime()}`
         : null,

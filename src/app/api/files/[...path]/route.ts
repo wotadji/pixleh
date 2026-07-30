@@ -41,9 +41,18 @@ export async function GET(_req: Request, { params }: { params: { path: string[] 
 
   const gallery = await prisma.gallery.findUnique({
     where: { id: galleryId },
-    include: { studio: { include: { settings: true } } },
+    include: {
+      studio: { include: { settings: true } },
+      // Nécessaire pour isPublicPortfolioPhoto ci-dessous — seuls id/visibility comptent.
+      collections: { select: { id: true, visibility: true } },
+    },
   });
   if (!gallery) return NextResponse.json({ error: "Introuvable" }, { status: 404 });
+
+  const photo = await prisma.photo.findUnique({ where: { id: photoId } });
+  if (!photo || photo.galleryId !== galleryId) {
+    return NextResponse.json({ error: "Photo introuvable" }, { status: 404 });
+  }
 
   // La photo de couverture fait exception : elle sert de fond à l'écran de choix
   // client/invité (voir GalleryEntryChooser, /g/[gallerySlug], variante `preview`) ET de
@@ -54,7 +63,24 @@ export async function GET(_req: Request, { params }: { params: { path: string[] 
   // Uniquement LA photo explicitement désignée comme couverture, pas les autres.
   const isPublicCoverPreview = gallery.coverPhotoId === photoId && (variant === "preview" || variant === "thumb");
 
-  if (!isPublicCoverPreview) {
+  // Toute photo appartenant à un set marqué PORTFOLIO (ou, tant qu'aucun set n'existe, si
+  // Gallery.defaultVisibility inclut PORTFOLIO) est elle aussi publique sans aucun gate —
+  // c'est précisément le contenu affiché sur /[studioSlug]/portfolio/[gallerySlug] (page
+  // publique dédiée, sans mot de passe ni email, voir cette route). Sans cette exception,
+  // cette page ne pourrait jamais afficher la moindre image puisque checkGalleryOrGuestAccess
+  // exige toujours une session — demandé par Adriel le 30/07/2026 pour que le portfolio
+  // public ne fuite QUE ces photos-là, jamais les sets Client/Invité.
+  const isPortfolioVisible =
+    gallery.status === "PUBLISHED" &&
+    (gallery.collections.length > 0
+      ? Boolean(
+          photo.collectionId &&
+            gallery.collections.some((c) => c.id === photo.collectionId && c.visibility.includes("PORTFOLIO"))
+        )
+      : gallery.defaultVisibility.includes("PORTFOLIO"));
+  const isPublicPortfolioPhoto = isPortfolioVisible && (variant === "preview" || variant === "thumb");
+
+  if (!isPublicCoverPreview && !isPublicPortfolioPhoto) {
     // Un visiteur peut être autorisé via le lien CLIENT (mot de passe / cookie `slug`) OU
     // via le lien INVITÉ (email / cookie `guestSlug`) — voir checkGalleryOrGuestAccess, qui
     // combine les deux car ils s'ignorent mutuellement. Sans ce OR, un invité qui passe le
@@ -64,11 +90,6 @@ export async function GET(_req: Request, { params }: { params: { path: string[] 
     if (!access.granted) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
-  }
-
-  const photo = await prisma.photo.findUnique({ where: { id: photoId } });
-  if (!photo || photo.galleryId !== galleryId) {
-    return NextResponse.json({ error: "Photo introuvable" }, { status: 404 });
   }
 
   const key = variant === "thumb" ? photo.thumbKey : photo.previewKey;

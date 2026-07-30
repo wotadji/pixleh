@@ -99,8 +99,9 @@ export default async function GuestGalleryPage({
   } else if (gallery.collections.length === 0) {
     guestPhotos = gallery.defaultVisibility.includes("GUEST") ? gallery.photos : [];
   } else {
-    const guestSets = gallery.collections.filter((c: { id: string; visibility: string[] }) =>
-      c.visibility.includes("GUEST")
+    const guestSets = gallery.collections.filter(
+      (c: { id: string; visibility: string[]; isPortfolioDefault: boolean }) =>
+        c.visibility.includes("GUEST") && !c.isPortfolioDefault
     );
     guestCollections = guestSets.map((c: { id: string; title: string }) => ({ id: c.id, title: c.title }));
     const guestCollectionIds = new Set(guestSets.map((c: { id: string }) => c.id));

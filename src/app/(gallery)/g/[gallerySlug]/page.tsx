@@ -111,8 +111,15 @@ export default async function GalleryEntryPage({
   // Mode invité : mêmes règles de filtrage que /invite/[guestSlug] (sets marqués "Invité"
   // uniquement, ou visibilité par défaut de la galerie tant qu'aucun set n'existe) — voir
   // ce fichier pour le détail commenté de cette logique.
+  // Le set "Portfolio" auto-créé (isPortfolioDefault) ne doit jamais apparaître comme onglet
+  // de filtre ici, ni côté client ni côté invité : sa visibilité publique se gère uniquement
+  // depuis le panneau studio (voir GalleryManager > togglePortfolioVisibility), et il a sa
+  // propre vue dédiée (/[studioSlug]/portfolio/[gallerySlug]) — demandé par Adriel le
+  // 30/07/2026 après avoir vu "PORTFOLIO" listé à côté des vrais sets sur /g/[slug].
   let visiblePhotos = gallery.photos;
-  let visibleCollections = gallery.collections.map((c) => ({ id: c.id, title: c.title }));
+  let visibleCollections = gallery.collections
+    .filter((c) => !c.isPortfolioDefault)
+    .map((c) => ({ id: c.id, title: c.title }));
   let coverPhotoId = gallery.coverPhotoId;
   let allowDownload = gallery.allowDownload;
   let allowRemarks = true;
@@ -122,7 +129,7 @@ export default async function GalleryEntryPage({
       visiblePhotos = gallery.defaultVisibility.includes("GUEST") ? gallery.photos : [];
       visibleCollections = [];
     } else {
-      const guestSets = gallery.collections.filter((c) => c.visibility.includes("GUEST"));
+      const guestSets = gallery.collections.filter((c) => c.visibility.includes("GUEST") && !c.isPortfolioDefault);
       visibleCollections = guestSets.map((c) => ({ id: c.id, title: c.title }));
       const guestCollectionIds = new Set(guestSets.map((c) => c.id));
       visiblePhotos = gallery.photos.filter((p) => p.collectionId && guestCollectionIds.has(p.collectionId));

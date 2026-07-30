@@ -28,6 +28,20 @@ import { formatDuration } from "@/lib/videoEmbed";
  * façon son propre hash à l'upload réel ; celui-ci ne sert qu'à proposer le bon choix
  * (ignorer/écraser/conserver) dans l'UI.
  */
+/**
+ * Mot de passe de galerie aléatoire (bouton "Générer" à côté du champ, Réglages) — alphabet
+ * réduit aux caractères non ambigus (pas de 0/O ni 1/l/I) puisque ce mot de passe est
+ * destiné à être lu et retapé à la main par le client, pas mémorisé comme un mot de passe
+ * de compte. Ne remplace le champ qu'au clic, jamais automatiquement : le studio garde la
+ * main pour saisir son propre mot de passe s'il préfère.
+ */
+function generateGalleryPassword(length = 8): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  let out = "";
+  for (let i = 0; i < length; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
+}
+
 async function sha256Hex(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   const digest = await crypto.subtle.digest("SHA-256", buffer);
@@ -1669,13 +1683,22 @@ export function GalleryManager({
 
               <div>
                 <label className="mb-1 block text-sm font-medium">{t("gs.password")}</label>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder={t("gs.passwordPlaceholder")}
-                  value={settingsForm.password}
-                  onChange={(e) => setSettingsForm((f) => ({ ...f, password: e.target.value }))}
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    className="input flex-1"
+                    placeholder={t("gs.passwordPlaceholder")}
+                    value={settingsForm.password}
+                    onChange={(e) => setSettingsForm((f) => ({ ...f, password: e.target.value }))}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSettingsForm((f) => ({ ...f, password: generateGalleryPassword() }))}
+                    className="btn-secondary shrink-0 whitespace-nowrap text-xs"
+                  >
+                    {t("gs.generatePassword")}
+                  </button>
+                </div>
                 <p className="mt-1 text-xs text-gray-500">{t("gs.passwordHint")}</p>
               </div>
 
@@ -1752,6 +1775,34 @@ export function GalleryManager({
                   <span className="block text-xs text-gray-500">{t("gs.watermarkHint")}</span>
                 </span>
               </label>
+
+              {/* Lien UNIQUE à partager avec le client (voir GalleryEntryChooser) : à l'ouverture,
+                  le visiteur choisit lui-même "Client" (mot de passe) ou "Invité" (email, soumis
+                  à validation) — c'est donc CE lien-ci qu'il faut communiquer par défaut, le lien
+                  invité juste en dessous n'étant qu'une alternative directe (saute le choix,
+                  utile pour un post-it ou une story Instagram par ex.). Demandé par Adriel le
+                  30/07/2026, qui ne le trouvait pas assez visible dans ce panneau (seul le bouton
+                  "Partager" tout en haut le proposait jusqu'ici). */}
+              <div className="rounded-lg border border-gray-200 p-4">
+                <p className="block text-sm font-medium">{t("gs.galleryLinkLabel")}</p>
+                <p className="mt-0.5 text-xs text-gray-500">{t("gs.galleryLinkHint")}</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    className="input flex-1 text-xs"
+                    value={galleryUrl}
+                    onFocus={(e) => e.target.select()}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleShare}
+                    className="btn-secondary shrink-0 whitespace-nowrap text-xs"
+                  >
+                    {copied ? t("gm.linkCopied") : t("gs.copyLink")}
+                  </button>
+                </div>
+              </div>
 
               <div className="rounded-lg border border-gray-200 p-4">
                 <p className="block text-sm font-medium">{t("gs.guestLinkLabel")}</p>
