@@ -236,9 +236,10 @@ export default function ContractsPage() {
                   type="button"
                   disabled={archiving === c.id}
                   onClick={() => toggleArchived(c, false)}
-                  className="rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
                 >
-                  {t("contracts.unarchive")}
+                  {archiving === c.id && <IconSpinner />}
+                  {archiving === c.id ? t("contracts.unarchiving") : t("contracts.unarchive")}
                 </button>
               ) : (
                 c.status === "SIGNED" && (
@@ -246,10 +247,10 @@ export default function ContractsPage() {
                     type="button"
                     disabled={archiving === c.id}
                     onClick={() => toggleArchived(c, true)}
-                    className="flex items-center gap-1 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                    className="flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
                   >
-                    <IconArchive />
-                    {t("contracts.archive")}
+                    {archiving === c.id ? <IconSpinner /> : <IconArchive />}
+                    {archiving === c.id ? t("contracts.archiving") : t("contracts.archive")}
                   </button>
                 )
               )}
@@ -290,6 +291,13 @@ function IconDownload() {
       <path d="M4 19h16" strokeLinecap="round" />
     </svg>
   );
+}
+
+/** Petit loader inline affiché dans le bouton Archiver/Désarchiver pendant la requête —
+ * demandé par Adriel, 31/07/2026 : le bouton se contentait de griser sans donner de retour
+ * visuel clair pendant l'appel réseau. */
+function IconSpinner() {
+  return <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />;
 }
 
 function IconArchive() {
