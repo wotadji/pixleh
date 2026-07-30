@@ -110,13 +110,13 @@ export function GuestListManager({
                     disabled={savingId === g.id}
                     onClick={() => toggleAccess(g)}
                     title={g.status === "APPROVED" ? "Désactiver l'accès" : "Activer l'accès"}
-                    className={`relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+                    className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:opacity-50 ${
                       g.status === "APPROVED" ? "bg-green-600" : "bg-gray-300"
                     }`}
                   >
                     <span
-                      className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                        g.status === "APPROVED" ? "translate-x-4" : "translate-x-0.5"
+                      className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                        g.status === "APPROVED" ? "translate-x-4" : "translate-x-0"
                       }`}
                     />
                   </button>
