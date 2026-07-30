@@ -7,12 +7,15 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { SignOutButton } from "@/components/studio/SignOutButton";
 
 export function DashboardSidebar({
-  userName,
+  studioName,
   studioSlug,
   isPlatformAdmin,
   unreadClientsCount = 0,
 }: {
-  userName: string;
+  /** Nom du studio (Studio.name), affiché sous "pixleh" — remplace le nom de l'utilisateur
+   * connecté (30/07/2026, demande d'Adriel) : le studio peut avoir plusieurs membres (OWNER/
+   * TEAM), donc le nom du studio identifie mieux "où on est" que celui de la personne connectée. */
+  studioName: string;
   studioSlug: string;
   isPlatformAdmin?: boolean;
   /** Nombre de clients/prospects avec un message de contact non lu — bulle rouge sur le
@@ -52,7 +55,7 @@ export function DashboardSidebar({
     <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-gray-50 p-4">
       <div className="mb-6 px-2">
         <p className="font-serif text-lg font-semibold">pixleh</p>
-        <p className="text-xs text-gray-500">{userName}</p>
+        <p className="text-xs text-gray-500">{studioName}</p>
       </div>
       <nav className="space-y-1">
         {nav.map((item) => (

@@ -17,7 +17,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // Calculé ici (layout, partagé par toutes les pages du dashboard) plutôt que dans chaque
   // page, pour que l'alerte à 80% d'utilisation soit visible partout dans le panel, pas
   // seulement sur la Vue d'ensemble.
-  const [quota, unreadClientsCount, currentUser] = await Promise.all([
+  const [quota, unreadClientsCount, currentUser, studio] = await Promise.all([
     getQuotaStatus(session.user.studioId),
     // Même logique de calcul serveur que le quota ci-dessus (plutôt qu'un fetch client dans
     // la sidebar) — alimente la bulle rouge sur le lien "Clients", visible dès le premier
@@ -27,12 +27,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
     // part ici, même logique que les deux requêtes ci-dessus, pour alimenter le bandeau de
     // vérification d'email visible sur tout le panel.
     prisma.user.findUnique({ where: { id: session.user.id }, select: { emailVerified: true } }),
+    // Nom du studio (30/07/2026, demande d'Adriel) : affiché sous "pixleh" dans la sidebar à
+    // la place du nom de l'utilisateur — pas non plus exposé dans la session NextAuth.
+    prisma.studio.findUnique({ where: { id: session.user.studioId }, select: { name: true } }),
   ]);
 
   return (
     <div className="flex min-h-screen">
       <DashboardSidebar
-        userName={session.user.name || ""}
+        studioName={studio?.name || ""}
         studioSlug={session.user.studioSlug}
         isPlatformAdmin={Boolean((session.user as any).isPlatformAdmin)}
         unreadClientsCount={unreadClientsCount}
