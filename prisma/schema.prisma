@@ -844,6 +844,15 @@ model Contract {
   signedAt     DateTime?
   signedIp     String?
   pdfKey       String?        // chemin du PDF généré sur le storage
+  /// Signature du STUDIO (pas du client), saisie à la création du contrat via SignatureField
+  /// (30/07/2026, demande d'Adriel) : texte tapé rendu en police manuscrite, image JPEG/PNG
+  /// importée, ou dessin à la souris — même format base64 que `signatureDataUrl` ci-dessus.
+  /// Ajouté après le dernier `prisma generate` du sandbox (même limitation que
+  /// ClientAccount.name / Gallery.publishedAt, voir plus haut dans ce schéma) : tant qu'Adriel
+  /// n'a pas relancé `prisma generate && prisma db push` en local, ce champ est lu/écrit via
+  /// `$queryRaw`/`$executeRaw` (table "Contract") plutôt que via l'API typée du Prisma Client
+  /// généré, qui ne le connaît pas encore.
+  studioSignatureDataUrl String? @db.Text
   createdAt    DateTime       @default(now())
 
   @@index([studioId])

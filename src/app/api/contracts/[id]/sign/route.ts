@@ -28,6 +28,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const clientIp = req.headers.get("x-forwarded-for") || "inconnu";
   const bodyText = contract.bodyHtml.replace(/<[^>]+>/g, "");
 
+  // studioSignatureDataUrl n'existe pas encore dans le Prisma Client généré du sandbox (voir
+  // commentaire sur ce champ dans schema.prisma) — lu à part via $queryRaw, même workaround
+  // que Gallery.publishedAt.
+  const [studioSignatureRow] = await prisma.$queryRaw<{ studioSignatureDataUrl: string | null }[]>`
+    SELECT "studioSignatureDataUrl" FROM "Contract" WHERE id = ${contract.id}
+  `;
+
   const pdfBuffer = await renderContractPdf({
     studioName: contract.studio.name,
     title: contract.title,
@@ -35,6 +42,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     signedByName,
     signedAt,
     signatureDataUrl,
+    studioSignatureDataUrl: studioSignatureRow?.studioSignatureDataUrl || null,
   });
 
   const pdfKey = `studios/${contract.studioId}/contracts/${contract.id}.pdf`;

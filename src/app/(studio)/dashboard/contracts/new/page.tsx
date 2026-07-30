@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { RichTextEditor } from "@/components/studio/RichTextEditor";
+import { SignatureField } from "@/components/studio/SignatureField";
 
 interface ClientOption {
   id: string;
@@ -16,14 +17,23 @@ export default function NewContractPage() {
   const router = useRouter();
   const { t } = useLanguage();
   const [clients, setClients] = useState<ClientOption[]>([]);
+  const [studioName, setStudioName] = useState("");
   const [form, setForm] = useState({ title: "", clientId: "", bodyHtml: "" });
+  const [studioSignatureDataUrl, setStudioSignatureDataUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/clients")
-      .then((r) => r.json())
-      .then((d) => setClients(d.clients || []))
+    Promise.all([
+      fetch("/api/clients").then((r) => r.json()),
+      // Sert uniquement à pré-remplir l'onglet "Texte" de SignatureField avec le nom du
+      // studio (modifiable) — même endpoint que la page Réglages.
+      fetch("/api/settings").then((r) => r.json()),
+    ])
+      .then(([clientsData, settingsData]) => {
+        setClients(clientsData.clients || []);
+        setStudioName(settingsData.studio?.name || "");
+      })
       .finally(() => setPageLoading(false));
   }, []);
 
@@ -42,7 +52,7 @@ export default function NewContractPage() {
     const res = await fetch("/api/contracts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, clientId: form.clientId || null }),
+      body: JSON.stringify({ ...form, clientId: form.clientId || null, studioSignatureDataUrl }),
     });
     setLoading(false);
     const data = await res.json();
@@ -102,6 +112,13 @@ export default function NewContractPage() {
               placeholder={t("contractForm.bodyPlaceholder")}
               minHeightClassName="min-h-[380px]"
             />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              {t("contractForm.studioSignatureLabel")}
+            </label>
+            <SignatureField defaultText={studioName} onChange={setStudioSignatureDataUrl} />
           </div>
 
           <div className="flex items-center justify-end gap-3 border-t border-gray-100 pt-4">

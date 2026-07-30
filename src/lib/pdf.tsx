@@ -26,8 +26,11 @@ export async function renderContractPdf(params: {
   signedByName?: string | null;
   signedAt?: Date | null;
   signatureDataUrl?: string | null;
+  /** Signature du studio, saisie à la création du contrat (voir SignatureField /
+   * Contract.studioSignatureDataUrl) — affichée même si le client n'a pas encore signé. */
+  studioSignatureDataUrl?: string | null;
 }) {
-  const { studioName, title, bodyText, signedByName, signedAt, signatureDataUrl } = params;
+  const { studioName, title, bodyText, signedByName, signedAt, signatureDataUrl, studioSignatureDataUrl } = params;
 
   const doc = (
     <Document>
@@ -37,6 +40,12 @@ export async function renderContractPdf(params: {
         <View style={styles.section}>
           <Text>{bodyText}</Text>
         </View>
+        {studioSignatureDataUrl && (
+          <View style={styles.section}>
+            <Text>Signé par : {studioName}</Text>
+            <Image src={studioSignatureDataUrl} style={styles.signature} />
+          </View>
+        )}
         {signedByName && (
           <View style={styles.section}>
             <Text>Signé par : {signedByName}</Text>

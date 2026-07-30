@@ -28,6 +28,12 @@ export async function POST(req: Request) {
     const contract = await prisma.contract.create({
       data: { studioId: session.user.studioId, status: "SENT", ...parsed.data },
     });
+    // studioSignatureDataUrl n'existe pas encore dans le Prisma Client généré du sandbox
+    // (voir commentaire sur ce champ dans schema.prisma) — écrit à part via $executeRaw,
+    // même workaround que Gallery.publishedAt.
+    if (body.studioSignatureDataUrl) {
+      await prisma.$executeRaw`UPDATE "Contract" SET "studioSignatureDataUrl" = ${body.studioSignatureDataUrl} WHERE id = ${contract.id}`;
+    }
     return NextResponse.json({ contract }, { status: 201 });
   } catch (e) {
     return handleError(e);
