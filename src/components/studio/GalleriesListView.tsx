@@ -21,6 +21,9 @@ interface GalleryRow {
   featuredHome: boolean;
   coverPhotoId: string | null;
   coverUpdatedAt: string | null;
+  /** Date de la dernière transition vers PUBLISHED (Gallery.publishedAt, 30/07/2026) — null
+   * pour une galerie jamais publiée (toujours en DRAFT). */
+  publishedAt: string | null;
 }
 
 // "mostLiked" viendra plus tard, une fois qu'un système de likes visiteurs existera
@@ -146,6 +149,12 @@ function statusLabel(status: GalleryRow["status"], t: (k: string) => string): st
 
 function formatDate(iso: string, locale: string): string {
   return new Date(iso).toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" });
+}
+
+/** null si la galerie n'a jamais été publiée (toujours en DRAFT) — voir Gallery.publishedAt. */
+function publishedLabel(publishedAt: string | null, locale: string, t: (k: string) => string): string | null {
+  if (!publishedAt) return null;
+  return t("galleries.publishedOn").replace("{date}", formatDate(publishedAt, locale));
 }
 
 function pillClass(active: boolean): string {
@@ -871,6 +880,11 @@ export function GalleriesListView({
                     <span className={`h-2 w-2 shrink-0 rounded-full ${statusDotColor(g.status)}`} />
                     {g.photoCount} {t("galleries.photoCount")} · {dateLabel}
                   </p>
+                  {g.publishedAt && (
+                    <p className="mt-0.5 truncate text-[11px] text-gray-400">
+                      {publishedLabel(g.publishedAt, locale, t)}
+                    </p>
+                  )}
                 </div>
               </Link>
             );
@@ -904,6 +918,11 @@ export function GalleriesListView({
                       <span className={`h-2 w-2 shrink-0 rounded-full ${statusDotColor(g.status)}`} />
                       {statusLabel(g.status, t)} · {g.photoCount} {t("galleries.photoCount")} · {dateLabel}
                     </p>
+                    {g.publishedAt && (
+                      <p className="mt-0.5 truncate text-xs text-gray-400">
+                        {publishedLabel(g.publishedAt, locale, t)}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">

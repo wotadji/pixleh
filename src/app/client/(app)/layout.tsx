@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getClientPortalSession } from "@/lib/clientSession";
 import { prisma } from "@/lib/prisma";
 import { ClientPortalSidebar } from "@/components/client-portal/ClientPortalSidebar";
+import { ClientPortalFooter } from "@/components/client-portal/ClientPortalFooter";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,10 @@ export default async function ClientPortalAppLayout({ children }: { children: Re
   return (
     <div className="mx-auto flex min-h-screen max-w-5xl">
       <ClientPortalSidebar email={session.email} galleryCount={galleryCount} />
-      <div className="min-w-0 flex-1">{children}</div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex-1">{children}</div>
+        <ClientPortalFooter />
+      </div>
     </div>
   );
 }

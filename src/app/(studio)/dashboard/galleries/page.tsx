@@ -35,6 +35,17 @@ export default async function GalleriesListPage() {
     : [];
   const coverById = new Map(coverPhotos.map((p) => [p.id, p]));
 
+  // `publishedAt` (30/07/2026, demande d'Adriel) est trop récent pour le Prisma Client généré
+  // du sandbox (voir le commentaire sur Gallery.publishedAt dans schema.prisma) : récupéré à
+  // part via $queryRaw, comme côté espace Client (voir client/(app)/page.tsx).
+  const galleryIds = galleries.map((g) => g.id);
+  const publishedRows = galleryIds.length
+    ? await prisma.$queryRaw<{ id: string; publishedAt: Date | null }[]>`
+        SELECT "id", "publishedAt" FROM "Gallery" WHERE "id" = ANY(${galleryIds})
+      `
+    : [];
+  const publishedAtById = new Map(publishedRows.map((r) => [r.id, r.publishedAt]));
+
   return (
     <GalleriesListView
       studioId={studioId}
@@ -54,6 +65,7 @@ export default async function GalleriesListPage() {
           featuredHome: g.featuredHome,
           coverPhotoId: cover?.id || null,
           coverUpdatedAt: cover?.updatedAt.toISOString() || null,
+          publishedAt: publishedAtById.get(g.id)?.toISOString() || null,
         };
       })}
     />
