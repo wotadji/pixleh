@@ -16,6 +16,17 @@ const styles = StyleSheet.create({
   },
   total: { marginTop: 12, fontSize: 14, fontWeight: 700, textAlign: "right" },
   signature: { marginTop: 24, width: 200, height: 80 },
+  footer: {
+    position: "absolute",
+    bottom: 24,
+    left: 40,
+    right: 40,
+    paddingTop: 8,
+    borderTop: "1px solid #e5e7eb",
+    fontSize: 9,
+    color: "#9ca3af",
+    textAlign: "center",
+  },
 });
 
 /** Génère le PDF d'un contrat signé (texte + image de signature). */
@@ -29,8 +40,27 @@ export async function renderContractPdf(params: {
   /** Signature du studio, saisie à la création du contrat (voir SignatureField /
    * Contract.studioSignatureDataUrl) — affichée même si le client n'a pas encore signé. */
   studioSignatureDataUrl?: string | null;
+  /** Coordonnées du studio (StudioSettings) affichées en pied de page — demandé par Adriel
+   * pour que le PDF final identifie clairement l'émetteur du contrat, même imprimé seul. */
+  studioAddress?: string | null;
+  studioContactEmail?: string | null;
+  studioContactPhone?: string | null;
 }) {
-  const { studioName, title, bodyText, signedByName, signedAt, signatureDataUrl, studioSignatureDataUrl } = params;
+  const {
+    studioName,
+    title,
+    bodyText,
+    signedByName,
+    signedAt,
+    signatureDataUrl,
+    studioSignatureDataUrl,
+    studioAddress,
+    studioContactEmail,
+    studioContactPhone,
+  } = params;
+  const footerLine = [studioName, studioAddress, studioContactEmail, studioContactPhone]
+    .filter(Boolean)
+    .join(" · ");
 
   const doc = (
     <Document>
@@ -52,6 +82,11 @@ export async function renderContractPdf(params: {
             {signedAt && <Text>Le : {signedAt.toLocaleString("fr-FR")}</Text>}
             {signatureDataUrl && <Image src={signatureDataUrl} style={styles.signature} />}
           </View>
+        )}
+        {footerLine && (
+          <Text style={styles.footer} fixed>
+            {footerLine}
+          </Text>
         )}
       </Page>
     </Document>

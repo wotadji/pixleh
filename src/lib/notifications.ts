@@ -160,6 +160,42 @@ export async function sendGalleryReadyEmail(params: {
   });
 }
 
+/** Envoyé au client quand le studio crée un contrat en le rattachant à un client (voir POST
+ * /api/contracts) : contient le lien de signature (/c/[id]). Même patron que
+ * sendGalleryReadyEmail (lien direct + signature de contact du studio). */
+export async function sendContractSignEmail(params: {
+  clientName: string;
+  clientEmail: string;
+  contractTitle: string;
+  contractId: string;
+  studio: { name: string; slug: string; logoUrl: string | null; brandColor: string | null };
+  settings: { contactEmail: string | null; contactPhone: string | null } | null;
+}) {
+  const link = appUrl(`/c/${params.contractId}`);
+  const signature = buildEmailSignature(params.studio, params.settings);
+
+  const html = wrapEmail(`
+    <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Un contrat à signer</h2>
+    <p>Bonjour ${escapeHtml(params.clientName)},</p>
+    <p><strong>${escapeHtml(params.studio.name)}</strong> vous a envoyé le contrat
+    « ${escapeHtml(params.contractTitle)} » à consulter et signer en ligne.</p>
+    <a href="${link}" style="${BUTTON_STYLE}">Consulter et signer</a>
+  `);
+
+  // Renvoie le résultat de sendMail (voir sendGalleryReadyEmail ci-dessus) pour que l'appelant
+  // (POST /api/contracts, déclenché de façon interactive par "Créer et générer le lien")
+  // puisse prévenir le studio si l'envoi échoue plutôt que de le croire réussi à tort.
+  return sendMail({
+    to: params.clientEmail,
+    subject: `Contrat à signer — ${params.contractTitle}`,
+    text: [
+      `Bonjour ${params.clientName}, ${params.studio.name} vous a envoyé le contrat « ${params.contractTitle} » à consulter et signer : ${link}`,
+      signature.text,
+    ].join("\n\n"),
+    html: `${html}${signature.html}`,
+  });
+}
+
 /** Confirme l'email d'un ClientAccount (espace Client unifié, voir /client/login) avant
  * d'activer le mot de passe qu'il vient de créer — même patron que sendVerificationEmail
  * (compte studio), lien géré par /api/client-portal/verify-email. */

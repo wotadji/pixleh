@@ -17,7 +17,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const contract = await prisma.contract.findUnique({
     where: { id: params.id },
-    include: { studio: true },
+    include: { studio: { include: { settings: true } } },
   });
   if (!contract) return NextResponse.json({ error: "Contrat introuvable" }, { status: 404 });
   if (contract.status === "SIGNED") {
@@ -43,6 +43,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     signedAt,
     signatureDataUrl,
     studioSignatureDataUrl: studioSignatureRow?.studioSignatureDataUrl || null,
+    studioAddress: contract.studio.settings?.address || null,
+    studioContactEmail: contract.studio.settings?.contactEmail || null,
+    studioContactPhone: contract.studio.settings?.contactPhone || null,
   });
 
   const pdfKey = `studios/${contract.studioId}/contracts/${contract.id}.pdf`;

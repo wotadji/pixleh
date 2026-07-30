@@ -51,6 +51,11 @@ export default function ContractsPage() {
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs text-gray-500">{STATUS_LABELS[c.status]}</span>
+              {c.status !== "SIGNED" && (
+                <Link href={`/dashboard/contracts/${c.id}/edit`} className="text-sm text-brand-600 hover:underline">
+                  {t("contracts.edit")}
+                </Link>
+              )}
               <Link href={`/c/${c.id}`} target="_blank" className="text-sm text-brand-600 hover:underline">
                 {t("contracts.viewLink")}
               </Link>

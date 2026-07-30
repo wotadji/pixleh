@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireStudioSession, AccessError } from "@/lib/access";
 import { contractSchema } from "@/lib/validators";
+import { sendContractSignEmail } from "@/lib/notifications";
 
 export async function GET() {
   try {
@@ -34,7 +35,36 @@ export async function POST(req: Request) {
     if (body.studioSignatureDataUrl) {
       await prisma.$executeRaw`UPDATE "Contract" SET "studioSignatureDataUrl" = ${body.studioSignatureDataUrl} WHERE id = ${contract.id}`;
     }
-    return NextResponse.json({ contract }, { status: 201 });
+
+    // Si le studio a choisi un client, on lui envoie directement le lien de signature par
+    // email (demande d'Adriel : "le bouton créer et générer un lien envoie aussi le mail au
+    // client") — pas d'échec bloquant si l'envoi rate (SMTP absent, etc.), le contrat est de
+    // toute façon créé et le lien reste consultable/partageable manuellement ; on remonte
+    // juste l'info à l'UI pour qu'elle prévienne le studio.
+    let emailSent = false;
+    let emailError: string | undefined;
+    if (parsed.data.clientId) {
+      const [client, studio] = await Promise.all([
+        prisma.client.findUnique({ where: { id: parsed.data.clientId } }),
+        prisma.studio.findUnique({ where: { id: session.user.studioId }, include: { settings: true } }),
+      ]);
+      if (client?.email && studio) {
+        const result = await sendContractSignEmail({
+          clientName: client.name,
+          clientEmail: client.email,
+          contractTitle: contract.title,
+          contractId: contract.id,
+          studio: { name: studio.name, slug: studio.slug, logoUrl: studio.logoUrl, brandColor: studio.brandColor },
+          settings: studio.settings
+            ? { contactEmail: studio.settings.contactEmail, contactPhone: studio.settings.contactPhone }
+            : null,
+        });
+        emailSent = result.ok;
+        emailError = result.error;
+      }
+    }
+
+    return NextResponse.json({ contract, emailSent, emailError }, { status: 201 });
   } catch (e) {
     return handleError(e);
   }

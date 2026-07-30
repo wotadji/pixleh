@@ -43,6 +43,26 @@ export function RichTextEditor({
     onChange(ref.current?.innerHTML || "");
   }
 
+  // Pas de execCommand standard pour l'interligne — on enveloppe tout le contenu dans un
+  // conteneur unique (repéré par `data-lh` pour ne pas en créer un nouveau à chaque
+  // changement) et on applique le style dessus, plutôt que par paragraphe : suffisant pour
+  // un contrat (un seul interligne cohérent sur tout le document) et beaucoup plus fiable
+  // qu'une manipulation de sélection avec contentEditable.
+  function setLineHeight(value: string) {
+    if (!ref.current) return;
+    ref.current.focus();
+    let wrapper = ref.current.querySelector<HTMLDivElement>("[data-lh]");
+    if (!wrapper) {
+      wrapper = document.createElement("div");
+      wrapper.setAttribute("data-lh", "1");
+      wrapper.innerHTML = ref.current.innerHTML;
+      ref.current.innerHTML = "";
+      ref.current.appendChild(wrapper);
+    }
+    wrapper.style.lineHeight = value;
+    onChange(ref.current.innerHTML);
+  }
+
   const btnClass = "flex h-7 w-7 items-center justify-center rounded text-sm text-gray-600 hover:bg-gray-200";
 
   return (
@@ -94,6 +114,61 @@ export function RichTextEditor({
         >
           1.
         </button>
+        <span className="mx-1 h-4 w-px bg-gray-300" />
+        <button
+          type="button"
+          title="Aligner à gauche"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => exec("justifyLeft")}
+          className={`${btnClass} text-xs`}
+        >
+          G
+        </button>
+        <button
+          type="button"
+          title="Centrer"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => exec("justifyCenter")}
+          className={`${btnClass} text-xs`}
+        >
+          C
+        </button>
+        <button
+          type="button"
+          title="Aligner à droite"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => exec("justifyRight")}
+          className={`${btnClass} text-xs`}
+        >
+          D
+        </button>
+        <button
+          type="button"
+          title="Justifier"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => exec("justifyFull")}
+          className={`${btnClass} text-xs`}
+        >
+          J
+        </button>
+        <span className="mx-1 h-4 w-px bg-gray-300" />
+        <select
+          title="Interligne"
+          defaultValue=""
+          onMouseDown={(e) => e.preventDefault()}
+          onChange={(e) => {
+            if (e.target.value) setLineHeight(e.target.value);
+            e.target.value = "";
+          }}
+          className="h-7 rounded border-0 bg-transparent text-xs text-gray-600 hover:bg-gray-200 focus:outline-none"
+        >
+          <option value="" disabled>
+            Interligne
+          </option>
+          <option value="1">Simple</option>
+          <option value="1.5">1,5</option>
+          <option value="2">Double</option>
+        </select>
         <span className="mx-1 h-4 w-px bg-gray-300" />
         <button
           type="button"

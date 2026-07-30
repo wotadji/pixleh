@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
 import { signatureFont } from "@/lib/fonts";
+import { useSignatureCanvasResize } from "@/lib/useSignatureCanvasResize";
 
 type SignMode = "type" | "upload" | "draw";
 
@@ -37,7 +38,7 @@ async function renderTypedSignature(text: string): Promise<string | null> {
 /**
  * Zone de signature à 3 méthodes — utilisée pour la signature du studio à la création d'un
  * contrat (contracts/new) : "Texte" (tapé, rendu en police manuscrite), "Importer" (image
- * JPEG/PNG) ou "Souris" (dessiné). Les 3 blocs restent montés (juste masqués en CSS) pour ne
+ * JPEG/PNG) ou "Dessiner" (à la souris). Les 3 blocs restent montés (juste masqués en CSS) pour ne
  * pas perdre le contenu d'un onglet en passant à un autre.
  */
 export function SignatureField({
@@ -55,6 +56,11 @@ export function SignatureField({
   const [drawnDataUrl, setDrawnDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const sigRef = useRef<SignatureCanvas>(null);
+
+  // Le canvas reste monté mais masqué (`hidden`) tant que l'onglet "Dessiner" n'est pas
+  // actif — `offsetWidth` vaut alors 0, donc le redimensionnement ne peut se faire qu'une
+  // fois l'onglet réellement visible (voir `active`).
+  useSignatureCanvasResize(sigRef, mode === "draw");
 
   // Ne se resynchronise que si `defaultText` change côté parent (ex: le nom du studio arrive
   // après le premier rendu, une fois /api/settings résolu) — sans écraser une saisie déjà en
@@ -138,7 +144,7 @@ export function SignatureField({
           Importer une image
         </button>
         <button type="button" onClick={() => switchMode("draw")} className={tabClass(mode === "draw")}>
-          Souris
+          Dessiner
         </button>
       </div>
 

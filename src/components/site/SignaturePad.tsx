@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
+import { useSignatureCanvasResize } from "@/lib/useSignatureCanvasResize";
 
 type SignMode = "draw" | "upload";
 
@@ -19,6 +20,10 @@ export function SignaturePad({ contractId }: { contractId: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+
+  // Le bloc "draw" est démonté/remonté à chaque changement d'onglet (voir le ternaire plus
+  // bas) : le canvas est donc toujours visible dès son montage, `active` peut rester true.
+  useSignatureCanvasResize(sigRef, mode === "draw");
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     setError(null);
