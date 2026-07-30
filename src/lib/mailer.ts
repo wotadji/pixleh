@@ -47,9 +47,11 @@ export async function sendMail(params: {
       : undefined,
   });
 
+  const from = process.env.SMTP_FROM || "pixleh <no-reply@localhost>";
+
   try {
     await transporter.sendMail({
-      from: process.env.SMTP_FROM || "pixleh <no-reply@localhost>",
+      from,
       to: params.to,
       subject: params.subject,
       text: params.text,
@@ -59,7 +61,18 @@ export async function sendMail(params: {
     });
     return { ok: true };
   } catch (e) {
-    const error = e instanceof Error ? e.message : String(e);
+    let error = e instanceof Error ? e.message : String(e);
+    // Cause la plus fréquente d'échec silencieux avec Resend : tant que le domaine d'envoi
+    // n'est pas vérifié dans le dashboard Resend, l'adresse "sandbox" onboarding@resend.dev
+    // ne peut envoyer QUE vers l'email du propriétaire du compte Resend — tout autre
+    // destinataire (le studio, un client...) est rejeté. Repéré le 31/07/2026 en creusant
+    // pourquoi l'email "contrat signé" n'atteignait jamais le studio malgré un code correct.
+    if (from.includes("resend.dev")) {
+      error +=
+        " — Cause probable : expéditeur onboarding@resend.dev (sandbox Resend), qui ne peut " +
+        "envoyer qu'à l'adresse email de votre compte Resend tant qu'aucun domaine n'est " +
+        "vérifié. Vérifiez un domaine dans le dashboard Resend puis mettez à jour SMTP_FROM.";
+    }
     console.error("Envoi email échoué :", error);
     return { ok: false, error };
   }
