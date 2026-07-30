@@ -51,15 +51,15 @@ export default function NewContractPage() {
   }
 
   return (
-    <div className="max-w-4xl">
+    <div>
       <Link href="/dashboard/contracts" className="text-sm text-gray-500 hover:text-gray-800">
         ← {t("contracts.title")}
       </Link>
       <h1 className="mt-2 font-serif text-2xl font-semibold">{t("contractForm.title")}</h1>
       <p className="mt-1 text-sm text-gray-500">{t("contractForm.subtitle")}</p>
 
-      <form onSubmit={handleSubmit} className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-5 rounded-xl border border-gray-200 bg-white p-6 lg:col-span-2">
+      <form onSubmit={handleSubmit} className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+        <div className="space-y-5 rounded-xl border border-gray-200 bg-white p-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
