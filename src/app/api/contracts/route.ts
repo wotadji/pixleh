@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireStudioSession, AccessError } from "@/lib/access";
 import { contractSchema } from "@/lib/validators";
 import { sendContractSignEmail } from "@/lib/notifications";
+import { isContractTemplateId } from "@/lib/contractTemplates";
 
 export async function GET() {
   try {
@@ -48,6 +49,11 @@ export async function POST(req: Request) {
     // place idem — même workaround (voir schema.prisma).
     if (body.place) {
       await prisma.$executeRaw`UPDATE "Contract" SET "place" = ${body.place} WHERE id = ${contract.id}`;
+    }
+    // template idem — même workaround (voir schema.prisma). On ignore silencieusement une
+    // valeur invalide/absente : le défaut SQL ("classic") s'applique déjà à la création.
+    if (isContractTemplateId(body.template)) {
+      await prisma.$executeRaw`UPDATE "Contract" SET "template" = ${body.template} WHERE id = ${contract.id}`;
     }
 
     // Si le studio a choisi un client, on lui envoie directement le lien de signature par

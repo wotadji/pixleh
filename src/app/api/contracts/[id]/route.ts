@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireStudioSession, AccessError } from "@/lib/access";
 import { contractSchema } from "@/lib/validators";
+import { isContractTemplateId } from "@/lib/contractTemplates";
 
 /**
  * Consultation d'un contrat côté studio (pré-remplissage du formulaire d'édition, voir
@@ -18,15 +19,22 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     });
     if (!contract) throw new AccessError("Contrat introuvable", 404);
 
-    // studioSignatureDataUrl et place n'existent pas encore dans le Prisma Client généré du
-    // sandbox (voir commentaires sur ces champs dans schema.prisma) — lus à part via
+    // studioSignatureDataUrl, place et template n'existent pas encore dans le Prisma Client
+    // généré du sandbox (voir commentaires sur ces champs dans schema.prisma) — lus à part via
     // $queryRaw, même workaround que Gallery.publishedAt.
-    const [row] = await prisma.$queryRaw<{ studioSignatureDataUrl: string | null; place: string | null }[]>`
-      SELECT "studioSignatureDataUrl", "place" FROM "Contract" WHERE id = ${contract.id}
+    const [row] = await prisma.$queryRaw<
+      { studioSignatureDataUrl: string | null; place: string | null; template: string | null }[]
+    >`
+      SELECT "studioSignatureDataUrl", "place", "template" FROM "Contract" WHERE id = ${contract.id}
     `;
 
     return NextResponse.json({
-      contract: { ...contract, studioSignatureDataUrl: row?.studioSignatureDataUrl || null, place: row?.place || null },
+      contract: {
+        ...contract,
+        studioSignatureDataUrl: row?.studioSignatureDataUrl || null,
+        place: row?.place || null,
+        template: row?.template || null,
+      },
     });
   } catch (e) {
     return handleError(e);
@@ -70,6 +78,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
     if (body.place !== undefined) {
       await prisma.$executeRaw`UPDATE "Contract" SET "place" = ${body.place} WHERE id = ${contract.id}`;
+    }
+    if (isContractTemplateId(body.template)) {
+      await prisma.$executeRaw`UPDATE "Contract" SET "template" = ${body.template} WHERE id = ${contract.id}`;
     }
 
     return NextResponse.json({ contract });

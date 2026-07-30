@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { ContractForm, ContractFormValues } from "@/components/studio/ContractForm";
+import { DEFAULT_CONTRACT_TEMPLATE } from "@/lib/contractTemplates";
 
 interface ClientOption {
   id: string;
@@ -17,6 +18,7 @@ export default function NewContractPage() {
   const { t } = useLanguage();
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [studioName, setStudioName] = useState("");
+  const [studioBrandColor, setStudioBrandColor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
 
@@ -24,12 +26,14 @@ export default function NewContractPage() {
     Promise.all([
       fetch("/api/clients").then((r) => r.json()),
       // Sert uniquement à pré-remplir l'onglet "Texte" de SignatureField avec le nom du
-      // studio (modifiable) — même endpoint que la page Réglages.
+      // studio (modifiable) et à colorer l'aperçu des templates de PDF — même endpoint que
+      // la page Réglages.
       fetch("/api/settings").then((r) => r.json()),
     ])
       .then(([clientsData, settingsData]) => {
         setClients(clientsData.clients || []);
         setStudioName(settingsData.studio?.name || "");
+        setStudioBrandColor(settingsData.studio?.brandColor || null);
       })
       .finally(() => setPageLoading(false));
   }, []);
@@ -73,7 +77,15 @@ export default function NewContractPage() {
       <ContractForm
         clients={clients}
         studioName={studioName}
-        initial={{ title: "", clientId: "", bodyHtml: "", studioSignatureDataUrl: null, place: "" }}
+        studioBrandColor={studioBrandColor}
+        initial={{
+          title: "",
+          clientId: "",
+          bodyHtml: "",
+          studioSignatureDataUrl: null,
+          place: "",
+          template: DEFAULT_CONTRACT_TEMPLATE,
+        }}
         submitLabel={t("contractForm.create")}
         submittingLabel={t("common.creating")}
         submitting={loading}

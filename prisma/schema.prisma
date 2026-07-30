@@ -864,6 +864,11 @@ model Contract {
   /// (lu/écrit via $queryRaw/$executeRaw tant qu'Adriel n'a pas relancé `prisma generate &&
   /// prisma db push`).
   archived     Boolean        @default(false)
+  /// Template de mise en page choisi par le studio pour le PDF de ce contrat ("classic" |
+  /// "minimal" | "elegant", voir src/lib/contractTemplates.ts) — demandé par Adriel,
+  /// 31/07/2026. Même limitation de sandbox que les champs ci-dessus (lu/écrit via
+  /// $queryRaw/$executeRaw tant qu'Adriel n'a pas relancé `prisma generate && prisma db push`).
+  template     String         @default("classic")
   createdAt    DateTime       @default(now())
 
   @@index([studioId])

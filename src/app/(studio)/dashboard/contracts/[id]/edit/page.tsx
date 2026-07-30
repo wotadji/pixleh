@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { ContractForm, ContractFormValues } from "@/components/studio/ContractForm";
+import { DEFAULT_CONTRACT_TEMPLATE, isContractTemplateId } from "@/lib/contractTemplates";
 
 interface ClientOption {
   id: string;
@@ -19,6 +20,7 @@ interface ContractDTO {
   client: { id: string } | null;
   studioSignatureDataUrl: string | null;
   place: string | null;
+  template: string | null;
   createdAt: string;
 }
 
@@ -28,6 +30,7 @@ export default function EditContractPage() {
   const { t, locale } = useLanguage();
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [studioName, setStudioName] = useState("");
+  const [studioBrandColor, setStudioBrandColor] = useState<string | null>(null);
   const [contract, setContract] = useState<ContractDTO | null>(null);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
@@ -42,6 +45,7 @@ export default function EditContractPage() {
       .then(([clientsData, settingsData, contractData]) => {
         setClients(clientsData.clients || []);
         setStudioName(settingsData.studio?.name || "");
+        setStudioBrandColor(settingsData.studio?.brandColor || null);
         if (contractData.contract) setContract(contractData.contract);
         else setNotFound(true);
       })
@@ -84,12 +88,14 @@ export default function EditContractPage() {
           <ContractForm
             clients={clients}
             studioName={studioName}
+            studioBrandColor={studioBrandColor}
             initial={{
               title: contract.title,
               clientId: contract.client?.id || "",
               bodyHtml: contract.bodyHtml,
               studioSignatureDataUrl: contract.studioSignatureDataUrl,
               place: contract.place || "",
+              template: isContractTemplateId(contract.template) ? contract.template : DEFAULT_CONTRACT_TEMPLATE,
             }}
             submitLabel={t("contractForm.save")}
             submittingLabel={t("contractForm.saving")}

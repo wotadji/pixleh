@@ -13,12 +13,11 @@ import { Text, View } from "@react-pdf/renderer";
  * de paquet) : un mini-parseur maison suffit, la surface HTML à couvrir étant strictement
  * limitée à ce que produit notre propre éditeur (pas d'entrée HTML tierce arbitraire).
  *
- * Redesign "PDF professionnel" (31/07/2026, demande d'Adriel) : les titres (h1/h2/h3 — ce que
- * produisent les "ARTICLE N" quand le studio choisit Format > Titre dans l'éditeur), les
- * citations et les liens reprennent désormais la couleur de marque du studio (`accentColor`,
- * voir Studio.brandColor) pour un rendu cohérent avec son identité visuelle, au lieu de
- * couleurs neutres fixes. Un interligne par défaut plus aéré (1.45) s'applique aussi tant que
- * le studio n'a pas choisi explicitement un interligne dans l'éditeur.
+ * Templates de contrat sélectionnables (31/07/2026, demande d'Adriel : "donner au studio le
+ * choix du design de template pour ses contrats") : le rendu du corps HTML (titres, citations,
+ * puces, liens...) doit varier selon le template choisi (Classique/Minimal/Élégant — voir
+ * src/lib/contractTemplates.ts et src/lib/pdf.tsx), d'où le passage d'un objet `HtmlPdfTheme`
+ * complet en paramètre au lieu d'une simple couleur d'accent comme précédemment.
  */
 
 interface ElementNode {
@@ -38,6 +37,46 @@ const VOID_TAGS = new Set(["br", "hr", "img"]);
 // PDF) — "div" est inclus car Chrome enveloppe chaque nouvelle ligne dans un <div> par défaut
 // quand aucune commande formatBlock explicite n'a été utilisée.
 const BLOCK_TAGS = new Set(["p", "div", "h1", "h2", "h3", "blockquote", "hr", "ul", "ol"]);
+
+/**
+ * Thème visuel appliqué au rendu du corps HTML d'un contrat — un jeu de valeurs par template
+ * (voir CONTRACT_TEMPLATE_THEMES dans src/lib/pdf.tsx) plutôt qu'une simple couleur d'accent,
+ * pour permettre des habillages réellement distincts (typographie des titres, présence ou non
+ * d'un soulignement, style des puces/citations, couleur des liens...).
+ */
+export interface HtmlPdfTheme {
+  accent: string;
+  headingFontFamily: string;
+  headingColor: string;
+  headingUnderline: boolean;
+  /** Alignement forcé des titres — si absent, reprend l'alignement choisi par le studio dans
+   * l'éditeur (style text-align inline), comme avant l'introduction des templates. */
+  headingAlign?: "left" | "center" | "right" | "justify";
+  bulletColor: string;
+  bulletChar: string;
+  quoteItalic: boolean;
+  quoteColor: string;
+  quoteBorderColor: string;
+  linkColor: string;
+}
+
+function buildTheme(overrides?: Partial<HtmlPdfTheme>): HtmlPdfTheme {
+  const accent = overrides?.accent || "#7c3aed";
+  return {
+    accent,
+    headingFontFamily: "Times-Bold",
+    headingColor: "#111827",
+    headingUnderline: true,
+    headingAlign: undefined,
+    bulletColor: accent,
+    bulletChar: "•",
+    quoteItalic: true,
+    quoteColor: "#4b5563",
+    quoteBorderColor: accent,
+    linkColor: accent,
+    ...overrides,
+  };
+}
 
 function decodeEntities(text: string): string {
   return text
@@ -132,7 +171,12 @@ function inlineStyle(ctx: InlineCtx, extra?: Record<string, unknown>) {
   };
 }
 
-function renderInline(nodes: HtmlNode[], ctx: InlineCtx, keyPrefix: string, accent: string): React.ReactNode[] {
+function renderInline(
+  nodes: HtmlNode[],
+  ctx: InlineCtx,
+  keyPrefix: string,
+  theme: HtmlPdfTheme
+): React.ReactNode[] {
   const out: React.ReactNode[] = [];
   nodes.forEach((node, i) => {
     const key = `${keyPrefix}-i${i}`;
@@ -159,8 +203,11 @@ function renderInline(nodes: HtmlNode[], ctx: InlineCtx, keyPrefix: string, acce
 
     if (tag === "a") {
       out.push(
-        <Text key={key} style={inlineStyle(nextCtx, { color: nextCtx.color || accent, textDecoration: "underline" })}>
-          {renderInline(children, nextCtx, key, accent)}
+        <Text
+          key={key}
+          style={inlineStyle(nextCtx, { color: nextCtx.color || theme.linkColor, textDecoration: "underline" })}
+        >
+          {renderInline(children, nextCtx, key, theme)}
         </Text>
       );
       return;
@@ -168,20 +215,22 @@ function renderInline(nodes: HtmlNode[], ctx: InlineCtx, keyPrefix: string, acce
 
     out.push(
       <Text key={key} style={inlineStyle(nextCtx)}>
-        {renderInline(children, nextCtx, key, accent)}
+        {renderInline(children, nextCtx, key, theme)}
       </Text>
     );
   });
   return out;
 }
 
-function renderBlockElement(node: ElementNode, ctx: BlockCtx, key: string, accent: string): React.ReactNode {
+function renderBlockElement(node: ElementNode, ctx: BlockCtx, key: string, theme: HtmlPdfTheme): React.ReactNode {
   const { tag, attrs, children } = node;
   const style = parseStyleAttr(attrs.style);
   const align = style["text-align"] as "left" | "center" | "right" | "justify" | undefined;
 
   if (tag === "hr") {
-    return <View key={key} style={{ borderBottomWidth: 1, borderColor: accent, opacity: 0.35, marginVertical: 12 }} />;
+    return (
+      <View key={key} style={{ borderBottomWidth: 1, borderColor: theme.accent, opacity: 0.35, marginVertical: 12 }} />
+    );
   }
 
   if (tag === "ul" || tag === "ol") {
@@ -190,11 +239,11 @@ function renderBlockElement(node: ElementNode, ctx: BlockCtx, key: string, accen
       <View key={key} style={{ marginBottom: 8 }}>
         {items.map((li, idx) => (
           <View key={`${key}-li${idx}`} style={{ flexDirection: "row", marginBottom: 4, paddingLeft: 4 }}>
-            <Text style={{ width: 16, lineHeight: ctx.lineHeight, color: tag === "ul" ? accent : undefined }}>
-              {tag === "ol" ? `${idx + 1}.` : "•"}
+            <Text style={{ width: 16, lineHeight: ctx.lineHeight, color: tag === "ul" ? theme.bulletColor : undefined }}>
+              {tag === "ol" ? `${idx + 1}.` : theme.bulletChar}
             </Text>
             <Text style={{ flex: 1, lineHeight: ctx.lineHeight }}>
-              {renderInline(li.children, {}, `${key}-li${idx}`, accent)}
+              {renderInline(li.children, {}, `${key}-li${idx}`, theme)}
             </Text>
           </View>
         ))}
@@ -204,9 +253,19 @@ function renderBlockElement(node: ElementNode, ctx: BlockCtx, key: string, accen
 
   if (tag === "blockquote") {
     return (
-      <View key={key} style={{ marginVertical: 10, paddingLeft: 12, borderLeftWidth: 2.5, borderLeftColor: accent }}>
-        <Text style={{ fontStyle: "italic", color: "#4b5563", lineHeight: ctx.lineHeight, textAlign: align }}>
-          {renderInline(children, {}, key, accent)}
+      <View
+        key={key}
+        style={{ marginVertical: 10, paddingLeft: 12, borderLeftWidth: 2.5, borderLeftColor: theme.quoteBorderColor }}
+      >
+        <Text
+          style={{
+            fontStyle: theme.quoteItalic ? "italic" : "normal",
+            color: theme.quoteColor,
+            lineHeight: ctx.lineHeight,
+            textAlign: align,
+          }}
+        >
+          {renderInline(children, {}, key, theme)}
         </Text>
       </View>
     );
@@ -221,21 +280,22 @@ function renderBlockElement(node: ElementNode, ctx: BlockCtx, key: string, accen
           marginTop: 16,
           marginBottom: 10,
           paddingBottom: 6,
-          borderBottomWidth: 1.5,
-          borderBottomColor: accent,
+          ...(theme.headingUnderline
+            ? { borderBottomWidth: 1.5, borderBottomColor: theme.accent }
+            : {}),
         }}
       >
         <Text
           style={{
-            fontFamily: "Times-Bold",
+            fontFamily: theme.headingFontFamily,
             fontWeight: 700,
             fontSize: size,
-            textAlign: align,
+            textAlign: theme.headingAlign || align,
             letterSpacing: 0.3,
-            color: "#111827",
+            color: theme.headingColor,
           }}
         >
-          {renderInline(children, { bold: true }, key, accent)}
+          {renderInline(children, { bold: true }, key, theme)}
         </Text>
       </View>
     );
@@ -244,12 +304,12 @@ function renderBlockElement(node: ElementNode, ctx: BlockCtx, key: string, accen
   // p / div — paragraphe générique
   return (
     <View key={key} style={{ marginBottom: 8 }}>
-      <Text style={{ lineHeight: ctx.lineHeight, textAlign: align }}>{renderInline(children, {}, key, accent)}</Text>
+      <Text style={{ lineHeight: ctx.lineHeight, textAlign: align }}>{renderInline(children, {}, key, theme)}</Text>
     </View>
   );
 }
 
-function renderBlocks(nodes: HtmlNode[], ctx: BlockCtx, keyPrefix: string, accent: string): React.ReactNode[] {
+function renderBlocks(nodes: HtmlNode[], ctx: BlockCtx, keyPrefix: string, theme: HtmlPdfTheme): React.ReactNode[] {
   const out: React.ReactNode[] = [];
   let pendingInline: HtmlNode[] = [];
   let pendingIndex = 0;
@@ -259,7 +319,7 @@ function renderBlocks(nodes: HtmlNode[], ctx: BlockCtx, keyPrefix: string, accen
     const key = `${keyPrefix}-p${pendingIndex++}`;
     out.push(
       <View key={key} style={{ marginBottom: 8 }}>
-        <Text style={{ lineHeight: ctx.lineHeight }}>{renderInline(pendingInline, {}, key, accent)}</Text>
+        <Text style={{ lineHeight: ctx.lineHeight }}>{renderInline(pendingInline, {}, key, theme)}</Text>
       </View>
     );
     pendingInline = [];
@@ -280,13 +340,13 @@ function renderBlocks(nodes: HtmlNode[], ctx: BlockCtx, keyPrefix: string, accen
       const wrapperStyle = parseStyleAttr(attrs.style);
       const lh = wrapperStyle["line-height"] ? parseFloat(wrapperStyle["line-height"]) : undefined;
       flushPendingInline();
-      out.push(...renderBlocks(children, { ...ctx, lineHeight: lh ?? ctx.lineHeight }, key, accent));
+      out.push(...renderBlocks(children, { ...ctx, lineHeight: lh ?? ctx.lineHeight }, key, theme));
       return;
     }
 
     if (BLOCK_TAGS.has(tag)) {
       flushPendingInline();
-      out.push(renderBlockElement(node, ctx, key, accent));
+      out.push(renderBlockElement(node, ctx, key, theme));
       return;
     }
 
@@ -300,12 +360,14 @@ function renderBlocks(nodes: HtmlNode[], ctx: BlockCtx, keyPrefix: string, accen
 }
 
 /** Point d'entrée : HTML éditeur → tableau d'éléments @react-pdf/renderer (Views/Text), à
- * placer dans un <View>/<Page> parent du document. `accentColor` reprend la couleur de marque
- * du studio (Studio.brandColor) pour les titres/citations/liens/listes à puces — repli sur le
- * violet pixleh par défaut si le studio n'en a pas choisi. Interligne par défaut 1.45 (plus
- * lisible), écrasé par l'interligne explicite choisi dans l'éditeur le cas échéant. */
-export function renderHtmlToPdf(html: string, accentColor = "#7c3aed"): React.ReactNode[] {
+ * placer dans un <View>/<Page> parent du document. `theme` (partiel — les champs omis reprennent
+ * une valeur par défaut dérivée de `theme.accent`) permet d'habiller le rendu différemment selon
+ * le template de contrat choisi par le studio (voir CONTRACT_TEMPLATE_THEMES dans pdf.tsx).
+ * Interligne par défaut 1.45 (plus lisible), écrasé par l'interligne explicite choisi dans
+ * l'éditeur le cas échéant. */
+export function renderHtmlToPdf(html: string, theme?: Partial<HtmlPdfTheme>): React.ReactNode[] {
   if (!html || !html.trim()) return [];
+  const resolved = buildTheme(theme);
   const nodes = parseHtml(html);
-  return renderBlocks(nodes, { lineHeight: 1.45 }, "root", accentColor);
+  return renderBlocks(nodes, { lineHeight: 1.45 }, "root", resolved);
 }
