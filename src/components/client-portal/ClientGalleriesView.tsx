@@ -87,26 +87,31 @@ function StudioTag({ name, logoUrl }: { name: string; logoUrl: string | null }) 
   );
 }
 
-function GalleryActions({ g, className }: { g: GalleryRow; className?: string }) {
+/** `dense` (utilisé en grille, où la carte n'a que ~300px de large pour les 3 actions) réduit
+ * le padding/texte et empêche le retour à la ligne (flex-nowrap) — sans ça "Gérer" retombe
+ * seul sur une 2e ligne dès que la carte est un peu étroite. En liste, plus de place
+ * disponible : padding normal, retour à la ligne autorisé si besoin. */
+function GalleryActions({ g, className, dense }: { g: GalleryRow; className?: string; dense?: boolean }) {
   const { t } = useLanguage();
+  const pad = dense ? "px-2 py-1 text-[11px]" : "px-3 py-1.5 text-xs";
   return (
-    <div className={`flex shrink-0 flex-wrap items-center gap-2 ${className || ""}`}>
+    <div className={`flex shrink-0 items-center gap-1.5 ${dense ? "flex-nowrap" : "flex-wrap gap-2"} ${className || ""}`}>
       {g.status !== "DRAFT" && (
         <>
           <a
             href={`/client/galleries/${g.id}/view`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center justify-center rounded-lg border-[1.5px] border-brand-400 px-3 py-1.5 text-xs font-medium text-brand-700 transition-colors hover:bg-brand-50"
+            className={`inline-flex shrink items-center justify-center whitespace-nowrap rounded-lg border-[1.5px] border-brand-400 font-medium text-brand-700 transition-colors hover:bg-brand-50 ${pad}`}
           >
             {t("client.galleries.viewGallery")}
           </a>
-          <ShareGalleryButton gallerySlug={g.slug} />
+          <ShareGalleryButton gallerySlug={g.slug} dense={dense} />
         </>
       )}
       <Link
         href={`/client/galleries/${g.id}`}
-        className="inline-flex items-center justify-center rounded-lg border-[1.5px] border-transparent bg-brand-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand-700"
+        className={`inline-flex shrink items-center justify-center whitespace-nowrap rounded-lg border-[1.5px] border-transparent bg-brand-600 font-medium text-white transition-colors hover:bg-brand-700 ${pad}`}
       >
         {t("client.galleries.manage")}
       </Link>
@@ -172,7 +177,7 @@ export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("any");
   const [downloadsFilter, setDownloadsFilter] = useState<DownloadsFilter>("any");
   const [studioFilter, setStudioFilter] = useState<string>("any");
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [page, setPage] = useState(1);
 
   // Se souvient du dernier mode d'affichage choisi, comme côté studio.
@@ -217,20 +222,27 @@ export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
 
   return (
     <div className="px-6 py-10 sm:px-10">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-serif text-2xl font-semibold text-gray-900">{t("client.galleries.title")}</h1>
+      <h1 className="font-serif text-2xl font-semibold text-gray-900">{t("client.galleries.title")}</h1>
 
-        {allGalleries.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
+      {/* Chaque contrôle est enveloppé dans un div de largeur fixe (shrink-0) : la classe
+          utilitaire .input applique w-full (voir globals.css), qui écraserait sinon toute
+          largeur passée directement sur l'<input>/<select> (même en flex-nowrap, un w-full
+          direct force chaque champ à remplir toute la ligne). overflow-x-auto permet un
+          défilement horizontal plutôt qu'un retour à la ligne si l'espace manque (mobile). */}
+      {allGalleries.length > 0 && (
+        <div className="mt-4 flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
+          <div className="w-44 shrink-0">
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t("galleries.searchPlaceholder")}
-              className="input w-44 text-sm"
+              className="input text-sm"
             />
+          </div>
+          <div className="w-36 shrink-0">
             <select
-              className="input w-auto text-sm"
+              className="input text-sm"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
             >
@@ -239,8 +251,10 @@ export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
               <option value="DRAFT">{STATUS_LABELS.DRAFT}</option>
               <option value="ARCHIVED">{STATUS_LABELS.ARCHIVED}</option>
             </select>
+          </div>
+          <div className="w-40 shrink-0">
             <select
-              className="input w-auto text-sm"
+              className="input text-sm"
               value={downloadsFilter}
               onChange={(e) => setDownloadsFilter(e.target.value as DownloadsFilter)}
             >
@@ -248,9 +262,11 @@ export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
               <option value="limited">{t("client.galleries.downloadsLimited")}</option>
               <option value="unlimited">{t("client.galleries.downloadsUnlimited")}</option>
             </select>
-            {studioOptions.length > 1 && (
+          </div>
+          {studioOptions.length > 1 && (
+            <div className="w-40 shrink-0">
               <select
-                className="input w-auto text-sm"
+                className="input text-sm"
                 value={studioFilter}
                 onChange={(e) => setStudioFilter(e.target.value)}
               >
@@ -261,37 +277,37 @@ export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
                   </option>
                 ))}
               </select>
-            )}
-            <div className="flex items-center gap-1 rounded-lg border border-gray-200 p-0.5">
-              <button
-                type="button"
-                onClick={() => changeView("grid")}
-                title={t("galleries.viewGrid")}
-                className={`rounded-md p-1.5 ${viewMode === "grid" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
-              >
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-                  <rect x="2" y="2" width="7" height="7" rx="1" fill="currentColor" />
-                  <rect x="11" y="2" width="7" height="7" rx="1" fill="currentColor" />
-                  <rect x="2" y="11" width="7" height="7" rx="1" fill="currentColor" />
-                  <rect x="11" y="11" width="7" height="7" rx="1" fill="currentColor" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => changeView("list")}
-                title={t("galleries.viewList")}
-                className={`rounded-md p-1.5 ${viewMode === "list" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
-              >
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-                  <rect x="2" y="3" width="16" height="3" rx="1" fill="currentColor" />
-                  <rect x="2" y="8.5" width="16" height="3" rx="1" fill="currentColor" />
-                  <rect x="2" y="14" width="16" height="3" rx="1" fill="currentColor" />
-                </svg>
-              </button>
             </div>
+          )}
+          <div className="flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 p-0.5">
+            <button
+              type="button"
+              onClick={() => changeView("grid")}
+              title={t("galleries.viewGrid")}
+              className={`rounded-md p-1.5 ${viewMode === "grid" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+            >
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                <rect x="2" y="2" width="7" height="7" rx="1" fill="currentColor" />
+                <rect x="11" y="2" width="7" height="7" rx="1" fill="currentColor" />
+                <rect x="2" y="11" width="7" height="7" rx="1" fill="currentColor" />
+                <rect x="11" y="11" width="7" height="7" rx="1" fill="currentColor" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => changeView("list")}
+              title={t("galleries.viewList")}
+              className={`rounded-md p-1.5 ${viewMode === "list" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+            >
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                <rect x="2" y="3" width="16" height="3" rx="1" fill="currentColor" />
+                <rect x="2" y="8.5" width="16" height="3" rx="1" fill="currentColor" />
+                <rect x="2" y="14" width="16" height="3" rx="1" fill="currentColor" />
+              </svg>
+            </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {filtersActive && (
         <button type="button" onClick={resetFilters} className="mt-3 text-sm text-gray-500 underline-offset-2 hover:underline">
@@ -399,7 +415,7 @@ export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
                     </span>
                   )}
                 </div>
-                <GalleryActions g={g} className="mt-3" />
+                <GalleryActions g={g} className="mt-3" dense />
               </div>
             </div>
           ))}
