@@ -351,6 +351,33 @@ export async function sendGuestAccessApprovedEmail(params: {
   });
 }
 
+/** Prévient le studio quand un client signe un contrat (voir POST /api/contracts/[id]/sign) —
+ * même patron que sendStudioOrderPaidEmail/sendStudioInvoicePaidEmail : notification interne,
+ * pas de lien vers la page publique de signature (le studio consulte depuis son dashboard). */
+export async function sendStudioContractSignedEmail(params: {
+  studioId: string;
+  contractId: string;
+  contractTitle: string;
+  signedByName: string;
+}) {
+  const to = await resolveStudioNotifyEmail(params.studioId);
+  if (!to) return;
+
+  const html = wrapEmail(`
+    <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Contrat signé</h2>
+    <p><strong>${escapeHtml(params.signedByName)}</strong> vient de signer le contrat
+    « ${escapeHtml(params.contractTitle)} ».</p>
+    <a href="${appUrl("/dashboard/contracts")}" style="${BUTTON_STYLE}">Voir le contrat</a>
+  `);
+
+  await sendMail({
+    to,
+    subject: `Contrat signé — ${params.contractTitle}`,
+    text: `${params.signedByName} vient de signer le contrat « ${params.contractTitle} ». Voir : ${appUrl("/dashboard/contracts")}`,
+    html,
+  });
+}
+
 export async function sendStudioOrderPaidEmail(params: {
   studioId: string;
   customerName: string;

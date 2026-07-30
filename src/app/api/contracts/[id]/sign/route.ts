@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { renderContractPdf } from "@/lib/pdf";
 import { getStorage } from "@/lib/storage";
+import { sendStudioContractSignedEmail } from "@/lib/notifications";
 
 export const runtime = "nodejs";
 
@@ -64,6 +65,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       pdfKey,
     },
   });
+
+  // Notification interne au studio — fire-and-forget (comme sendStudioOrderPaidEmail/
+  // sendStudioInvoicePaidEmail) : un échec d'envoi ne doit pas faire échouer la signature,
+  // qui est déjà actée en base et dans le PDF à ce stade.
+  sendStudioContractSignedEmail({
+    studioId: contract.studioId,
+    contractId: contract.id,
+    contractTitle: contract.title,
+    signedByName,
+  }).catch((e) => console.error("Échec de l'email de notification studio (contrat signé) :", e));
 
   return NextResponse.json({ contract: updated });
 }

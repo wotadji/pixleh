@@ -67,6 +67,20 @@ export function RichTextEditor({
     onChange(ref.current.innerHTML);
   }
 
+  // execCommand n'a pas de commande "taille en px" — seulement 7 tailles numérotées (1 à 7)
+  // qui produisent des balises <font size="N">. On passe donc par la taille 7 (la plus
+  // grande, pour la retrouver facilement) puis on remplace ces balises générées par un style
+  // inline en pixels, sur la sélection courante uniquement.
+  function setFontSize(px: string) {
+    ref.current?.focus();
+    document.execCommand("fontSize", false, "7");
+    ref.current?.querySelectorAll('font[size="7"]').forEach((el) => {
+      el.removeAttribute("size");
+      (el as HTMLElement).style.fontSize = px;
+    });
+    onChange(ref.current?.innerHTML || "");
+  }
+
   function toggleSourceMode() {
     if (!sourceMode) {
       setSourceText(ref.current?.innerHTML || "");
@@ -125,6 +139,27 @@ export function RichTextEditor({
           <option value="<h1>">Titre 1</option>
           <option value="<h2>">Titre 2</option>
           <option value="<h3>">Titre 3</option>
+        </select>
+        <select
+          title="Taille du texte"
+          defaultValue=""
+          disabled={sourceMode}
+          onMouseDown={(e) => e.preventDefault()}
+          onChange={(e) => {
+            if (e.target.value) setFontSize(e.target.value);
+            e.target.value = "";
+          }}
+          className={`${selectClass} disabled:opacity-30`}
+        >
+          <option value="" disabled>
+            Taille
+          </option>
+          <option value="10px">Très petit</option>
+          <option value="12px">Petit</option>
+          <option value="14px">Normal</option>
+          <option value="16px">Moyen</option>
+          <option value="20px">Grand</option>
+          <option value="28px">Très grand</option>
         </select>
         {sep}
         <button
