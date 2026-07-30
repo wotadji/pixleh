@@ -20,6 +20,13 @@ export const dynamic = "force-dynamic";
  * /dashboard/galleries côté studio — pour afficher une vignette au lieu d'une simple ligne de
  * texte. Le fichier de couverture est servi sans authentification (voir isPublicCoverPreview
  * dans /api/files/[...path]/route.ts), donc affichable ici sans session galerie.
+ *
+ * Toujours le 30/07/2026 : ClientGalleriesView aplatit lui-même ces groupes par studio pour
+ * proposer recherche/filtres/pagination sur l'ensemble des galeries du client (voir ce fichier
+ * pour le détail) — `downloadLimit` est donc remonté ici pour permettre le filtre "Limité /
+ * Illimité" (le nombre réellement consommé n'est PAS affiché : chaque clic sur "Voir galerie"
+ * émet un nouveau clientRef, voir /client/galleries/[id]/view/route.ts, donc un décompte par
+ * client stable façon Studio n'est pas fiable ici).
  */
 export default async function ClientPortalPage() {
   const session = getClientPortalSession();
@@ -38,6 +45,7 @@ export default async function ClientPortalPage() {
           slug: true,
           eventDate: true,
           coverPhotoId: true,
+          downloadLimit: true,
           guests: { select: { status: true } },
           photos: { orderBy: { position: "asc" }, take: 1, select: { id: true, updatedAt: true } },
         },
@@ -70,6 +78,7 @@ export default async function ClientPortalPage() {
         slug: g.slug,
         coverPhotoId: cover?.id || null,
         coverUpdatedAt: cover?.updatedAt.toISOString() || null,
+        downloadLimit: g.downloadLimit,
         approvedCount: g.guests.filter((x) => x.status === "APPROVED").length,
         pendingCount: g.guests.filter((x) => x.status === "PENDING").length,
       };
