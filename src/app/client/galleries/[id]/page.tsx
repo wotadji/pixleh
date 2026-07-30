@@ -3,14 +3,9 @@ import Link from "next/link";
 import { getClientPortalSession } from "@/lib/clientSession";
 import { prisma } from "@/lib/prisma";
 import { SetVisibilityManager } from "@/components/client-portal/SetVisibilityManager";
+import { GuestListManager } from "@/components/client-portal/GuestListManager";
 
 export const dynamic = "force-dynamic";
-
-const STATUS_LABELS: Record<string, string> = {
-  PENDING: "En attente",
-  APPROVED: "Accès accordé",
-  REJECTED: "Refusé",
-};
 
 export default async function ClientGalleryPage({ params }: { params: { id: string } }) {
   const session = getClientPortalSession();
@@ -67,38 +62,20 @@ export default async function ClientGalleryPage({ params }: { params: { id: stri
 
       <section className="mt-8">
         <h2 className="text-sm font-semibold text-gray-900">Invités</h2>
-        {gallery.guests.length === 0 ? (
-          <p className="mt-2 text-sm text-gray-500">Aucun invité pour l&apos;instant.</p>
-        ) : (
-          <ul className="mt-2 divide-y divide-gray-100 rounded-lg border border-gray-100">
-            {gallery.guests.map((g) => (
-              <li key={g.id} className="flex items-center justify-between px-4 py-3 text-sm">
-                <span>{g.email}</span>
-                <span className="flex items-center gap-2">
-                  <span
-                    className={
-                      g.status === "APPROVED"
-                        ? "text-green-700"
-                        : g.status === "REJECTED"
-                          ? "text-red-600"
-                          : "text-amber-700"
-                    }
-                  >
-                    {STATUS_LABELS[g.status]}
-                  </span>
-                  {g.status === "PENDING" && g.approvalToken && (
-                    <Link
-                      href={`/approve-guest/${g.approvalToken}`}
-                      className="text-xs text-purple-700 underline"
-                    >
-                      Traiter
-                    </Link>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <p className="mt-1 text-xs text-gray-500">
+          Recherchez un invité et activez ou désactivez son accès à tout moment.
+        </p>
+        <div className="mt-3">
+          <GuestListManager
+            galleryId={gallery.id}
+            initialGuests={gallery.guests.map((g) => ({
+              id: g.id,
+              email: g.email,
+              status: g.status,
+              approvalToken: g.approvalToken,
+            }))}
+          />
+        </div>
       </section>
     </div>
   );
