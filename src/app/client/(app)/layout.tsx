@@ -26,12 +26,15 @@ export default async function ClientPortalAppLayout({ children }: { children: Re
   });
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-5xl">
-      <ClientPortalSidebar email={session.email} galleryCount={galleryCount} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex-1">{children}</div>
-        <ClientPortalFooter />
+    <div className="flex min-h-screen flex-col">
+      {/* Le pied de page doit courir sur toute la largeur de l'écran (demande d'Adriel du
+          30/07/2026), pas seulement sous la colonne de contenu : il vit donc en dehors du
+          conteneur mx-auto max-w-5xl (sidebar + contenu) plutôt que dedans, comme avant. */}
+      <div className="mx-auto flex w-full max-w-5xl flex-1">
+        <ClientPortalSidebar email={session.email} galleryCount={galleryCount} />
+        <div className="min-w-0 flex-1">{children}</div>
       </div>
+      <ClientPortalFooter />
     </div>
   );
 }

@@ -151,10 +151,11 @@ function formatDate(iso: string, locale: string): string {
   return new Date(iso).toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" });
 }
 
-/** null si la galerie n'a jamais été publiée (toujours en DRAFT) — voir Gallery.publishedAt. */
-function publishedLabel(publishedAt: string | null, locale: string, t: (k: string) => string): string | null {
+/** Date seule (sans libellé "Publiée le", demande d'Adriel du 30/07/2026) — null si la galerie
+ * n'a jamais été publiée (toujours en DRAFT) — voir Gallery.publishedAt. */
+function publishedLabel(publishedAt: string | null, locale: string): string | null {
   if (!publishedAt) return null;
-  return t("galleries.publishedOn").replace("{date}", formatDate(publishedAt, locale));
+  return formatDate(publishedAt, locale);
 }
 
 function pillClass(active: boolean): string {
@@ -881,8 +882,8 @@ export function GalleriesListView({
                     {g.photoCount} {t("galleries.photoCount")} · {dateLabel}
                   </p>
                   {g.publishedAt && (
-                    <p className="mt-0.5 truncate text-[11px] text-gray-400">
-                      {publishedLabel(g.publishedAt, locale, t)}
+                    <p className="mt-0.5 truncate text-[9px] text-gray-400">
+                      {publishedLabel(g.publishedAt, locale)}
                     </p>
                   )}
                 </div>
@@ -919,8 +920,8 @@ export function GalleriesListView({
                       {statusLabel(g.status, t)} · {g.photoCount} {t("galleries.photoCount")} · {dateLabel}
                     </p>
                     {g.publishedAt && (
-                      <p className="mt-0.5 truncate text-xs text-gray-400">
-                        {publishedLabel(g.publishedAt, locale, t)}
+                      <p className="mt-0.5 truncate text-[9px] text-gray-400">
+                        {publishedLabel(g.publishedAt, locale)}
                       </p>
                     )}
                   </div>

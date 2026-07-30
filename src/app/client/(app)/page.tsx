@@ -32,6 +32,13 @@ export const dynamic = "force-dynamic";
  * le Prisma Client généré du sandbox (voir le commentaire sur Gallery.publishedAt dans
  * schema.prisma) : il n'existe donc pas dans le `select` typé ci-dessous et est récupéré à part
  * via $queryRaw, comme le fait déjà /api/client-portal/account pour ClientAccount.name.
+ *
+ * Repéré par Adriel le 30/07/2026 : `publishedAt` ne se stamp que sur les FUTURES transitions
+ * vers PUBLISHED (voir PATCH /api/galleries/[id]) — les galeries déjà publiées avant l'ajout de
+ * ce champ n'ont donc aucune date et n'affichaient rien. Repli sur la date d'upload la plus
+ * récente (Photo.createdAt, déjà utilisée par le graphique d'activité d'upload de la Vue
+ * d'ensemble studio) comme meilleure approximation disponible tant que ces galeries n'ont pas
+ * été republiées ; `null` uniquement si la galerie n'a ni date de publication ni aucune photo.
  */
 export default async function ClientPortalPage() {
   const session = getClientPortalSession();
@@ -79,6 +86,14 @@ export default async function ClientPortalPage() {
     : [];
   const publishedAtById = new Map(publishedRows.map((r) => [r.id, r.publishedAt]));
 
+  // Repli "date d'upload la plus récente" (voir la note en tête de fichier) — champ Prisma
+  // ordinaire (Photo.createdAt existe depuis le début), donc requête typée normale, pas de
+  // $queryRaw nécessaire ici.
+  const latestUploads = galleryIds.length
+    ? await prisma.photo.groupBy({ by: ["galleryId"], where: { galleryId: { in: galleryIds } }, _max: { createdAt: true } })
+    : [];
+  const latestUploadById = new Map(latestUploads.map((r) => [r.galleryId, r._max.createdAt]));
+
   const rows = clientRows.map((row) => ({
     id: row.id,
     studioId: row.studio.id,
@@ -94,7 +109,12 @@ export default async function ClientPortalPage() {
         coverPhotoId: cover?.id || null,
         coverUpdatedAt: cover?.updatedAt.toISOString() || null,
         downloadLimit: g.downloadLimit,
-        publishedAt: publishedAtById.get(g.id)?.toISOString() || null,
+        // Repli sur la date d'upload uniquement si la galerie n'est plus en DRAFT (voir la
+        // note en tête de fichier) : côté client, `g.status !== "DRAFT"` conditionne déjà
+        // l'affichage des boutons Voir/Partager (ClientGalleriesView), donc cohérent ici aussi.
+        publishedAt:
+          (publishedAtById.get(g.id) || (g.status !== "DRAFT" ? latestUploadById.get(g.id) : null) || null)?.toISOString() ||
+          null,
         approvedCount: g.guests.filter((x) => x.status === "APPROVED").length,
         pendingCount: g.guests.filter((x) => x.status === "PENDING").length,
       };

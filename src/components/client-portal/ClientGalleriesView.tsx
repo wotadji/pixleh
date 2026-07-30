@@ -74,14 +74,12 @@ function GalleryCover({ g, studioId, className }: { g: GalleryRow; studioId: str
   );
 }
 
-/** Formate Gallery.publishedAt selon la langue courante — rien si la galerie n'a jamais été
- * publiée (toujours en DRAFT). */
-function PublishedDate({ publishedAt, locale, t }: { publishedAt: string | null; locale: string; t: (k: string) => string }) {
+/** Date formatée seule (sans libellé "Publiée le", demande d'Adriel du 30/07/2026) — rien si
+ * la galerie n'a jamais été publiée (toujours en DRAFT). */
+function PublishedDate({ publishedAt, locale }: { publishedAt: string | null; locale: string }) {
   if (!publishedAt) return null;
   const formatted = new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(publishedAt));
-  return (
-    <span className="shrink-0 text-xs text-gray-400">{t("client.galleries.publishedOn").replace("{date}", formatted)}</span>
-  );
+  return <span className="shrink-0 text-[9px] text-gray-400">{formatted}</span>;
 }
 
 function StudioTag({ name, logoUrl }: { name: string; logoUrl: string | null }) {
@@ -385,7 +383,7 @@ export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
                         {t("client.galleries.downloadLimitBadge").replace("{count}", String(g.downloadLimit))}
                       </span>
                     )}
-                    <PublishedDate publishedAt={g.publishedAt} locale={locale} t={t} />
+                    <PublishedDate publishedAt={g.publishedAt} locale={locale} />
                   </div>
                 </div>
               </div>
@@ -434,7 +432,7 @@ export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
                   )}
                 </div>
                 <div className="mt-1">
-                  <PublishedDate publishedAt={g.publishedAt} locale={locale} t={t} />
+                  <PublishedDate publishedAt={g.publishedAt} locale={locale} />
                 </div>
                 <GalleryActions g={g} className="mt-2" dense />
               </div>

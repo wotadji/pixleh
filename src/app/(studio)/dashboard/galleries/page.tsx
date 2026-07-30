@@ -38,13 +38,24 @@ export default async function GalleriesListPage() {
   // `publishedAt` (30/07/2026, demande d'Adriel) est trop récent pour le Prisma Client généré
   // du sandbox (voir le commentaire sur Gallery.publishedAt dans schema.prisma) : récupéré à
   // part via $queryRaw, comme côté espace Client (voir client/(app)/page.tsx).
+  //
+  // Repli sur la date d'upload la plus récente si `publishedAt` est vide (même note que côté
+  // espace Client) : ce champ ne se stamp que sur les FUTURES transitions vers PUBLISHED, donc
+  // toutes les galeries publiées avant son ajout n'ont aucune date tant qu'elles ne sont pas
+  // republiées.
   const galleryIds = galleries.map((g) => g.id);
-  const publishedRows = galleryIds.length
-    ? await prisma.$queryRaw<{ id: string; publishedAt: Date | null }[]>`
-        SELECT "id", "publishedAt" FROM "Gallery" WHERE "id" = ANY(${galleryIds})
-      `
-    : [];
+  const [publishedRows, latestUploads] = await Promise.all([
+    galleryIds.length
+      ? prisma.$queryRaw<{ id: string; publishedAt: Date | null }[]>`
+          SELECT "id", "publishedAt" FROM "Gallery" WHERE "id" = ANY(${galleryIds})
+        `
+      : Promise.resolve([]),
+    galleryIds.length
+      ? prisma.photo.groupBy({ by: ["galleryId"], where: { galleryId: { in: galleryIds } }, _max: { createdAt: true } })
+      : Promise.resolve([]),
+  ]);
   const publishedAtById = new Map(publishedRows.map((r) => [r.id, r.publishedAt]));
+  const latestUploadById = new Map(latestUploads.map((r) => [r.galleryId, r._max.createdAt]));
 
   return (
     <GalleriesListView
@@ -65,7 +76,12 @@ export default async function GalleriesListPage() {
           featuredHome: g.featuredHome,
           coverPhotoId: cover?.id || null,
           coverUpdatedAt: cover?.updatedAt.toISOString() || null,
-          publishedAt: publishedAtById.get(g.id)?.toISOString() || null,
+          // Le repli sur la date d'upload ne s'applique qu'aux galeries PUBLISHED/ARCHIVED
+          // (jamais DRAFT : une galerie encore en brouillon peut très bien avoir des photos
+          // déjà envoyées sans être publiée, afficher une date de publication serait trompeur).
+          publishedAt:
+            (publishedAtById.get(g.id) || (g.status !== "DRAFT" ? latestUploadById.get(g.id) : null) || null)?.toISOString() ||
+            null,
         };
       })}
     />
