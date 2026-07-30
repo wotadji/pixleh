@@ -78,6 +78,10 @@ interface CollectionDTO {
   id: string;
   title: string;
   visibility: SetVisibility[];
+  /** Set "Portfolio" auto-créé à la création de la galerie (voir POST /api/galleries) — le
+   * seul dont la visibilité PORTFOLIO se pilote via un interrupteur dédié dans le panneau
+   * Sets plutôt que le modal de renommage (voir togglePortfolioVisibility). */
+  isPortfolioDefault: boolean;
 }
 
 interface ClientOption {
@@ -190,6 +194,9 @@ export function GalleryManager({
   const [deleteConfirm, setDeleteConfirm] = useState<{ collectionId: string; title: string } | null>(
     null
   );
+  // Bascule rapide de la visibilité du set "Portfolio" (isPortfolioDefault), sans passer par
+  // le modal — voir togglePortfolioVisibility. `null` = aucun toggle en cours.
+  const [portfolioToggling, setPortfolioToggling] = useState<string | null>(null);
   // Upload de photos : permet d'interrompre en cours de route (bouton "Arrêter" dans l'overlay
   // de progression, voir uploadFiles/stopUpload) — `AbortController` plutôt qu'un simple
   // booléen pour couper aussi le batch en cours d'envoi (`fetch`), pas seulement empêcher le
@@ -509,6 +516,26 @@ export function GalleryManager({
       if (has && m.visibility.length === 1) return m;
       return { ...m, visibility: has ? m.visibility.filter((x) => x !== v) : [...m.visibility, v] };
     });
+  }
+
+  /** Active/désactive PORTFOLIO sur le set dédié (isPortfolioDefault), en ne touchant qu'à ce
+   * seul drapeau — les autres (CLIENT/GUEST) éventuellement cochés sur ce set restent
+   * inchangés. Demandé par Adriel le 30/07/2026 : un interrupteur direct dans le panneau
+   * Sets, plutôt que d'ouvrir le modal de renommage pour cocher/décocher "Portfolio" parmi
+   * 3 options sans rapport évident pour ce set précis. */
+  async function togglePortfolioVisibility(c: CollectionDTO) {
+    const has = c.visibility.includes("PORTFOLIO");
+    const nextVisibility = has
+      ? c.visibility.filter((v) => v !== "PORTFOLIO")
+      : [...c.visibility, "PORTFOLIO"];
+    setPortfolioToggling(c.id);
+    await fetch(`/api/galleries/${gallery.id}/collections/${c.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ visibility: nextVisibility }),
+    });
+    setPortfolioToggling(null);
+    router.refresh();
   }
 
   async function submitSetModal(e: React.FormEvent) {
@@ -1049,7 +1076,7 @@ export function GalleryManager({
                               I
                             </span>
                           )}
-                          {c.visibility?.includes("PORTFOLIO") && (
+                          {!c.isPortfolioDefault && c.visibility?.includes("PORTFOLIO") && (
                             <span
                               title={t("gm.setVisibilityPortfolio")}
                               className="rounded bg-gray-200 px-1 text-[10px] font-semibold text-gray-500"
@@ -1061,6 +1088,35 @@ export function GalleryManager({
                       </span>
                       <span className="text-xs text-gray-400">{count}</span>
                     </button>
+                    {/* Set "Portfolio" auto-créé : interrupteur direct (au lieu du badge "P" +
+                        case à cocher dans le modal) pour activer/désactiver sa visibilité sur
+                        le profil public sans quitter le panneau — demandé par Adriel le
+                        30/07/2026. Toujours visible (pas group-hover) et bouton "supprimer"
+                        masqué pour ce set, afin d'éviter de retirer par erreur le seul set
+                        que /api/galleries et le portfolio public s'attendent à trouver. */}
+                    {c.isPortfolioDefault && (
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={c.visibility?.includes("PORTFOLIO") || false}
+                        disabled={portfolioToggling === c.id}
+                        onClick={() => togglePortfolioVisibility(c)}
+                        title={
+                          c.visibility?.includes("PORTFOLIO")
+                            ? t("gm.deactivatePortfolio")
+                            : t("gm.activatePortfolio")
+                        }
+                        className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:opacity-50 ${
+                          c.visibility?.includes("PORTFOLIO") ? "bg-green-600" : "bg-gray-300"
+                        }`}
+                      >
+                        <span
+                          className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                            c.visibility?.includes("PORTFOLIO") ? "translate-x-4" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                    )}
                     <button
                       onClick={() => openRenameSetModal(c)}
                       className="hidden px-1 text-xs text-gray-400 hover:text-brand-600 group-hover:block"
@@ -1068,13 +1124,15 @@ export function GalleryManager({
                     >
                       ✎
                     </button>
-                    <button
-                      onClick={() => setDeleteConfirm({ collectionId: c.id, title: c.title })}
-                      className="hidden px-1 text-xs text-gray-400 hover:text-red-500 group-hover:block"
-                      title={t("gm.deleteSetTitle")}
-                    >
-                      ✕
-                    </button>
+                    {!c.isPortfolioDefault && (
+                      <button
+                        onClick={() => setDeleteConfirm({ collectionId: c.id, title: c.title })}
+                        className="hidden px-1 text-xs text-gray-400 hover:text-red-500 group-hover:block"
+                        title={t("gm.deleteSetTitle")}
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
                 );
               })}

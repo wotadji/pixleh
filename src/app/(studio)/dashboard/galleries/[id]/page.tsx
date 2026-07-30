@@ -60,7 +60,12 @@ export default async function GalleryDetailPage({ params }: { params: { id: stri
           createdAt: p.createdAt.toISOString(),
           sizeBytes: p.sizeBytes,
         })),
-        collections: gallery.collections.map((c) => ({ id: c.id, title: c.title, visibility: c.visibility })),
+        collections: gallery.collections.map((c) => ({
+          id: c.id,
+          title: c.title,
+          visibility: c.visibility,
+          isPortfolioDefault: c.isPortfolioDefault,
+        })),
       }}
     />
   );
