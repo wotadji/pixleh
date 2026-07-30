@@ -43,6 +43,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     signedAt,
     signatureDataUrl,
     studioSignatureDataUrl: row?.studioSignatureDataUrl || null,
+    studioLogoUrl: contract.studio.logoUrl || null,
+    brandColor: contract.studio.brandColor || null,
     studioAddress: contract.studio.settings?.address || null,
     studioContactEmail: contract.studio.settings?.contactEmail || null,
     studioContactPhone: contract.studio.settings?.contactPhone || null,
