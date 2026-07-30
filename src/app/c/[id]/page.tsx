@@ -84,11 +84,32 @@ export default async function ContractSignPage({ params }: { params: { id: strin
 
           {contract.status === "SIGNED" ? (
             <div className="mt-6 rounded-xl border border-green-100 bg-green-50 p-5">
-              <p className="text-sm font-medium text-green-800">Contrat signé</p>
-              <p className="mt-1 text-sm text-green-700">
-                Par <strong>{contract.signedByName}</strong> le{" "}
-                {contract.signedAt?.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}.
-              </p>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-green-800">Contrat signé</p>
+                  <p className="mt-1 text-sm text-green-700">
+                    Par <strong>{contract.signedByName}</strong> le{" "}
+                    {contract.signedAt?.toLocaleDateString("fr-FR", {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                    .
+                  </p>
+                </div>
+                {contract.pdfKey && (
+                  <a
+                    href={`/api/contracts/${contract.id}/pdf`}
+                    className="flex shrink-0 items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-green-800 shadow-sm hover:bg-green-100"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M4 19h16" strokeLinecap="round" />
+                    </svg>
+                    Télécharger le PDF
+                  </a>
+                )}
+              </div>
               {contract.signatureDataUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={contract.signatureDataUrl} alt={`Signature de ${contract.signedByName}`} className="mt-3 h-16" />

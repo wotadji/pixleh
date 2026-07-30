@@ -162,6 +162,15 @@ export default function ContractsPage() {
                   {t("contracts.edit")}
                 </Link>
               )}
+              {c.status === "SIGNED" && (
+                <a
+                  href={`/api/contracts/${c.id}/pdf`}
+                  className="flex items-center gap-1 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                >
+                  <IconDownload />
+                  {t("contracts.download")}
+                </a>
+              )}
               <Link
                 href={`/c/${c.id}`}
                 target="_blank"
@@ -196,6 +205,15 @@ export default function ContractsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function IconDownload() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 19h16" strokeLinecap="round" />
+    </svg>
   );
 }
 
