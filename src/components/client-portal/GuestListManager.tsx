@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useLanguage } from "@/lib/i18n/LanguageProvider";
 
 type GuestStatus = "PENDING" | "APPROVED" | "REJECTED";
 
@@ -11,12 +12,6 @@ interface GuestRow {
   status: GuestStatus;
   approvalToken: string | null;
 }
-
-const STATUS_LABELS: Record<GuestStatus, string> = {
-  PENDING: "En attente",
-  APPROVED: "Accès accordé",
-  REJECTED: "Accès désactivé",
-};
 
 /**
  * Liste des invités d'une galerie côté espace Client : recherche par email + bascule
@@ -32,10 +27,17 @@ export function GuestListManager({
   galleryId: string;
   initialGuests: GuestRow[];
 }) {
+  const { t } = useLanguage();
   const [guests, setGuests] = useState(initialGuests);
   const [query, setQuery] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const STATUS_LABELS: Record<GuestStatus, string> = {
+    PENDING: t("client.guests.statusPending"),
+    APPROVED: t("client.guests.statusApproved"),
+    REJECTED: t("client.guests.statusRejected"),
+  };
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -55,7 +57,7 @@ export function GuestListManager({
     setSavingId(null);
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      setError(data?.error || "Une erreur est survenue");
+      setError(data?.error || t("client.guests.error"));
       return;
     }
     setGuests((prev) => prev.map((g) => (g.id === guest.id ? { ...g, status: nextStatus } : g)));
@@ -67,16 +69,16 @@ export function GuestListManager({
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Rechercher un invité par email…"
+        placeholder={t("client.guests.searchPlaceholder")}
         className="input w-full text-sm"
       />
 
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
 
       {guests.length === 0 ? (
-        <p className="mt-3 text-sm text-gray-500">Aucun invité pour l&apos;instant.</p>
+        <p className="mt-3 text-sm text-gray-500">{t("client.guests.emptyAll")}</p>
       ) : filtered.length === 0 ? (
-        <p className="mt-3 text-sm text-gray-500">Aucun invité ne correspond à cette recherche.</p>
+        <p className="mt-3 text-sm text-gray-500">{t("client.guests.emptySearch")}</p>
       ) : (
         <ul className="mt-3 divide-y divide-gray-100 rounded-lg border border-gray-100">
           {filtered.map((g) => (
@@ -99,7 +101,7 @@ export function GuestListManager({
                     href={`/approve-guest/${g.approvalToken}`}
                     className="text-xs text-purple-700 underline"
                   >
-                    Traiter
+                    {t("client.guests.process")}
                   </Link>
                 )}
                 {g.status !== "PENDING" && (
@@ -109,7 +111,7 @@ export function GuestListManager({
                     aria-checked={g.status === "APPROVED"}
                     disabled={savingId === g.id}
                     onClick={() => toggleAccess(g)}
-                    title={g.status === "APPROVED" ? "Désactiver l'accès" : "Activer l'accès"}
+                    title={g.status === "APPROVED" ? t("client.guests.disable") : t("client.guests.enable")}
                     className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:opacity-50 ${
                       g.status === "APPROVED" ? "bg-green-600" : "bg-gray-300"
                     }`}

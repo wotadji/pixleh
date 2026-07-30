@@ -7,29 +7,31 @@ import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/locales";
 import { LogoutButton } from "@/components/client-portal/LogoutButton";
 
-const NAV = [
-  { href: "/client", label: "Mes galeries" },
-  { href: "/client/orders", label: "Mes impressions" },
-  { href: "/client/settings", label: "Paramètres" },
-];
-
 /**
  * Barre latérale de l'espace Client (/client/*), affichée par le layout du groupe (app) —
  * pas sur /client/login, en dehors de ce groupe (voir layout.tsx). Demandé par Adriel le
  * 30/07/2026 : navigation entre les galeries, les commandes d'impression passées dans
  * n'importe quel studio (voir /client/orders), le profil (nom/mot de passe, voir
  * /client/settings) et la langue de l'interface — jusqu'ici seule la page /client existait,
- * sans aucune navigation vers autre chose.
+ * sans aucune navigation vers autre chose. `galleryCount` (bulle à côté de "Mes galeries",
+ * déplacée ici depuis le titre de /client/page.tsx le 30/07/2026) est compté par le layout
+ * serveur pour rester disponible sur toutes les pages, pas seulement /client.
  */
-export function ClientPortalSidebar({ email }: { email: string }) {
+export function ClientPortalSidebar({ email, galleryCount }: { email: string; galleryCount: number }) {
   const pathname = usePathname();
-  const { locale, setLocale } = useLanguage();
+  const { locale, setLocale, t } = useLanguage();
   const [langOpen, setLangOpen] = useState(false);
+
+  const NAV = [
+    { href: "/client", label: t("client.nav.myGalleries"), count: galleryCount },
+    { href: "/client/orders", label: t("client.nav.myOrders") },
+    { href: "/client/settings", label: t("client.nav.settings") },
+  ];
 
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-gray-100 bg-gray-50/50 px-4 py-6">
       <div className="px-2">
-        <p className="font-serif text-lg font-semibold">Mon espace</p>
+        <p className="font-serif text-lg font-semibold">{t("client.sidebar.title")}</p>
         <p className="mt-0.5 truncate text-xs text-gray-500">{email}</p>
       </div>
 
@@ -40,11 +42,16 @@ export function ClientPortalSidebar({ email }: { email: string }) {
             <Link
               key={item.href}
               href={item.href}
-              className={`rounded-lg px-3 py-2 text-sm transition-colors ${
+              className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
                 active ? "bg-white font-medium text-gray-900 shadow-sm" : "text-gray-600 hover:bg-white/70"
               }`}
             >
-              {item.label}
+              <span>{item.label}</span>
+              {!!item.count && (
+                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                  {item.count}
+                </span>
+              )}
             </Link>
           );
         })}

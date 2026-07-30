@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useLanguage } from "@/lib/i18n/LanguageProvider";
 
 /** Copie le lien /g/[slug] dans le presse-papier — même lien que le bouton "Partager" du
  * panel studio (voir GalleryManager > handleShare), pour que le client puisse le retransmettre
  * lui-même (famille, invités...) sans repasser par le studio. */
 export function ShareGalleryButton({ gallerySlug }: { gallerySlug: string }) {
+  const { t } = useLanguage();
   const [copied, setCopied] = useState(false);
 
   async function handleClick(e: React.MouseEvent) {
@@ -17,13 +19,13 @@ export function ShareGalleryButton({ gallerySlug }: { gallerySlug: string }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      window.prompt("Copiez le lien :", url);
+      window.prompt(t("gm.copyLinkFallback"), url);
     }
   }
 
   return (
     <button type="button" onClick={handleClick} className="btn-secondary px-3 py-1.5 text-xs">
-      {copied ? "Lien copié" : "Partager"}
+      {copied ? t("client.galleries.linkCopied") : t("client.galleries.share")}
     </button>
   );
 }

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getClientPortalSession } from "@/lib/clientSession";
 import { prisma } from "@/lib/prisma";
-import { ClientSettingsForm } from "@/components/client-portal/ClientSettingsForm";
+import { ClientSettingsPageView } from "@/components/client-portal/ClientSettingsPageView";
 
 export const dynamic = "force-dynamic";
 
@@ -25,13 +25,10 @@ export default async function ClientSettingsPage() {
   `;
 
   return (
-    <div className="px-6 py-10">
-      <h1 className="font-serif text-2xl font-semibold">Paramètres</h1>
-      <p className="mt-1 text-sm text-gray-500">{session.email}</p>
-
-      <div className="mt-8 max-w-md">
-        <ClientSettingsForm initialName={rows[0]?.name ?? null} hasPassword={!!account.passwordHash} />
-      </div>
-    </div>
+    <ClientSettingsPageView
+      email={session.email}
+      initialName={rows[0]?.name ?? null}
+      hasPassword={!!account.passwordHash}
+    />
   );
 }
