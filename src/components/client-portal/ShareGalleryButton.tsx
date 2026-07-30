@@ -24,7 +24,11 @@ export function ShareGalleryButton({ gallerySlug }: { gallerySlug: string }) {
   }
 
   return (
-    <button type="button" onClick={handleClick} className="btn-secondary px-3 py-1.5 text-xs">
+    <button
+      type="button"
+      onClick={handleClick}
+      className="inline-flex items-center justify-center rounded-lg border-[1.5px] border-sky-400 px-3 py-1.5 text-xs font-medium text-sky-700 transition-colors hover:bg-sky-50"
+    >
       {copied ? t("client.galleries.linkCopied") : t("client.galleries.share")}
     </button>
   );

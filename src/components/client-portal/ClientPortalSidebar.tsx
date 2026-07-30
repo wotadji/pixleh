@@ -29,10 +29,15 @@ export function ClientPortalSidebar({ email, galleryCount }: { email: string; ga
   ];
 
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-gray-100 bg-gray-50/50 px-4 py-6">
-      <div className="px-2">
-        <p className="font-serif text-lg font-semibold">{t("client.sidebar.title")}</p>
-        <p className="mt-0.5 truncate text-xs text-gray-500">{email}</p>
+    <aside className="flex w-60 shrink-0 flex-col border-r border-gray-100 bg-gray-50/50 px-4 py-6">
+      <div className="flex items-center gap-2.5 px-2">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-600 font-serif text-sm font-semibold text-white">
+          {email.slice(0, 1).toUpperCase()}
+        </span>
+        <div className="min-w-0">
+          <p className="font-serif text-base font-semibold leading-tight">{t("client.sidebar.title")}</p>
+          <p className="truncate text-xs text-gray-500">{email}</p>
+        </div>
       </div>
 
       <nav className="mt-6 flex flex-1 flex-col gap-0.5">
@@ -42,13 +47,20 @@ export function ClientPortalSidebar({ email, galleryCount }: { email: string; ga
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
+              className={`relative flex items-center justify-between rounded-lg py-2 pl-3.5 pr-3 text-sm transition-colors ${
                 active ? "bg-white font-medium text-gray-900 shadow-sm" : "text-gray-600 hover:bg-white/70"
               }`}
             >
+              {active && (
+                <span className="absolute -left-1 top-1/2 h-4 w-1 -translate-y-1/2 rounded-full bg-brand-600" />
+              )}
               <span>{item.label}</span>
               {!!item.count && (
-                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                    active ? "bg-brand-50 text-brand-700" : "bg-gray-100 text-gray-600"
+                  }`}
+                >
                   {item.count}
                 </span>
               )}

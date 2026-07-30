@@ -15,6 +15,12 @@ import { usePathname } from "next/navigation";
  * d'accueil du studio vit toujours sur /s/[studioSlug], quel que soit le point d'entrée. Si le
  * slug lui-même est invalide, le lien "page d'accueil" mènera vers ce même 404 — dégradation
  * acceptable pour ce cas limite (URL de studio mal tapée).
+ *
+ * Redesign du 30/07/2026 (charte pixleh) : même traitement typographique du "404" (dégradé
+ * identique au logo pixleh, voir src/app/not-found.tsx) que le 404 global, MAIS sans le logo
+ * pixleh lui-même ni de lien "nous contacter" — cette page reste dans l'espace du studio
+ * (avatar/nom déjà affichés par PublicSiteHeader au-dessus, voir
+ * (public-site)/s/[studioSlug]/layout.tsx), pixleh n'a pas à s'y mettre en avant.
  */
 export function StudioNotFound() {
   const pathname = usePathname();
@@ -23,17 +29,24 @@ export function StudioNotFound() {
   const homeHref = studioSlug ? `/s/${studioSlug}` : "/";
 
   return (
-    <div className="mx-auto flex min-h-[50vh] max-w-xl flex-col items-center justify-center px-6 py-24 text-center">
-      <h1 className="font-serif text-3xl font-semibold text-gray-900 sm:text-4xl">
+    <div className="mx-auto flex min-h-[50vh] max-w-lg flex-col items-center justify-center px-6 py-20 text-center">
+      <p
+        className="font-serif text-6xl font-bold leading-none sm:text-7xl"
+        style={{
+          backgroundImage: "linear-gradient(135deg, #3B82F6 0%, #8B5CF6 50%, #EC4899 75%, #F97316 100%)",
+          WebkitBackgroundClip: "text",
+          backgroundClip: "text",
+          color: "transparent",
+        }}
+      >
+        404
+      </p>
+      <h1 className="mt-5 font-serif text-2xl font-semibold text-gray-900 sm:text-3xl">
         Cette page a été supprimée ou modifiée
       </h1>
-      <p className="mt-4 text-gray-600">
-        Vous pouvez retourner à la{" "}
-        <Link href={homeHref} className="text-brand-600 underline underline-offset-2 hover:text-brand-700">
-          page d&apos;accueil
-        </Link>
-        .
-      </p>
+      <Link href={homeHref} className="btn-primary mt-7">
+        Retour à la page d&apos;accueil
+      </Link>
     </div>
   );
 }
