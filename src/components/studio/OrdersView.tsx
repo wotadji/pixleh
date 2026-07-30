@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 
 interface OrderPhoto {
@@ -24,7 +24,9 @@ interface OrderRow {
   customerEmail: string;
   galleryId: string | null;
   galleryTitle: string | null;
+  createdAt: string;
   totalCents: number;
+  currency: string;
   status: "PENDING" | "PAID" | "FULFILLED" | "CANCELLED" | "REFUNDED";
   items: OrderItemRow[];
 }
@@ -58,11 +60,39 @@ function groupItems(items: OrderItemRow[]): ProductGroup[] {
   return [...byProduct.values()];
 }
 
+// Même palette que ClientOrdersView (espace client) — cohérence visuelle entre les deux
+// vues d'une même commande (30/07/2026, refonte demandée par Adriel).
+const STATUS_STYLES: Record<OrderRow["status"], string> = {
+  PENDING: "bg-amber-50 text-amber-700",
+  PAID: "bg-green-50 text-green-700",
+  FULFILLED: "bg-blue-50 text-blue-700",
+  CANCELLED: "bg-gray-100 text-gray-500",
+  REFUNDED: "bg-gray-100 text-gray-500",
+};
+
+const PAGE_SIZE = 8;
+
+/** Initiales du client (ex: "Marie Dupont" → "MD") pour l'avatar rond — ne prend que la
+ * première et la dernière "unité" du nom pour rester à 2 caractères même sur un nom composé. */
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function formatDate(iso: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(iso));
+}
+
 export function OrdersView({ orders }: { orders: OrderRow[] }) {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [detailGroup, setDetailGroup] = useState<ProductGroup | null>(null);
   const [detailGalleryId, setDetailGalleryId] = useState<string | null>(null);
   const [zoomIndex, setZoomIndex] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<OrderRow["status"] | "ALL">("ALL");
+  const [page, setPage] = useState(1);
 
   const STATUS_LABELS: Record<OrderRow["status"], string> = {
     PENDING: t("orderStatus.pending"),
@@ -72,30 +102,97 @@ export function OrdersView({ orders }: { orders: OrderRow[] }) {
     REFUNDED: t("orderStatus.refunded"),
   };
 
+  function formatPrice(cents: number, currency: string) {
+    return new Intl.NumberFormat(locale, { style: "currency", currency }).format(cents / 100);
+  }
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return orders.filter((o) => {
+      const matchesSearch =
+        !q ||
+        o.customerName.toLowerCase().includes(q) ||
+        o.customerEmail.toLowerCase().includes(q) ||
+        (o.galleryTitle || "").toLowerCase().includes(q);
+      const matchesStatus = statusFilter === "ALL" || o.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [orders, search, statusFilter]);
+
+  // Revenir en page 1 dès que la recherche ou le filtre change, sinon on peut se retrouver
+  // sur une page qui n'existe plus dans le résultat filtré (même logique que ClientGalleriesView).
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   return (
     <div>
       <h1 className="font-serif text-2xl font-semibold">{t("orders.title")}</h1>
-      <div className="mt-6 divide-y divide-gray-100 rounded-xl border border-gray-200">
-        {orders.length === 0 && <p className="p-6 text-sm text-gray-500">{t("orders.empty")}</p>}
-        {orders.map((o) => {
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="w-56 shrink-0">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("orders.searchPlaceholder")}
+            className="input"
+          />
+        </div>
+        <div className="w-44 shrink-0">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as OrderRow["status"] | "ALL")}
+            className="input"
+          >
+            <option value="ALL">{t("orders.allStatuses")}</option>
+            {(Object.keys(STATUS_LABELS) as OrderRow["status"][]).map((s) => (
+              <option key={s} value={s}>
+                {STATUS_LABELS[s]}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="mt-4 divide-y divide-gray-100 rounded-xl border border-gray-200">
+        {filtered.length === 0 && <p className="p-6 text-sm text-gray-500">{t("orders.empty")}</p>}
+        {paginated.map((o) => {
           const groups = groupItems(o.items);
           return (
             <div key={o.id} className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">{o.customerName}</p>
-                  <p className="text-sm text-gray-500">
-                    {o.customerEmail} · {o.galleryTitle || "—"}
-                  </p>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700">
+                    {initials(o.customerName)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-gray-900">{o.customerName}</p>
+                    <p className="truncate text-sm text-gray-500">
+                      {o.customerEmail} · {o.galleryTitle || "—"}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-gray-400">{formatDate(o.createdAt, locale)}</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-medium">{(o.totalCents / 100).toFixed(2)} €</p>
-                  <span className="text-xs text-gray-500">{STATUS_LABELS[o.status]}</span>
+                <div className="shrink-0 text-right">
+                  <p className="font-medium text-gray-900">{formatPrice(o.totalCents, o.currency)}</p>
+                  <span
+                    className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[o.status]}`}
+                  >
+                    {STATUS_LABELS[o.status]}
+                  </span>
                 </div>
               </div>
-              <ul className="mt-2 space-y-1 text-sm text-gray-500">
+              <div className="mt-3 flex flex-wrap gap-2">
                 {groups.map((g) => (
-                  <li key={g.productId} className="flex items-center justify-between gap-3">
+                  <div
+                    key={g.productId}
+                    className="flex items-center gap-2 rounded-full bg-gray-50 py-1 pl-3 pr-1 text-xs text-gray-700"
+                  >
                     <span>
                       {g.count} × {g.productName}
                     </span>
@@ -105,18 +202,40 @@ export function OrdersView({ orders }: { orders: OrderRow[] }) {
                           setDetailGroup(g);
                           setDetailGalleryId(o.galleryId);
                         }}
-                        className="shrink-0 text-xs font-medium uppercase tracking-wide text-gray-700 underline decoration-gray-300 underline-offset-2 hover:text-gray-900"
+                        className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-brand-700 shadow-sm hover:bg-brand-50"
                       >
                         {t("orders.details")}
                       </button>
                     )}
-                  </li>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
           );
         })}
       </div>
+
+      {filtered.length > PAGE_SIZE && (
+        <div className="mt-4 flex items-center justify-center gap-4 text-sm">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage <= 1}
+            className="text-gray-600 hover:text-gray-900 disabled:pointer-events-none disabled:opacity-40"
+          >
+            {t("orders.prevPage")}
+          </button>
+          <span className="text-gray-500">
+            {t("orders.pageInfo").replace("{page}", String(currentPage)).replace("{total}", String(totalPages))}
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage >= totalPages}
+            className="text-gray-600 hover:text-gray-900 disabled:pointer-events-none disabled:opacity-40"
+          >
+            {t("orders.nextPage")}
+          </button>
+        </div>
+      )}
 
       {detailGroup && (
         <OrderPhotosModal

@@ -19,7 +19,9 @@ export default async function OrdersPage() {
         customerEmail: o.customerEmail,
         galleryId: o.galleryId,
         galleryTitle: o.gallery?.title || null,
+        createdAt: o.createdAt.toISOString(),
         totalCents: o.totalCents,
+        currency: o.currency,
         status: o.status,
         items: o.items.map((item) => ({
           id: item.id,
