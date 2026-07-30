@@ -32,6 +32,12 @@ export function RichTextEditor({
   // corriger/copier-coller une mise en forme précise sans dépendre des commandes du navigateur.
   const [sourceMode, setSourceMode] = useState(false);
   const [sourceText, setSourceText] = useState("");
+  // Sélection courante dans la zone éditable, capturée juste avant qu'un <select> de la
+  // barre d'outils ne prenne le focus (au mousedown, avant que le navigateur n'ouvre le
+  // menu déroulant natif) — nécessaire car, contrairement aux <button>, on ne peut pas
+  // bloquer le mousedown d'un <select> avec preventDefault() : cela empêche le menu de
+  // s'ouvrir dans la plupart des navigateurs (c'était le bug "reste grisé" rapporté).
+  const savedRange = useRef<Range | null>(null);
 
   // Ne pousse le HTML dans le DOM qu'au montage (valeur initiale chargée depuis le
   // serveur) : le resynchroniser à chaque frappe ferait sauter le curseur au début du
@@ -45,6 +51,28 @@ export function RichTextEditor({
     ref.current?.focus();
     document.execCommand(command, false, arg);
     onChange(ref.current?.innerHTML || "");
+  }
+
+  // À appeler au mousedown d'un <select> de la barre d'outils (avant qu'il ne prenne le
+  // focus et ne fasse perdre la sélection en cours dans la zone éditable).
+  function saveSelection() {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && ref.current && sel.anchorNode && ref.current.contains(sel.anchorNode)) {
+      savedRange.current = sel.getRangeAt(0).cloneRange();
+    }
+  }
+
+  // À appeler juste avant d'exécuter une commande déclenchée par un <select> (onChange) :
+  // reforce le focus sur la zone éditable puis restaure la sélection capturée par
+  // saveSelection(), pour que la commande s'applique bien à l'endroit où l'utilisateur
+  // avait placé son curseur/sa sélection avant d'ouvrir le menu déroulant.
+  function restoreSelectionAndFocus() {
+    ref.current?.focus();
+    if (savedRange.current) {
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(savedRange.current);
+    }
   }
 
   // Pas de execCommand standard pour l'interligne — on enveloppe tout le contenu dans un
@@ -125,9 +153,12 @@ export function RichTextEditor({
           title="Format"
           defaultValue=""
           disabled={sourceMode}
-          onMouseDown={(e) => e.preventDefault()}
+          onMouseDown={saveSelection}
           onChange={(e) => {
-            if (e.target.value) exec("formatBlock", e.target.value);
+            if (e.target.value) {
+              restoreSelectionAndFocus();
+              exec("formatBlock", e.target.value);
+            }
             e.target.value = "";
           }}
           className={`${selectClass} disabled:opacity-30`}
@@ -144,9 +175,12 @@ export function RichTextEditor({
           title="Taille du texte"
           defaultValue=""
           disabled={sourceMode}
-          onMouseDown={(e) => e.preventDefault()}
+          onMouseDown={saveSelection}
           onChange={(e) => {
-            if (e.target.value) setFontSize(e.target.value);
+            if (e.target.value) {
+              restoreSelectionAndFocus();
+              setFontSize(e.target.value);
+            }
             e.target.value = "";
           }}
           className={`${selectClass} disabled:opacity-30`}
@@ -247,9 +281,12 @@ export function RichTextEditor({
           title="Interligne"
           defaultValue=""
           disabled={sourceMode}
-          onMouseDown={(e) => e.preventDefault()}
+          onMouseDown={saveSelection}
           onChange={(e) => {
-            if (e.target.value) setLineHeight(e.target.value);
+            if (e.target.value) {
+              restoreSelectionAndFocus();
+              setLineHeight(e.target.value);
+            }
             e.target.value = "";
           }}
           className={`${selectClass} disabled:opacity-30`}
