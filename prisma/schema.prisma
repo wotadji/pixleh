@@ -336,6 +336,12 @@ model Client {
 model ClientAccount {
   id                String    @id @default(cuid())
   email             String    @unique
+  /// Nom affiché dans l'espace Client (sidebar, /client/settings) — indépendant du `Client.name`
+  /// propre à chaque studio (un même ClientAccount, identifié par email, peut correspondre à des
+  /// Client CRM différents chez plusieurs studios, potentiellement avec un nom orthographié
+  /// différemment) : ce champ est celui que l'utilisateur choisit lui-même pour son compte
+  /// unifié. Nullable : peut rester vide si le compte n'a jamais été complété.
+  name              String?
   passwordHash      String?
   emailVerified     DateTime?
   verifyToken       String?   @unique
