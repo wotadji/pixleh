@@ -43,6 +43,7 @@ export default async function GalleryDetailPage({ params }: { params: { id: stri
         downloadLimit: gallery.downloadLimit,
         guestSlug: gallery.guestSlug,
         allowGuestDownload: gallery.allowGuestDownload,
+        requireGuestApproval: gallery.requireGuestApproval,
         allowFavorites: gallery.allowFavorites,
         showWatermark: gallery.showWatermark,
         expiresAt: gallery.expiresAt ? gallery.expiresAt.toISOString() : null,

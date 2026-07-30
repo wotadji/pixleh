@@ -99,6 +99,10 @@ interface GalleryDTO {
   downloadLimit: number | null;
   guestSlug: string | null;
   allowGuestDownload: boolean;
+  /** Champ conservé en base (schema.prisma) mais plus lu par la logique d'accès invité :
+   * l'approbation se déduit désormais automatiquement de "Visible pour mes invités" sur
+   * les sets (voir /api/guest-access/route.ts). Non éditable dans cette UI. */
+  requireGuestApproval: boolean;
   allowFavorites: boolean;
   showWatermark: boolean;
   expiresAt: string | null;
@@ -212,6 +216,7 @@ export function GalleryManager({
     allowDownload: gallery.allowDownload,
     downloadLimit: gallery.downloadLimit ? String(gallery.downloadLimit) : "",
     allowGuestDownload: gallery.allowGuestDownload,
+    requireGuestApproval: gallery.requireGuestApproval,
     allowFavorites: gallery.allowFavorites,
     showWatermark: gallery.showWatermark,
     expiresAt: gallery.expiresAt ? gallery.expiresAt.slice(0, 10) : "",
@@ -833,6 +838,7 @@ export function GalleryManager({
           allowDownload: settingsForm.allowDownload,
           downloadLimit: settingsForm.downloadLimit ? Number(settingsForm.downloadLimit) : null,
           allowGuestDownload: settingsForm.allowGuestDownload,
+          requireGuestApproval: settingsForm.requireGuestApproval,
           allowFavorites: settingsForm.allowFavorites,
           showWatermark: settingsForm.showWatermark,
           expiresAt: settingsForm.expiresAt || null,
@@ -1580,12 +1586,15 @@ export function GalleryManager({
               <div>
                 <p className="mb-1 block text-sm font-medium">{t("gm.setVisibilityLabel")}</p>
                 <p className="mb-1.5 text-xs text-gray-500">{t("galleryForm.visibilityHint")}</p>
+                {/* PORTFOLIO retiré ici : la visibilité portfolio est désormais gouvernée
+                    uniquement par le set "Portfolio" dédié (onglet Photos > Sets), créé
+                    automatiquement sur chaque galerie et activable indépendamment — plus
+                    cohérent qu'un réglage global qui s'appliquait à toute la galerie. */}
                 <div className="space-y-1.5">
                   {(
                     [
                       { key: "CLIENT", label: t("gm.setVisibilityClient") },
                       { key: "GUEST", label: t("gm.setVisibilityGuest") },
-                      { key: "PORTFOLIO", label: t("gm.setVisibilityPortfolio") },
                     ] as { key: SetVisibility; label: string }[]
                   ).map((opt) => (
                     <label key={opt.key} className="flex items-center gap-2 text-sm text-gray-700">
@@ -1727,6 +1736,19 @@ export function GalleryManager({
                     <span className="block text-xs text-gray-500">{t("gs.allowGuestDownloadHint")}</span>
                   </span>
                 </label>
+
+                {/* L'approbation des invités n'est plus un réglage manuel : elle se déduit
+                    automatiquement de "Visible pour mes invités" sur les sets (voir onglet
+                    Photos > visibilité des sets, et /api/guest-access). Simple texte
+                    informatif, non interactif — demandé par Adriel le 29/07/2026. */}
+                <div className="mt-3 rounded-md bg-gray-50 px-3 py-2 text-sm">
+                  <span className="block font-medium text-gray-900">{t("gs.requireGuestApproval")}</span>
+                  <span className="mt-0.5 block text-xs text-gray-500">{t("gs.requireGuestApprovalHint")}</span>
+                </div>
+
+                <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  {t("gs.visibilityDisclaimer")}
+                </p>
               </div>
 
               <div className="flex items-center gap-3">

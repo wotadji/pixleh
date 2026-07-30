@@ -5,6 +5,7 @@ import { requireStudioSession, handleApiError } from "@/lib/access";
 import { assertGalleryQuota } from "@/lib/quotas";
 import { gallerySchema } from "@/lib/validators";
 import { slugify, randomSuffix } from "@/lib/slug";
+import type { SetVisibility } from "@prisma/client";
 
 export async function GET() {
   try {
@@ -58,8 +59,20 @@ export async function POST(req: Request) {
         expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
         eventDate: data.eventDate ? new Date(data.eventDate) : null,
         categoryTag: data.categoryTag || null,
-        defaultVisibility: data.defaultVisibility?.length ? data.defaultVisibility : ["CLIENT"],
+        // PORTFOLIO n'est plus une option ici (retiré du formulaire "Visible par") : la
+        // visibilité portfolio est désormais gouvernée uniquement par le set "Portfolio"
+        // dédié créé juste en dessous, activable indépendamment.
+        defaultVisibility: (
+          data.defaultVisibility?.length ? data.defaultVisibility : (["CLIENT"] as SetVisibility[])
+        ).filter((v) => v !== "PORTFOLIO"),
         status: "DRAFT",
+        // Set "Portfolio" par défaut, présent sur toute nouvelle galerie — inactif au
+        // départ (visibility: []), le studio l'active depuis l'onglet Sets pour que les
+        // photos qui y sont rangées apparaissent sur son profil public (/s/[slug]). Évite
+        // au studio de devoir créer ce set manuellement à chaque fois.
+        collections: {
+          create: [{ title: "Portfolio", position: 0, isPortfolioDefault: true, visibility: [] }],
+        },
       },
     });
 

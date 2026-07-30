@@ -3,7 +3,10 @@ import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { cookieNameFor, issueGalleryToken } from "@/lib/gallery-session";
 import { rateLimit, getClientIp } from "@/lib/rateLimit";
-import { sendStudioNewGalleryGuestEmail } from "@/lib/notifications";
+import {
+  sendStudioNewGalleryGuestEmail,
+  sendClientGuestApprovalRequestEmail,
+} from "@/lib/notifications";
 
 /**
  * Équivalent de /api/gallery-access pour le lien "invité" (/invite/[guestSlug]) : pas de
@@ -13,12 +16,13 @@ import { sendStudioNewGalleryGuestEmail } from "@/lib/notifications";
  * plutôt qu'au `slug` — les deux liens ont donc des sessions indépendantes.
  */
 export async function POST(req: Request) {
-  const { guestSlug, email } = await req.json();
+  const { guestSlug, email, marketingOptIn } = await req.json();
   if (!guestSlug) return NextResponse.json({ error: "Lien invalide" }, { status: 400 });
   const cleanEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
   if (!cleanEmail || !cleanEmail.includes("@")) {
     return NextResponse.json({ error: "Email invalide" }, { status: 400 });
   }
+  const optIn = marketingOptIn === true;
 
   // Évite qu'un lien invité soit utilisé pour spammer la table GalleryGuest (création en
   // masse de faux emails) — limite large pour ne pas gêner un vrai afflux d'invités.
@@ -31,7 +35,10 @@ export async function POST(req: Request) {
     );
   }
 
-  const gallery = await prisma.gallery.findUnique({ where: { guestSlug } });
+  const gallery = await prisma.gallery.findUnique({
+    where: { guestSlug },
+    include: { client: true, collections: true },
+  });
   if (!gallery || gallery.status !== "PUBLISHED") {
     return NextResponse.json({ error: "Galerie introuvable" }, { status: 404 });
   }
@@ -45,23 +52,64 @@ export async function POST(req: Request) {
     where: { galleryId: gallery.id, email: cleanEmail },
   });
   if (!guest) {
+    // L'approbation manuelle n'est plus un réglage à part (voir Gallery.requireGuestApproval,
+    // conservé en base mais plus lu ici) : elle se déduit désormais directement de "Visible
+    // pour mes invités" sur les sets — dès qu'AU MOINS un set est coché "Invité", l'accès
+    // reste immédiat et global pour tout le monde (comportement historique). Dès que PLUS
+    // AUCUN set n'est coché "Invité", toute nouvelle demande doit être validée
+    // individuellement par le client (voir sendClientGuestApprovalRequestEmail plus bas), qui
+    // choisit alors explicitement ce que CE visiteur précis peut voir (GalleryGuest.allSetsAccess
+    // / allowedCollections) — demandé par Adriel le 29/07/2026.
+    const hasGuestVisibleSet =
+      gallery.collections.length > 0
+        ? gallery.collections.some((c) => c.visibility.includes("GUEST"))
+        : gallery.defaultVisibility.includes("GUEST");
+    const needsApproval = !hasGuestVisibleSet;
     guest = await prisma.galleryGuest.create({
-      data: { galleryId: gallery.id, email: cleanEmail, clientRef: randomUUID() },
+      data: {
+        galleryId: gallery.id,
+        email: cleanEmail,
+        clientRef: randomUUID(),
+        marketingOptIn: optIn,
+        status: needsApproval ? "PENDING" : "APPROVED",
+        approvalToken: needsApproval ? randomUUID() : null,
+      },
     });
-    // Uniquement à la première visite de cet email sur CETTE galerie (voir le `if (!guest)`
-    // ci-dessus) — best-effort, ne doit jamais faire échouer l'accès à la galerie (voir
-    // sendMail, qui logge déjà l'échec sans lever d'exception).
-    sendStudioNewGalleryGuestEmail({
-      studioId: gallery.studioId,
-      galleryId: gallery.id,
-      galleryTitle: gallery.title,
-      guestEmail: cleanEmail,
-    }).catch((e) => console.error("Échec de la notification nouvel invité :", e));
+    if (needsApproval && guest.approvalToken) {
+      // Best-effort — ne doit jamais faire échouer la demande d'accès (voir sendMail, qui
+      // logge déjà l'échec sans lever d'exception). Si la galerie n'a pas de client rattaché
+      // (Gallery.client nullable), personne ne reçoit la demande : elle reste PENDING tant
+      // qu'un studio ne rattache pas un client ou ne désactive pas requireGuestApproval —
+      // comportement volontaire (voir notifications.ts).
+      if (gallery.client?.email) {
+        sendClientGuestApprovalRequestEmail({
+          clientName: gallery.client.name,
+          clientEmail: gallery.client.email,
+          galleryTitle: gallery.title,
+          guestEmail: cleanEmail,
+          approvalToken: guest.approvalToken,
+        }).catch((e) => console.error("Échec de la notification d'approbation :", e));
+      }
+    } else {
+      // Uniquement à la première visite de cet email sur CETTE galerie (voir le
+      // `if (!guest)` ci-dessus), et seulement quand l'accès est immédiat (pas de sens
+      // d'informer le studio d'un invité qui n'a pas encore été approuvé).
+      sendStudioNewGalleryGuestEmail({
+        studioId: gallery.studioId,
+        galleryId: gallery.id,
+        galleryTitle: gallery.title,
+        guestEmail: cleanEmail,
+      }).catch((e) => console.error("Échec de la notification nouvel invité :", e));
+    }
   }
 
+  // La session est toujours posée, même en attente d'approbation : c'est ce qui permet de
+  // reconnaître ce visiteur à son retour (checkGuestAccess relit le statut en base à chaque
+  // requête, voir src/lib/access.ts) sans lui redemander son email tant que la demande est
+  // en cours de traitement.
   const token = issueGalleryToken({ galleryId: gallery.id, clientRef: guest.clientRef });
 
-  const res = NextResponse.json({ ok: true });
+  const res = NextResponse.json({ ok: true, status: guest.status });
   res.cookies.set(cookieNameFor(guestSlug), token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

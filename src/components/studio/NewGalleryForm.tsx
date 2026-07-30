@@ -152,12 +152,14 @@ export function NewGalleryForm({ existingTags = [] }: { existingTags?: string[] 
         <div>
           <p className="mb-1 block text-sm font-medium">{t("gm.setVisibilityLabel")}</p>
           <p className="mb-1.5 text-xs text-gray-500">{t("galleryForm.visibilityHint")}</p>
+          {/* PORTFOLIO retiré : chaque nouvelle galerie reçoit automatiquement un set
+              "Portfolio" dédié (désactivé par défaut), activable ensuite depuis l'onglet
+              Photos > Sets — plus besoin de ce réglage global à la création. */}
           <div className="space-y-1.5">
             {(
               [
                 { key: "CLIENT", label: t("gm.setVisibilityClient") },
                 { key: "GUEST", label: t("gm.setVisibilityGuest") },
-                { key: "PORTFOLIO", label: t("gm.setVisibilityPortfolio") },
               ] as { key: GalleryVisibility; label: string }[]
             ).map((opt) => (
               <label key={opt.key} className="flex items-center gap-2 text-sm text-gray-700">

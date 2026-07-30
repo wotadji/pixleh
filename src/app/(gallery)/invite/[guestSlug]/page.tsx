@@ -43,6 +43,34 @@ export default async function GuestGalleryPage({
 
   const access = await checkGuestAccess(gallery);
   if (!access.granted) {
+    // `status` n'est présent que si une session invité existe déjà (email déjà saisi une
+    // fois) — sans ça (première visite), on retombe sur le formulaire email normal.
+    if (access.status === "PENDING") {
+      return (
+        <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
+          <h1 className="font-serif text-2xl font-semibold">Votre demande a bien été reçue</h1>
+          <p className="mt-3 text-sm leading-relaxed text-gray-600">
+            Merci pour votre intérêt pour « {gallery.title} ». Cette galerie est soumise à
+            l&apos;approbation de son propriétaire : nous lui avons transmis votre demande et
+            vous recevrez un email dès que l&apos;accès vous sera accordé.
+          </p>
+          <p className="mt-4 text-xs text-gray-400">
+            Vous pouvez fermer cette page — inutile de la rafraîchir, vous serez prévenu(e) par email.
+          </p>
+        </div>
+      );
+    }
+    if (access.status === "REJECTED") {
+      return (
+        <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
+          <h1 className="font-serif text-2xl font-semibold">Accès non accordé</h1>
+          <p className="mt-3 text-sm leading-relaxed text-gray-600">
+            Le propriétaire de cette galerie n&apos;a pas donné suite à votre demande d&apos;accès.
+            Si vous pensez qu&apos;il s&apos;agit d&apos;une erreur, rapprochez-vous directement de lui.
+          </p>
+        </div>
+      );
+    }
     return <EmailGate guestSlug={params.guestSlug} title={gallery.title} />;
   }
 
@@ -57,7 +85,18 @@ export default async function GuestGalleryPage({
   // façon, l'y proposer comme filtre ne ferait que montrer une case toujours vide.
   let guestPhotos: typeof gallery.photos;
   let guestCollections: { id: string; title: string }[] = [];
-  if (gallery.collections.length === 0) {
+  // access.allSetsAccess === false : ce visiteur précis a reçu un accès limité à certains
+  // sets choisis par le client au moment de l'approbation (voir /approve-guest/[token]) —
+  // ça remplace entièrement la logique GUEST habituelle (le client peut ainsi autoriser un
+  // set qui n'est pas globalement marqué "Invité"), plutôt que de la restreindre davantage.
+  if (access.allSetsAccess === false) {
+    const allowedIds = new Set(access.allowedCollectionIds ?? []);
+    const allowedSets = gallery.collections.filter((c: { id: string }) => allowedIds.has(c.id));
+    guestCollections = allowedSets.map((c: { id: string; title: string }) => ({ id: c.id, title: c.title }));
+    guestPhotos = gallery.photos.filter(
+      (p: { id: string; collectionId: string | null }) => p.collectionId && allowedIds.has(p.collectionId)
+    );
+  } else if (gallery.collections.length === 0) {
     guestPhotos = gallery.defaultVisibility.includes("GUEST") ? gallery.photos : [];
   } else {
     const guestSets = gallery.collections.filter((c: { id: string; visibility: string[] }) =>

@@ -33,6 +33,7 @@ export const gallerySchema = z.object({
   allowDownload: z.boolean().optional(),
   downloadLimit: z.number().int().positive().optional().nullable(),
   allowGuestDownload: z.boolean().optional(),
+  requireGuestApproval: z.boolean().optional(),
   allowFavorites: z.boolean().optional(),
   showWatermark: z.boolean().optional(),
   expiresAt: z.string().optional().nullable(),

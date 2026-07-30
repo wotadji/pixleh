@@ -133,6 +133,10 @@ export async function sendGalleryReadyEmail(params: {
     et télécharger vos photos.</p>
     ${passwordBlock}
     <a href="${link}" style="${BUTTON_STYLE}">Voir ma galerie</a>
+    <p style="margin-top:16px;font-size:12px;color:#9ca3af;">
+      Astuce : retrouvez toutes vos galeries (même de plusieurs photographes) dans
+      <a href="${appUrl("/client/login")}" style="color:#7c3aed;">votre espace client</a>.
+    </p>
   `);
 
   await sendMail({
@@ -141,11 +145,35 @@ export async function sendGalleryReadyEmail(params: {
     text: [
       `Bonjour ${params.clientName}, votre galerie « ${params.galleryTitle} » est prête : ${link}`,
       params.galleryPassword ? `Mot de passe : ${params.galleryPassword}` : "",
+      `Retrouvez toutes vos galeries : ${appUrl("/client/login")}`,
       signature.text,
     ]
       .filter(Boolean)
       .join("\n\n"),
     html: `${html}${signature.html}`,
+  });
+}
+
+/** Confirme l'email d'un ClientAccount (espace Client unifié, voir /client/login) avant
+ * d'activer le mot de passe qu'il vient de créer — même patron que sendVerificationEmail
+ * (compte studio), lien géré par /api/client-portal/verify-email. */
+export async function sendClientAccountVerificationEmail(params: {
+  email: string;
+  verifyToken: string;
+}) {
+  const link = appUrl(`/api/client-portal/verify-email?token=${params.verifyToken}`);
+  const html = wrapEmail(`
+    <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Confirmez votre adresse email</h2>
+    <p>Cliquez ci-dessous pour confirmer votre adresse email et activer votre espace client pixleh,
+    où vous retrouverez toutes vos galeries :</p>
+    <a href="${link}" style="${BUTTON_STYLE}">Confirmer mon email</a>
+    <p style="margin-top:20px;font-size:12px;color:#9ca3af;">Ce lien expire dans 48 heures. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
+  `);
+  await sendMail({
+    to: params.email,
+    subject: "Confirmez votre adresse email — Mon espace pixleh",
+    text: `Confirmez votre adresse email pour activer votre espace client : ${link}`,
+    html,
   });
 }
 
@@ -219,6 +247,64 @@ export async function sendStudioNewGalleryGuestEmail(params: {
     to,
     subject: `Nouvel invité — ${params.galleryTitle}`,
     text: `${params.guestEmail} vient d'accéder à la galerie « ${params.galleryTitle} » via le lien invité. Voir : ${link}`,
+    html,
+  });
+}
+
+/**
+ * Envoyé au CLIENT (Gallery.client, pas au studio) quand Gallery.requireGuestApproval est
+ * actif et qu'un nouvel email demande l'accès au lien invité — voir /api/guest-access. Le
+ * client choisit, sur la page pointée par le lien (pas de simple lien "un clic", pour
+ * permettre le choix des sets), d'accorder l'accès à tous les sets ou seulement certains,
+ * ou de refuser. N'est jamais envoyé si la galerie n'a pas de client rattaché (Gallery.client
+ * nullable) — dans ce cas la demande reste PENDING indéfiniment, comportement volontaire :
+ * mieux vaut bloquer que d'accorder sans personne pour valider.
+ */
+export async function sendClientGuestApprovalRequestEmail(params: {
+  clientName: string;
+  clientEmail: string;
+  galleryTitle: string;
+  guestEmail: string;
+  approvalToken: string;
+}) {
+  const link = appUrl(`/approve-guest/${params.approvalToken}`);
+  const html = wrapEmail(`
+    <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Nouvelle demande d'accès</h2>
+    <p>Bonjour ${escapeHtml(params.clientName)},</p>
+    <p><strong>${escapeHtml(params.guestEmail)}</strong> souhaite accéder à votre galerie
+    « ${escapeHtml(params.galleryTitle)} ». Vous pouvez choisir de lui donner accès à toutes les
+    photos ou seulement à certaines, ou de refuser cette demande.</p>
+    <a href="${link}" style="${BUTTON_STYLE}">Traiter la demande</a>
+    <p style="margin-top:20px;font-size:12px;color:#9ca3af;">Ce lien est à usage unique et n'expire pas tant que la demande n'a pas été traitée.</p>
+  `);
+
+  await sendMail({
+    to: params.clientEmail,
+    subject: `Demande d'accès à « ${params.galleryTitle} »`,
+    text: `${params.guestEmail} souhaite accéder à votre galerie « ${params.galleryTitle} ». Traitez la demande ici : ${link}`,
+    html,
+  });
+}
+
+/** Envoyé à l'invité une fois sa demande approuvée par le client — il n'était pas notifié
+ * automatiquement autrement (pas de compte, pas de session active pendant l'attente). */
+export async function sendGuestAccessApprovedEmail(params: {
+  guestEmail: string;
+  galleryTitle: string;
+  guestSlug: string;
+}) {
+  const link = appUrl(`/invite/${params.guestSlug}`);
+  const html = wrapEmail(`
+    <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Accès accordé !</h2>
+    <p>Votre demande d'accès à la galerie « ${escapeHtml(params.galleryTitle)} » a été acceptée.
+    Vous pouvez dès maintenant la consulter.</p>
+    <a href="${link}" style="${BUTTON_STYLE}">Voir la galerie</a>
+  `);
+
+  await sendMail({
+    to: params.guestEmail,
+    subject: `Accès accordé — ${params.galleryTitle}`,
+    text: `Votre demande d'accès à la galerie « ${params.galleryTitle} » a été acceptée : ${link}`,
     html,
   });
 }

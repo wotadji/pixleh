@@ -87,6 +87,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         ...(data.allowDownload !== undefined && { allowDownload: data.allowDownload }),
         ...(data.downloadLimit !== undefined && { downloadLimit: data.downloadLimit }),
         ...(data.allowGuestDownload !== undefined && { allowGuestDownload: data.allowGuestDownload }),
+        ...(data.requireGuestApproval !== undefined && {
+          requireGuestApproval: data.requireGuestApproval,
+        }),
         ...(guestSlug !== gallery.guestSlug && { guestSlug }),
         ...(data.allowFavorites !== undefined && { allowFavorites: data.allowFavorites }),
         ...(data.showWatermark !== undefined && { showWatermark: data.showWatermark }),

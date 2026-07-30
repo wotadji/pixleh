@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PixlehLogo } from "@/components/marketing/PixlehLogo";
 import { MarketingLanguageSwitcher } from "@/components/marketing/MarketingLanguageSwitcher";
+import { LoginMenu } from "@/components/marketing/LoginMenu";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 
 /**
@@ -72,14 +73,7 @@ export function MarketingHeader({ transparent = false }: { transparent?: boolean
         </nav>
         <div className="flex items-center gap-4">
           <MarketingLanguageSwitcher transparent={transparent} />
-          <Link
-            href="/login"
-            className={`hidden text-sm sm:inline ${
-              transparent ? "text-white/85 hover:text-white" : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            {t("marketing.nav.login")}
-          </Link>
+          <LoginMenu transparent={transparent} />
           {/* "Créer mon studio" passe d'abord par la page Tarifs (choix d'un plan) plutôt que
               directement vers l'inscription — "Connexion" reste inchangé (/login) pour un
               utilisateur existant. */}
@@ -114,7 +108,10 @@ export function MarketingHeader({ transparent = false }: { transparent?: boolean
           );
         })}
         <Link href="/login" className={transparent ? "hover:text-white" : "hover:text-gray-900"}>
-          {t("marketing.nav.login")}
+          {t("marketing.nav.loginStudio")}
+        </Link>
+        <Link href="/client/login" className={transparent ? "hover:text-white" : "hover:text-gray-900"}>
+          {t("marketing.nav.loginClient")}
         </Link>
       </nav>
     </header>

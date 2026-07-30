@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { slugify, randomSuffix } from "@/lib/slug";
+import { slugify, randomSuffix, isReservedStudioSlug } from "@/lib/slug";
 import { generateSecureToken, sendWelcomeEmail } from "@/lib/notifications";
 
 interface ProvisionStudioParams {
@@ -31,8 +31,18 @@ export async function provisionStudioWithOwner({
   oauthVerified,
 }: ProvisionStudioParams) {
   let slug = slugify(studioName) || "studio";
-  const slugTaken = await prisma.studio.findUnique({ where: { slug } });
+  // isReservedStudioSlug évite qu'un studio obtienne un slug identique à une route système
+  // (ex: "admin", "client", "tarifs"...) — indispensable depuis que la page portfolio d'une
+  // galerie individuelle vit à la racine (/[studioSlug]/[gallerySlug]), voir slug.ts.
+  const slugTaken =
+    isReservedStudioSlug(slug) || (await prisma.studio.findUnique({ where: { slug } }));
   if (slugTaken) slug = `${slug}-${randomSuffix(4)}`;
+  // Cas extrême mais possible : le slug généré (nom + suffixe aléatoire) retombe lui-même
+  // sur un mot réservé ou une collision — on boucle jusqu'à en trouver un valide plutôt que
+  // de risquer une exception Prisma (contrainte unique) ou une route système masquée.
+  while (isReservedStudioSlug(slug) || (await prisma.studio.findUnique({ where: { slug } }))) {
+    slug = `${slugify(studioName) || "studio"}-${randomSuffix(4)}`;
+  }
 
   // Jeton de vérification email (voir /api/auth/verify-email) — généré dès la création pour
   // les comptes email/mot de passe uniquement (voir `oauthVerified` ci-dessus). Valable 48h,

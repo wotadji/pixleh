@@ -80,7 +80,18 @@ export async function checkGalleryAccess(
  */
 export async function checkGuestAccess(
   gallery: Gallery
-): Promise<{ granted: boolean; asStudio: boolean; clientRef?: string }> {
+): Promise<{
+  granted: boolean;
+  asStudio: boolean;
+  clientRef?: string;
+  /** Statut de la demande d'accès (voir GalleryGuest.status) — permet à l'appelant
+   * d'afficher un écran "en attente de validation" plutôt qu'un simple refus quand
+   * Gallery.requireGuestApproval est actif (voir /invite/[guestSlug]/page.tsx). Absent si
+   * aucune session invité n'existe du tout (jamais passé l'EmailGate). */
+  status?: "PENDING" | "APPROVED" | "REJECTED";
+  allSetsAccess?: boolean;
+  allowedCollectionIds?: string[];
+}> {
   const studioSession = await getStudioSession();
   if (studioSession && studioSession.user.studioId === gallery.studioId) {
     return { granted: true, asStudio: true };
@@ -91,10 +102,32 @@ export async function checkGuestAccess(
   if (!gallery.guestSlug) return { granted: false, asStudio: false };
 
   const gallerySession = getGallerySession(gallery.guestSlug);
-  if (gallerySession && gallerySession.galleryId === gallery.id) {
-    return { granted: true, asStudio: false, clientRef: gallerySession.clientRef };
+  if (!gallerySession || gallerySession.galleryId !== gallery.id) {
+    return { granted: false, asStudio: false };
   }
-  return { granted: false, asStudio: false };
+
+  // Le cookie ne prouve que l'identité de l'invité (clientRef), jamais son statut
+  // d'approbation courant — celui-ci peut changer après l'émission du cookie (voir
+  // /approve-guest/[token]), donc on le relit en base à chaque requête plutôt que de figer
+  // une valeur dans le JWT au moment de la première visite.
+  const guest = await prisma.galleryGuest.findUnique({
+    where: { clientRef: gallerySession.clientRef },
+    include: { allowedCollections: { select: { id: true } } },
+  });
+  if (!guest || guest.galleryId !== gallery.id) {
+    return { granted: false, asStudio: false };
+  }
+  const base = {
+    asStudio: false,
+    clientRef: guest.clientRef,
+    status: guest.status,
+    allSetsAccess: guest.allSetsAccess,
+    allowedCollectionIds: guest.allowedCollections.map((c) => c.id),
+  };
+  if (guest.status !== "APPROVED") {
+    return { granted: false, ...base };
+  }
+  return { granted: true, ...base };
 }
 
 /**

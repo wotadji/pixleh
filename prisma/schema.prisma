@@ -322,6 +322,30 @@ model Client {
   @@index([studioId])
 }
 
+/// Identité de connexion unifiée d'un Client, indépendante du studio — un même email peut
+/// correspondre à plusieurs lignes Client (CRM) dans des studios différents (voir
+/// @@unique([studioId, email]) sur Client ci-dessus), mais un seul ClientAccount par email :
+/// c'est ce qui permet à un client de se connecter une fois (/client/login) et de voir toutes
+/// ses galeries, tous studios confondus, plutôt qu'un lien par galerie.
+///
+/// Pas créé automatiquement avec le Client CRM — uniquement quand quelqu'un se connecte
+/// effectivement avec cet email pour la première fois. Ce premier accès sert aussi à créer
+/// le mot de passe (`passwordHash` est donc nullable tant que ce n'est pas fait), validé par
+/// email avant activation (`emailVerified`) — même patron que User (verifyToken/emailVerified/
+/// resetToken), voir src/lib/notifications.ts.
+model ClientAccount {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  passwordHash      String?
+  emailVerified     DateTime?
+  verifyToken       String?   @unique
+  verifyTokenExpiry DateTime?
+  resetToken        String?   @unique
+  resetTokenExpiry  DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
 /// INBOUND = message reçu (formulaire de contact public). OUTBOUND = réponse envoyée par le
 /// studio depuis le panel — voir POST /api/clients/[id]/messages, qui envoie aussi un vrai
 /// email à `Client.email` (via sendMail) en plus de créer cette ligne.
@@ -403,6 +427,12 @@ model Gallery {
   /// Autorise (ou non) le téléchargement des photos depuis le lien invité — indépendant
   /// du réglage `allowDownload` qui, lui, gouverne le lien client.
   allowGuestDownload Boolean    @default(false)
+  /// Si activé, toute nouvelle demande d'accès invité (lien /invite/[guestSlug]) reste en
+  /// attente (GalleryGuest.status = PENDING) tant que le client (Gallery.client, notifié par
+  /// email) ne l'a pas explicitement approuvée — voir POST /api/guest-access et
+  /// /approve-guest/[token]. Désactivé par défaut : préserve le comportement historique
+  /// (accès immédiat dès saisie de l'email) pour ne rien changer aux galeries existantes.
+  requireGuestApproval Boolean @default(false)
   /// Visibilité par défaut de la galerie entière ("Visible par", choisi dès la création) :
   /// prise en compte tant qu'aucun set (Collection) n'a été créé dans cette galerie. Dès
   /// qu'un set existe, c'est SA visibilité (Collection.visibility) qui gouverne à la place
@@ -498,6 +528,16 @@ model Collection {
   /// cumuler 1, 2 ou les 3 — CLIENT par défaut pour ne rien changer au comportement
   /// existant des sets déjà créés avant cette fonctionnalité.
   visibility SetVisibility[]  @default([CLIENT])
+  /// Marque le set "Portfolio" créé automatiquement à la création de la galerie (voir
+  /// POST /api/galleries) — permet de le retrouver de façon fiable (au lieu de se fier au
+  /// titre "Portfolio", modifiable) pour le toggle actif/inactif dédié dans GalleryManager,
+  /// qui remplace l'ancienne case PORTFOLIO générique de "Visible par". Un studio peut créer
+  /// d'autres sets normaux avec PORTFOLIO dans leur visibility comme avant ; ce flag ne sert
+  /// qu'à distinguer CE set précis, pas à limiter qui peut avoir PORTFOLIO dans sa visibility.
+  isPortfolioDefault Boolean @default(false)
+  /// Invités ayant reçu un accès limité à CE set précisément (GalleryGuest.allSetsAccess =
+  /// false) — voir /approve-guest/[token].
+  guestAllowedFor GalleryGuest[] @relation("GuestAllowedCollections")
 
   @@index([galleryId])
 }
@@ -538,15 +578,40 @@ model Photo {
   @@index([collectionId])
 }
 
-/// Un visiteur ayant accédé à une galerie via le lien invité (/invite/[guestSlug]) — pas
-/// de compte, juste un email capturé une fois, réutilisé pour reconnaître ce visiteur au
-/// retour (clientRef signé dans un cookie, voir gallery-session.ts).
+/// Un visiteur ayant accédé (ou demandé l'accès) à une galerie via le lien invité
+/// (/invite/[guestSlug]) — pas de compte, juste un email capturé une fois, réutilisé pour
+/// reconnaître ce visiteur au retour (clientRef signé dans un cookie, voir gallery-session.ts).
+enum GuestAccessStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model GalleryGuest {
   id        String   @id @default(cuid())
   galleryId String
   gallery   Gallery  @relation(fields: [galleryId], references: [id], onDelete: Cascade)
   email     String
   clientRef String   @unique
+  /// APPROVED par défaut : préserve l'accès immédiat historique pour les galeries qui
+  /// n'activent pas Gallery.requireGuestApproval. Ne démarre à PENDING qu'à la création
+  /// d'une nouvelle demande sur une galerie où ce réglage est actif (voir POST
+  /// /api/guest-access) — tant que le statut n'est pas APPROVED, aucune session galerie
+  /// n'est émise (voir checkGuestAccess dans src/lib/access.ts).
+  status    GuestAccessStatus @default(APPROVED)
+  /// Case à cocher côté EmailGate — opt-in pour recontacter cet email (newsletter,
+  /// prospection future). Stocké uniquement, aucun envoi automatique aujourd'hui.
+  marketingOptIn Boolean @default(false)
+  /// Token à usage unique envoyé au client (Gallery.client.email) pour approuver/refuser
+  /// cette demande sans connexion (voir /approve-guest/[token]) — effacé (null) une fois
+  /// la demande traitée (approuvée ou refusée).
+  approvalToken String? @unique
+  /// true = accès à tous les sets de la galerie (comportement par défaut/legacy, y compris
+  /// pour tout GalleryGuest déjà existant avant cette fonctionnalité). false = accès limité
+  /// aux sets listés dans `allowedCollections`, choisis par le client au moment de
+  /// l'approbation ("Tous les sets" vs sélection).
+  allSetsAccess Boolean @default(true)
+  allowedCollections Collection[] @relation("GuestAllowedCollections")
   createdAt DateTime @default(now())
 
   @@index([galleryId])

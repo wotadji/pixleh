@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 export function EmailGate({ guestSlug, title }: { guestSlug: string; title: string }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -20,7 +21,7 @@ export function EmailGate({ guestSlug, title }: { guestSlug: string; title: stri
     const res = await fetch("/api/guest-access", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ guestSlug, email }),
+      body: JSON.stringify({ guestSlug, email, marketingOptIn }),
     });
     setLoading(false);
     if (!res.ok) {
@@ -28,6 +29,9 @@ export function EmailGate({ guestSlug, title }: { guestSlug: string; title: stri
       setError(data?.error || "Une erreur est survenue");
       return;
     }
+    // Que la demande soit immédiatement approuvée ou mise en attente (voir
+    // Gallery.requireGuestApproval), la page se recharge : checkGuestAccess (côté serveur)
+    // décide ensuite d'afficher la galerie ou l'écran d'attente à partir du statut en base.
     router.refresh();
   }
 
@@ -48,6 +52,15 @@ export function EmailGate({ guestSlug, title }: { guestSlug: string; title: stri
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
+        <label className="flex items-start gap-2 text-xs text-gray-600">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={marketingOptIn}
+            onChange={(e) => setMarketingOptIn(e.target.checked)}
+          />
+          <span>J&apos;accepte de recevoir des actualités du photographe par email (facultatif).</span>
+        </label>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button type="submit" disabled={loading} className="btn-primary w-full">
           {loading ? "Vérification..." : "Accéder à la galerie"}
