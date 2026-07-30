@@ -3,8 +3,15 @@ import { Document, Page, Text, View, StyleSheet, Image, renderToBuffer } from "@
 import { renderHtmlToPdf } from "@/lib/htmlToPdf";
 
 const styles = StyleSheet.create({
-  page: { padding: 40, fontSize: 11, fontFamily: "Helvetica" },
-  title: { fontSize: 18, marginBottom: 12, fontWeight: 700 },
+  page: { padding: 64, fontSize: 11, fontFamily: "Helvetica" },
+  titleBox: {
+    borderWidth: 1,
+    borderColor: "#111827",
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    marginBottom: 20,
+  },
+  title: { fontSize: 18, fontWeight: 700, textAlign: "center" },
   section: { marginBottom: 16 },
   row: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
   label: { color: "#666" },
@@ -20,8 +27,8 @@ const styles = StyleSheet.create({
   footer: {
     position: "absolute",
     bottom: 24,
-    left: 40,
-    right: 40,
+    left: 64,
+    right: 64,
     paddingTop: 8,
     borderTop: "1px solid #e5e7eb",
     fontSize: 9,
@@ -79,7 +86,9 @@ export async function renderContractPdf(params: {
   const doc = (
     <Document>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.title}>{title}</Text>
+        <View style={styles.titleBox}>
+          <Text style={styles.title}>{title}</Text>
+        </View>
         <Text style={{ marginBottom: 4, color: "#666" }}>{studioName}</Text>
         {madeAtLine && <Text style={{ marginBottom: 16, fontSize: 10, color: "#9ca3af" }}>{madeAtLine}</Text>}
         <View style={styles.section}>{renderHtmlToPdf(bodyHtml)}</View>
