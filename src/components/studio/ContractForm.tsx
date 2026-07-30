@@ -23,39 +23,38 @@ export interface ContractFormValues {
 
 /** Aperçu miniature (CSS pur) de chaque template — donne une idée du placement du logo, du
  * titre et du liseré avant même de générer un PDF. `accent` reprend la couleur de marque du
- * studio (Studio.brandColor) pour que l'aperçu corresponde au rendu réel. */
+ * studio (Studio.brandColor) pour que l'aperçu corresponde au rendu réel. Format compact
+ * (dans la sidebar, voir plus bas) plutôt que les grandes cartes utilisées initialement. */
 function TemplatePreview({ id, accent }: { id: ContractTemplateId; accent: string }) {
   if (id === "minimal") {
     return (
-      <div className="flex h-20 w-full flex-col justify-center gap-1.5 rounded-md bg-gray-50 px-3 py-2.5">
-        <div className="flex items-center gap-1.5">
-          <div className="h-2.5 w-2.5 rounded-sm bg-gray-300" />
-          <div className="h-1 w-10 rounded-sm bg-gray-300" />
+      <div className="flex h-12 w-16 shrink-0 flex-col justify-center gap-1 rounded-md bg-gray-50 p-1.5">
+        <div className="flex items-center gap-1">
+          <div className="h-1.5 w-1.5 rounded-sm bg-gray-300" />
+          <div className="h-0.5 w-6 rounded-sm bg-gray-300" />
         </div>
-        <div className="h-1.5 w-2/3 rounded-sm bg-gray-700" />
+        <div className="h-1 w-2/3 rounded-sm bg-gray-700" />
         <div className="h-px w-full bg-gray-200" />
-        <div className="h-1 w-1/3 rounded-sm bg-gray-300" />
       </div>
     );
   }
   if (id === "elegant") {
     return (
-      <div className="flex h-20 w-full flex-col items-center justify-center gap-1.5 rounded-md border border-gray-300 bg-gray-50 px-3 py-2">
-        <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: accent }} />
-        <div className="h-1 w-8 rounded-sm bg-gray-300" />
-        <div className="h-1.5 w-1/2 rounded-sm bg-gray-700" />
+      <div className="flex h-12 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-md border border-gray-300 bg-gray-50 p-1">
+        <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accent }} />
+        <div className="h-1 w-1/2 rounded-sm bg-gray-700" />
       </div>
     );
   }
   // classic
   return (
-    <div className="flex h-20 w-full flex-col items-center justify-center gap-1.5 rounded-md bg-gray-50 px-3 py-2.5">
-      <div className="flex items-center gap-1.5 self-start">
-        <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: accent }} />
-        <div className="h-1 w-10 rounded-sm bg-gray-300" />
+    <div className="flex h-12 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-md bg-gray-50 p-1.5">
+      <div className="flex items-center gap-1 self-start">
+        <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accent }} />
+        <div className="h-0.5 w-6 rounded-sm bg-gray-300" />
       </div>
-      <div className="h-1.5 w-2/3 rounded-sm bg-gray-700" />
-      <div className="h-0.5 w-8 rounded-full" style={{ backgroundColor: accent }} />
+      <div className="h-1 w-2/3 rounded-sm bg-gray-700" />
+      <div className="h-0.5 w-4 rounded-full" style={{ backgroundColor: accent }} />
     </div>
   );
 }
@@ -106,6 +105,7 @@ export function ContractForm({
   // une signature dessinée/importée à chaque ouverture du formulaire d'édition si on le
   // montait direct.
   const [replacingSignature, setReplacingSignature] = useState(!initial.studioSignatureDataUrl);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -117,6 +117,42 @@ export function ContractForm({
       return;
     }
     onSubmit({ ...form, studioSignatureDataUrl });
+  }
+
+  /** Génère et ouvre un aperçu PDF du contrat tel qu'il est en cours de rédaction — sans
+   * enregistrer quoi que ce soit (voir POST /api/contracts/preview-pdf). Demandé par Adriel,
+   * 31/07/2026 : "un bouton pour l'aperçu de son contrat", pour voir le rendu réel du template
+   * choisi avant de créer/enregistrer le contrat. L'onglet est ouvert de façon synchrone (avant
+   * le fetch) pour éviter que le navigateur ne bloque le popup une fois la réponse arrivée.
+   */
+  async function handlePreview() {
+    if (!form.bodyHtml.replace(/<[^>]+>/g, "").trim()) {
+      alert(t("contractForm.bodyRequired"));
+      return;
+    }
+    const previewTab = window.open("", "_blank");
+    setPreviewLoading(true);
+    try {
+      const res = await fetch("/api/contracts/preview-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, studioSignatureDataUrl }),
+      });
+      if (!res.ok) {
+        previewTab?.close();
+        alert(t("common.error"));
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      if (previewTab) previewTab.location.href = url;
+      else window.open(url, "_blank");
+    } catch {
+      previewTab?.close();
+      alert(t("common.error"));
+    } finally {
+      setPreviewLoading(false);
+    }
   }
 
   return (
@@ -176,30 +212,6 @@ export function ContractForm({
         </div>
 
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-gray-700">{t("contractForm.templateLabel")}</label>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {CONTRACT_TEMPLATE_IDS.map((id) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setForm({ ...form, template: id })}
-                className={`rounded-lg border p-3 text-left transition ${
-                  form.template === id
-                    ? "border-brand-500 ring-2 ring-brand-100"
-                    : "border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                <TemplatePreview id={id} accent={accent} />
-                <p className="mt-2 text-sm font-medium text-gray-900">{t(`contractTemplate.${id}.name`)}</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-gray-500">
-                  {t(`contractTemplate.${id}.description`)}
-                </p>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div>
           <label className="mb-1.5 block text-sm font-medium text-gray-700">
             {t("contractForm.studioSignatureLabel")}
           </label>
@@ -226,19 +238,55 @@ export function ContractForm({
         </div>
       </div>
 
-      <aside className="h-fit rounded-xl border border-gray-200 bg-gray-50 p-6">
-        <h2 className="text-sm font-semibold text-gray-900">{t("contractForm.howItWorksTitle")}</h2>
-        <ol className="mt-4 space-y-4">
-          {[t("contractForm.step1"), t("contractForm.step2"), t("contractForm.step3")].map((step, i) => (
-            <li key={i} className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700">
-                {i + 1}
-              </span>
-              <p className="text-sm leading-relaxed text-gray-600">{step}</p>
-            </li>
-          ))}
-        </ol>
-      </aside>
+      <div className="h-fit space-y-6">
+        <aside className="rounded-xl border border-gray-200 bg-gray-50 p-6">
+          <h2 className="text-sm font-semibold text-gray-900">{t("contractForm.templateLabel")}</h2>
+          <div className="mt-3 space-y-2">
+            {CONTRACT_TEMPLATE_IDS.map((id) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setForm({ ...form, template: id })}
+                className={`flex w-full items-center gap-3 rounded-lg border p-2.5 text-left transition ${
+                  form.template === id
+                    ? "border-brand-500 bg-white ring-2 ring-brand-100"
+                    : "border-gray-200 bg-white hover:border-gray-300"
+                }`}
+              >
+                <TemplatePreview id={id} accent={accent} />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-gray-900">{t(`contractTemplate.${id}.name`)}</span>
+                  <span className="mt-0.5 block text-xs leading-snug text-gray-500">
+                    {t(`contractTemplate.${id}.description`)}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={handlePreview}
+            disabled={previewLoading}
+            className="btn-secondary mt-4 w-full text-sm"
+          >
+            {previewLoading ? t("contractForm.previewLoading") : t("contractForm.previewButton")}
+          </button>
+        </aside>
+
+        <aside className="rounded-xl border border-gray-200 bg-gray-50 p-6">
+          <h2 className="text-sm font-semibold text-gray-900">{t("contractForm.howItWorksTitle")}</h2>
+          <ol className="mt-4 space-y-4">
+            {[t("contractForm.step1"), t("contractForm.step2"), t("contractForm.step3")].map((step, i) => (
+              <li key={i} className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700">
+                  {i + 1}
+                </span>
+                <p className="text-sm leading-relaxed text-gray-600">{step}</p>
+              </li>
+            ))}
+          </ol>
+        </aside>
+      </div>
     </form>
   );
 }
