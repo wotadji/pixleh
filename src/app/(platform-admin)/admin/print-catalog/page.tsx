@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { PageSpinner } from "@/components/ui/Spinner";
 
@@ -37,12 +37,18 @@ const EMPTY_FORM: FormState = {
   wholesaleCost: "",
 };
 
+type StatusFilter = "ALL" | "ACTIVE" | "INACTIVE" | "NO_SKU";
+
 function toCents(euros: string) {
   return Math.round(parseFloat(euros.replace(",", ".") || "0") * 100);
 }
 
 function fromCents(cents: number) {
   return (cents / 100).toFixed(2);
+}
+
+function formatMoney(cents: number) {
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(cents / 100);
 }
 
 function itemToForm(item: PrintCatalogItemDTO): FormState {
@@ -58,6 +64,15 @@ function itemToForm(item: PrintCatalogItemDTO): FormState {
   };
 }
 
+/** Pastille de marge colorée : rouge si perte, ambre si marge faible (<20%), verte sinon —
+ * donne un signal visuel immédiat sans avoir à faire le calcul mentalement. */
+function marginTone(marginCents: number, priceCents: number): { bg: string; text: string } {
+  if (marginCents < 0) return { bg: "bg-red-50", text: "text-red-700" };
+  const pct = priceCents > 0 ? (marginCents / priceCents) * 100 : 0;
+  if (pct < 20) return { bg: "bg-amber-50", text: "text-amber-700" };
+  return { bg: "bg-green-50", text: "text-green-700" };
+}
+
 /**
  * Catalogue impression plateforme — service pixleh (fulfillment via Prodigi), pas les
  * studios : demande d'Adriel, 31/07/2026, "je veux que Boutique — Produits soit géré dans le
@@ -65,15 +80,23 @@ function itemToForm(item: PrintCatalogItemDTO): FormState {
  * (priceCents) reste TOUJOURS fixé manuellement par Adriel ; le coût de revient Prodigi
  * (wholesaleCostCents) n'est qu'une indication pour l'aider à décider de sa marge, jamais
  * recalculé automatiquement dans priceCents.
+ *
+ * Redesign du 01/08/2026 (demande d'Adriel : "design pro et expert") : bandeau de stats,
+ * recherche/filtre, pastille de marge colorée, activation en un clic, aperçu image + marge
+ * en direct dans le formulaire — même vocabulaire visuel que /dashboard/invoices (pastilles
+ * arrondies, avatar carré, liste divide-y) pour rester cohérent avec le reste de pixleh.
  */
 export default function AdminPrintCatalogPage() {
   const [items, setItems] = useState<PrintCatalogItemDTO[] | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
-  const [resyncing, setResyncing] = useState(false);
+  const [resyncing, setResyncing] = useState<string | null>(null);
+  const [toggling, setToggling] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [prodigiWarning, setProdigiWarning] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
 
   async function loadItems() {
     const res = await fetch("/api/admin/print-catalog");
@@ -137,7 +160,7 @@ export default function AdminPrintCatalogPage() {
   }
 
   async function resync(item: PrintCatalogItemDTO) {
-    setResyncing(true);
+    setResyncing(item.id);
     const res = await fetch(`/api/admin/print-catalog/${item.id}/quote`, { method: "POST" });
     const data = await res.json().catch(() => ({}));
     if (data.prodigiSync && data.prodigiSync.synced === false) {
@@ -146,7 +169,20 @@ export default function AdminPrintCatalogPage() {
       setProdigiWarning(null);
     }
     await loadItems();
-    setResyncing(false);
+    setResyncing(null);
+  }
+
+  async function toggleActive(item: PrintCatalogItemDTO) {
+    setToggling(item.id);
+    const res = await fetch(`/api/admin/print-catalog/${item.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: !item.active }),
+    });
+    if (res.ok) {
+      setItems((prev) => prev?.map((i) => (i.id === item.id ? { ...i, active: !i.active } : i)) ?? null);
+    }
+    setToggling(null);
   }
 
   async function remove(item: PrintCatalogItemDTO) {
@@ -160,11 +196,47 @@ export default function AdminPrintCatalogPage() {
     await loadItems();
   }
 
-  if (!items) return <PageSpinner />;
+  const stats = useMemo(() => {
+    if (!items) return null;
+    const active = items.filter((i) => i.active);
+    const withMargin = items.filter((i) => i.wholesaleCostCents != null);
+    const avgMarginPct =
+      withMargin.length > 0
+        ? withMargin.reduce(
+            (sum, i) => sum + ((i.priceCents - (i.wholesaleCostCents ?? 0)) / Math.max(i.priceCents, 1)) * 100,
+            0
+          ) / withMargin.length
+        : null;
+    const avgPrice = items.length > 0 ? items.reduce((sum, i) => sum + i.priceCents, 0) / items.length : 0;
+    const noSku = items.filter((i) => !i.sku).length;
+    return {
+      total: items.length,
+      active: active.length,
+      avgPrice,
+      avgMarginPct,
+      noSku,
+    };
+  }, [items]);
+
+  const filtered = useMemo(() => {
+    if (!items) return [];
+    const q = search.trim().toLowerCase();
+    return items.filter((i) => {
+      const matchesSearch = !q || i.name.toLowerCase().includes(q) || (i.sku || "").toLowerCase().includes(q);
+      const matchesStatus =
+        statusFilter === "ALL" ||
+        (statusFilter === "ACTIVE" && i.active) ||
+        (statusFilter === "INACTIVE" && !i.active) ||
+        (statusFilter === "NO_SKU" && !i.sku);
+      return matchesSearch && matchesStatus;
+    });
+  }, [items, search, statusFilter]);
+
+  if (!items || !stats) return <PageSpinner />;
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-serif text-2xl font-semibold">Catalogue impression</h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -178,6 +250,23 @@ export default function AdminPrintCatalogPage() {
         </button>
       </div>
 
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatCard label="Produits actifs" value={`${stats.active} / ${stats.total}`} />
+        <StatCard label="Prix de vente moyen" value={formatMoney(stats.avgPrice)} />
+        <StatCard
+          label="Marge moyenne"
+          value={stats.avgMarginPct != null ? `${Math.round(stats.avgMarginPct)} %` : "—"}
+          tone={
+            stats.avgMarginPct == null ? undefined : stats.avgMarginPct < 20 ? "amber" : "green"
+          }
+        />
+        <StatCard
+          label="Sans SKU Prodigi"
+          value={String(stats.noSku)}
+          tone={stats.noSku > 0 ? "amber" : undefined}
+        />
+      </div>
+
       <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
         Le SKU correspond au SKU Prodigi (ex: <code>GLOBAL-CAN-10x10</code>) — renseigne-le pour pouvoir
         resynchroniser le coût de revient réel. Le prix de vente reste toujours fixé ici à la main, avec
@@ -186,65 +275,145 @@ export default function AdminPrintCatalogPage() {
 
       {prodigiWarning && (
         <div className="mt-4 flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <span>Synchronisation Prodigi : {prodigiWarning}</span>
+          <span className="break-words">Synchronisation Prodigi : {prodigiWarning}</span>
           <button onClick={() => setProdigiWarning(null)} className="shrink-0 text-amber-500 hover:text-amber-700">
             ✕
           </button>
         </div>
       )}
 
-      <div className="mt-6 space-y-3">
-        {items.length === 0 && (
-          <p className="text-sm text-gray-500">Aucun produit pour le moment — crée le premier.</p>
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="w-56 shrink-0">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher (nom, SKU)"
+            className="input"
+          />
+        </div>
+        <div className="w-48 shrink-0">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            className="input"
+          >
+            <option value="ALL">Tous les statuts</option>
+            <option value="ACTIVE">Actifs</option>
+            <option value="INACTIVE">Désactivés</option>
+            <option value="NO_SKU">Sans SKU Prodigi</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="mt-4 divide-y divide-gray-100 rounded-xl border border-gray-200">
+        {filtered.length === 0 && (
+          <div className="flex flex-col items-center gap-3 p-12 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-50 text-gray-300">
+              <IconPrinter />
+            </div>
+            <p className="text-sm text-gray-500">
+              {items.length === 0
+                ? "Aucun produit pour le moment — crée le premier."
+                : "Aucun produit ne correspond à ta recherche."}
+            </p>
+          </div>
         )}
-        {items.map((item) => {
+        {filtered.map((item) => {
           const marginCents = item.wholesaleCostCents != null ? item.priceCents - item.wholesaleCostCents : null;
+          const tone = marginCents != null ? marginTone(marginCents, item.priceCents) : null;
           return (
             <div
               key={item.id}
-              className={`card flex items-center justify-between ${!item.active ? "opacity-50" : ""}`}
+              className={`flex flex-wrap items-center justify-between gap-3 p-4 ${!item.active ? "bg-gray-50/60" : ""}`}
             >
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="font-medium">{item.name}</p>
-                  {!item.active && (
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">Désactivé</span>
-                  )}
-                  {!item.sku && (
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
-                      Sans SKU Prodigi
-                    </span>
-                  )}
+              <div className="flex min-w-0 items-center gap-3">
+                {item.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={item.imageUrl}
+                    alt=""
+                    className="h-11 w-11 shrink-0 rounded-lg border border-gray-200 object-cover"
+                  />
+                ) : (
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+                    <IconPrinter small />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="flex flex-wrap items-center gap-1.5 truncate font-medium text-gray-900">
+                    {item.name}
+                    {!item.active && (
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+                        Désactivé
+                      </span>
+                    )}
+                    {!item.sku && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                        Sans SKU Prodigi
+                      </span>
+                    )}
+                  </p>
+                  <p className="truncate text-sm text-gray-500">
+                    {item.sku ? <code className="text-gray-600">{item.sku}</code> : item.description || "—"}
+                  </p>
                 </div>
-                <p className="mt-1 text-sm text-gray-500">
-                  {fromCents(item.priceCents)}€ vendu
-                  {item.wholesaleCostCents != null && (
-                    <>
-                      {" "}
-                      · {fromCents(item.wholesaleCostCents)}€ coût Prodigi
-                      {marginCents != null && ` · ${fromCents(marginCents)}€ de marge`}
-                    </>
-                  )}
-                  {item.sku && ` · SKU ${item.sku}`}
-                </p>
               </div>
-              <div className="flex shrink-0 gap-2">
+
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                <div className="text-right">
+                  <p className="font-medium text-gray-900">{formatMoney(item.priceCents)}</p>
+                  <p className="text-xs text-gray-400">
+                    {item.wholesaleCostCents != null ? `coût ${formatMoney(item.wholesaleCostCents)}` : "coût inconnu"}
+                  </p>
+                </div>
+
+                {marginCents != null && tone && (
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${tone.bg} ${tone.text}`}>
+                    {marginCents >= 0 ? "+" : ""}
+                    {formatMoney(marginCents)}
+                  </span>
+                )}
+
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={item.active}
+                  disabled={toggling === item.id}
+                  onClick={() => toggleActive(item)}
+                  title={item.active ? "Désactiver (masquer des galeries)" : "Activer (afficher dans les galeries)"}
+                  className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:opacity-50 ${
+                    item.active ? "bg-green-600" : "bg-gray-300"
+                  }`}
+                >
+                  <span
+                    className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                      item.active ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+
                 {item.sku && (
                   <button
                     type="button"
-                    className="btn-secondary text-sm"
-                    disabled={resyncing}
+                    disabled={resyncing === item.id}
                     onClick={() => resync(item)}
+                    className="flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
                   >
-                    Resynchroniser
+                    {resyncing === item.id ? <IconSpinner /> : <IconRefresh />}
+                    {resyncing === item.id ? "Synchronisation..." : "Resynchroniser"}
                   </button>
                 )}
-                <button type="button" className="btn-secondary text-sm" onClick={() => openEdit(item)}>
+                <button
+                  type="button"
+                  className="rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                  onClick={() => openEdit(item)}
+                >
                   Modifier
                 </button>
                 <button
                   type="button"
-                  className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+                  className="rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-100"
                   onClick={() => remove(item)}
                 >
                   Supprimer
@@ -255,24 +424,96 @@ export default function AdminPrintCatalogPage() {
         })}
       </div>
 
-      <Modal
+      <ProductModal
         open={modalOpen}
+        form={form}
+        setForm={setForm}
+        saving={saving}
+        error={error}
         onClose={() => setModalOpen(false)}
-        title={form.id ? "Modifier le produit" : "Nouveau produit"}
-        widthClassName="max-w-2xl"
-        footer={
-          <>
-            <button type="button" className="btn-secondary text-sm" onClick={() => setModalOpen(false)}>
-              Annuler
-            </button>
-            <button type="button" className="btn-primary text-sm" disabled={saving} onClick={save}>
-              {saving ? "Enregistrement..." : "Enregistrer"}
-            </button>
-          </>
-        }
+        onSave={save}
+      />
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "amber" | "green";
+}) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <p className="text-xs font-medium text-gray-500">{label}</p>
+      <p
+        className={`mt-1 text-xl font-semibold ${
+          tone === "amber" ? "text-amber-600" : tone === "green" ? "text-green-600" : "text-gray-900"
+        }`}
       >
-        <div className="space-y-4">
-          <div>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function ProductModal({
+  open,
+  form,
+  setForm,
+  saving,
+  error,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  form: FormState;
+  setForm: (f: FormState) => void;
+  saving: boolean;
+  error: string | null;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const priceCents = toCents(form.price);
+  const costCents = form.wholesaleCost.trim() ? toCents(form.wholesaleCost) : null;
+  const marginCents = costCents != null ? priceCents - costCents : null;
+  const marginPct = marginCents != null && priceCents > 0 ? Math.round((marginCents / priceCents) * 100) : null;
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={form.id ? "Modifier le produit" : "Nouveau produit"}
+      widthClassName="max-w-2xl"
+      footer={
+        <>
+          <button type="button" className="btn-secondary text-sm" onClick={onClose}>
+            Annuler
+          </button>
+          <button type="button" className="btn-primary text-sm" disabled={saving} onClick={onSave}>
+            {saving ? "Enregistrement..." : "Enregistrer"}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        <div className="flex items-center gap-3">
+          {form.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={form.imageUrl}
+              alt=""
+              className="h-14 w-14 shrink-0 rounded-lg border border-gray-200 object-cover"
+            />
+          ) : (
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+              <IconPrinter />
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
             <label className="mb-1 block text-sm font-medium">Nom</label>
             <input
               className="input"
@@ -281,16 +522,18 @@ export default function AdminPrintCatalogPage() {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
           </div>
+        </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium">Description</label>
-            <input
-              className="input"
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-            />
-          </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium">Description</label>
+          <input
+            className="input"
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+          />
+        </div>
 
+        <div className="rounded-lg border border-gray-200 p-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-sm font-medium">Prix de vente (€)</label>
@@ -314,39 +557,89 @@ export default function AdminPrintCatalogPage() {
               />
             </div>
           </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium">SKU Prodigi</label>
-            <input
-              className="input"
-              placeholder="GLOBAL-CAN-10x10"
-              value={form.sku}
-              onChange={(e) => setForm({ ...form, sku: e.target.value })}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium">Image (URL)</label>
-            <input
-              className="input"
-              placeholder="https://..."
-              value={form.imageUrl}
-              onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
-            />
-          </div>
-
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.active}
-              onChange={(e) => setForm({ ...form, active: e.target.checked })}
-            />
-            Actif (visible dans les galeries)
-          </label>
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {/* Marge calculée en direct pendant la saisie — évite d'avoir à enregistrer pour
+              découvrir qu'un prix fixé à la va-vite laisse une marge nulle voire négative. */}
+          <p className="mt-2 text-sm">
+            Marge :{" "}
+            {marginCents != null ? (
+              <span
+                className={`font-medium ${
+                  marginCents < 0
+                    ? "text-red-600"
+                    : marginPct != null && marginPct < 20
+                      ? "text-amber-600"
+                      : "text-green-600"
+                }`}
+              >
+                {marginCents >= 0 ? "+" : ""}
+                {formatMoney(marginCents)} {marginPct != null && `(${marginPct} %)`}
+              </span>
+            ) : (
+              <span className="text-gray-400">renseigne un coût de revient pour la voir</span>
+            )}
+          </p>
         </div>
-      </Modal>
-    </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium">SKU Prodigi</label>
+          <input
+            className="input"
+            placeholder="GLOBAL-CAN-10x10"
+            value={form.sku}
+            onChange={(e) => setForm({ ...form, sku: e.target.value })}
+          />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium">Image (URL)</label>
+          <input
+            className="input"
+            placeholder="https://..."
+            value={form.imageUrl}
+            onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
+          />
+        </div>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.active}
+            onChange={(e) => setForm({ ...form, active: e.target.checked })}
+          />
+          Actif (visible dans les galeries)
+        </label>
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+      </div>
+    </Modal>
   );
+}
+
+function IconPrinter({ small }: { small?: boolean }) {
+  const size = small ? 18 : 22;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M6 9V3h12v6" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="4" y="9" width="16" height="8" rx="1.5" />
+      <path d="M6 13h12v8H6z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 16h8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconRefresh() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path
+        d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M18 3v4h-4M6 21v-4h4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconSpinner() {
+  return <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />;
 }
