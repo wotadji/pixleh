@@ -12,6 +12,18 @@ interface ContractDTO {
   createdAt: string;
   client: { name: string } | null;
   archived: boolean;
+  amountCents: number | null;
+}
+
+interface InvoiceSummary {
+  contractId: string | null;
+  totalCents: number;
+  amountPaidCents: number;
+  status: string;
+}
+
+function formatMoney(cents: number) {
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(cents / 100);
 }
 
 const PAGE_SIZE = 8;
@@ -48,6 +60,11 @@ export default function ContractsPage() {
   };
 
   const [contracts, setContracts] = useState<ContractDTO[]>([]);
+  // Factures liées aux contrats (31/07/2026, demande d'Adriel : suivi facturé/payé par
+  // contrat) — récupérées séparément de /api/invoices puis agrégées par contractId, plutôt
+  // que d'alourdir GET /api/contracts avec une jointure. cancelled exclu du cumul facturé :
+  // une facture annulée ne doit pas compter dans ce qui a été facturé pour le contrat.
+  const [invoiceSummaries, setInvoiceSummaries] = useState<InvoiceSummary[]>([]);
   const [pageLoading, setPageLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ContractDTO["status"] | "ALL">("ALL");
@@ -59,11 +76,36 @@ export default function ContractsPage() {
   const [archiving, setArchiving] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/contracts")
-      .then((r) => r.json())
-      .then((d) => setContracts(d.contracts || []))
+    Promise.all([
+      fetch("/api/contracts").then((r) => r.json()),
+      fetch("/api/invoices").then((r) => r.json()),
+    ])
+      .then(([contractsData, invoicesData]) => {
+        setContracts(contractsData.contracts || []);
+        setInvoiceSummaries(
+          (invoicesData.invoices || [])
+            .filter((i: InvoiceSummary) => i.contractId)
+            .map((i: InvoiceSummary) => ({
+              contractId: i.contractId,
+              totalCents: i.totalCents,
+              amountPaidCents: i.amountPaidCents,
+              status: i.status,
+            }))
+        );
+      })
       .finally(() => setPageLoading(false));
   }, []);
+
+  /** Cumul facturé/payé pour un contrat donné (voir invoiceSummaries ci-dessus) — les factures
+   * CANCELLED sont exclues du cumul. */
+  function billingSummary(contractId: string): { billedCents: number; paidCents: number } | null {
+    const rows = invoiceSummaries.filter((s) => s.contractId === contractId && s.status !== "CANCELLED");
+    if (rows.length === 0) return null;
+    return {
+      billedCents: rows.reduce((sum, r) => sum + r.totalCents, 0),
+      paidCents: rows.reduce((sum, r) => sum + r.amountPaidCents, 0),
+    };
+  }
 
   async function toggleArchived(contract: ContractDTO, archived: boolean) {
     setArchiving(contract.id);
@@ -203,7 +245,23 @@ export default function ContractsPage() {
                 </p>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              {c.amountCents !== null &&
+                (() => {
+                  const billing = billingSummary(c.id);
+                  return (
+                    <div className="text-right">
+                      <p className="font-medium text-gray-900">{formatMoney(c.amountCents!)}</p>
+                      {billing && (
+                        <p className="text-xs text-gray-400">
+                          {t("contracts.billedOf")
+                            .replace("{billed}", formatMoney(billing.billedCents))
+                            .replace("{paid}", formatMoney(billing.paidCents))}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
               <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[c.status]}`}>
                 {STATUS_LABELS[c.status]}
               </span>
@@ -216,13 +274,22 @@ export default function ContractsPage() {
                 </Link>
               )}
               {c.status === "SIGNED" && (
-                <a
-                  href={`/api/contracts/${c.id}/pdf`}
-                  className="flex items-center gap-1 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
-                >
-                  <IconDownload />
-                  {t("contracts.download")}
-                </a>
+                <>
+                  <a
+                    href={`/api/contracts/${c.id}/pdf`}
+                    className="flex items-center gap-1 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                  >
+                    <IconDownload />
+                    {t("contracts.download")}
+                  </a>
+                  <Link
+                    href={`/dashboard/invoices/new?contractId=${c.id}`}
+                    className="flex items-center gap-1 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                  >
+                    <IconInvoiceSmall />
+                    {t("contracts.invoice")}
+                  </Link>
+                </>
               )}
               <Link
                 href={`/c/${c.id}`}
@@ -307,6 +374,17 @@ function IconArchive() {
       <path d="M5 7v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7" strokeLinejoin="round" />
       <rect x="3" y="4" width="18" height="3" rx="1" />
       <path d="M10 12h4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Icône du bouton "Facturer" (lien vers /dashboard/invoices/new?contractId=..., 31/07/2026
+ * demandé par Adriel : créer une facture directement liée au contrat depuis sa fiche). */
+function IconInvoiceSmall() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M7 3h10a1 1 0 0 1 1 1v16l-2.5-1.5L13 20l-2.5-1.5L8 20l-2.5-1.5L3 20V6a1 1 0 0 1 1-1h1" strokeLinejoin="round" />
+      <path d="M8 9h8M8 13h8M8 17h4" strokeLinecap="round" />
     </svg>
   );
 }

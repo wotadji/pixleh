@@ -85,6 +85,7 @@ export default function NewContractPage() {
           studioSignatureDataUrl: null,
           place: "",
           template: DEFAULT_CONTRACT_TEMPLATE,
+          amountCents: null,
         }}
         submitLabel={t("contractForm.create")}
         submittingLabel={t("common.creating")}

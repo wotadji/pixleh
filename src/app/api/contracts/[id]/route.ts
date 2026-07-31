@@ -19,13 +19,18 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     });
     if (!contract) throw new AccessError("Contrat introuvable", 404);
 
-    // studioSignatureDataUrl, place et template n'existent pas encore dans le Prisma Client
-    // généré du sandbox (voir commentaires sur ces champs dans schema.prisma) — lus à part via
-    // $queryRaw, même workaround que Gallery.publishedAt.
+    // studioSignatureDataUrl, place, template et amountCents n'existent pas encore dans le
+    // Prisma Client généré du sandbox (voir commentaires sur ces champs dans schema.prisma) —
+    // lus à part via $queryRaw, même workaround que Gallery.publishedAt.
     const [row] = await prisma.$queryRaw<
-      { studioSignatureDataUrl: string | null; place: string | null; template: string | null }[]
+      {
+        studioSignatureDataUrl: string | null;
+        place: string | null;
+        template: string | null;
+        amountCents: number | null;
+      }[]
     >`
-      SELECT "studioSignatureDataUrl", "place", "template" FROM "Contract" WHERE id = ${contract.id}
+      SELECT "studioSignatureDataUrl", "place", "template", "amountCents" FROM "Contract" WHERE id = ${contract.id}
     `;
 
     return NextResponse.json({
@@ -34,6 +39,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         studioSignatureDataUrl: row?.studioSignatureDataUrl || null,
         place: row?.place || null,
         template: row?.template || null,
+        amountCents: row?.amountCents ?? null,
       },
     });
   } catch (e) {
@@ -64,9 +70,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
+    // amountCents n'existe pas dans le type d'entrée du Prisma Client généré du sandbox (voir
+    // commentaire sur ce champ dans schema.prisma) — exclu de l'objet passé à `update`, écrit
+    // à part via $executeRaw juste en dessous.
+    const { amountCents, ...updateData } = parsed.data;
     const contract = await prisma.contract.update({
       where: { id: existing.id },
-      data: parsed.data,
+      data: updateData,
     });
 
     // studioSignatureDataUrl n'existe pas encore dans le Prisma Client généré du sandbox
@@ -81,6 +91,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
     if (isContractTemplateId(body.template)) {
       await prisma.$executeRaw`UPDATE "Contract" SET "template" = ${body.template} WHERE id = ${contract.id}`;
+    }
+    if (body.amountCents !== undefined) {
+      await prisma.$executeRaw`UPDATE "Contract" SET "amountCents" = ${amountCents ?? null} WHERE id = ${contract.id}`;
     }
 
     return NextResponse.json({ contract });

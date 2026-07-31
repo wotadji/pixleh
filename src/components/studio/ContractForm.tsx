@@ -19,6 +19,10 @@ export interface ContractFormValues {
   studioSignatureDataUrl: string | null;
   place: string;
   template: ContractTemplateId;
+  /** Montant total convenu du contrat, en centimes (31/07/2026, demande d'Adriel : sert de
+   * référence au suivi facturé/payé via les factures liées, voir Contract.amountCents).
+   * null = pas de montant renseigné. */
+  amountCents: number | null;
 }
 
 /** Aperçu miniature (CSS pur) de chaque template — donne une idée du placement du logo, du
@@ -97,6 +101,7 @@ export function ContractForm({
     bodyHtml: initial.bodyHtml,
     place: initial.place,
     template: initial.template || DEFAULT_CONTRACT_TEMPLATE,
+    amountCents: initial.amountCents,
   });
   const [studioSignatureDataUrl, setStudioSignatureDataUrl] = useState(initial.studioSignatureDataUrl);
   // Tant qu'une signature existe déjà (mode édition) ET n'a pas été explicitement remplacée,
@@ -198,6 +203,24 @@ export function ContractForm({
             <p className="input flex items-center bg-gray-50 text-gray-500">
               {createdAtDisplay || t("contractForm.createdAtOnSave")}
             </p>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">{t("contractForm.amountLabel")}</label>
+            <input
+              type="number"
+              step="0.01"
+              min={0}
+              placeholder={t("contractForm.amountPlaceholder")}
+              className="input"
+              value={form.amountCents !== null ? form.amountCents / 100 : ""}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  amountCents: e.target.value === "" ? null : Math.round(Number(e.target.value) * 100),
+                })
+              }
+            />
+            <p className="mt-1 text-xs text-gray-400">{t("contractForm.amountHelp")}</p>
           </div>
         </div>
 

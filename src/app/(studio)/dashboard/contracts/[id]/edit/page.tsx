@@ -21,6 +21,7 @@ interface ContractDTO {
   studioSignatureDataUrl: string | null;
   place: string | null;
   template: string | null;
+  amountCents: number | null;
   createdAt: string;
 }
 
@@ -96,6 +97,7 @@ export default function EditContractPage() {
               studioSignatureDataUrl: contract.studioSignatureDataUrl,
               place: contract.place || "",
               template: isContractTemplateId(contract.template) ? contract.template : DEFAULT_CONTRACT_TEMPLATE,
+              amountCents: contract.amountCents ?? null,
             }}
             submitLabel={t("contractForm.save")}
             submittingLabel={t("contractForm.saving")}

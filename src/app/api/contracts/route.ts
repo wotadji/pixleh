@@ -43,8 +43,12 @@ export async function POST(req: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
+    // amountCents n'existe pas dans le type d'entrée du Prisma Client généré du sandbox (voir
+    // commentaire sur ce champ dans schema.prisma) — exclu de l'objet passé à `create`, écrit
+    // à part via $executeRaw juste en dessous, même workaround que les autres champs récents.
+    const { amountCents, ...createData } = parsed.data;
     const contract = await prisma.contract.create({
-      data: { studioId: session.user.studioId, status: "SENT", ...parsed.data },
+      data: { studioId: session.user.studioId, status: "SENT", ...createData },
     });
     // studioSignatureDataUrl n'existe pas encore dans le Prisma Client généré du sandbox
     // (voir commentaire sur ce champ dans schema.prisma) — écrit à part via $executeRaw,
@@ -60,6 +64,10 @@ export async function POST(req: Request) {
     // valeur invalide/absente : le défaut SQL ("classic") s'applique déjà à la création.
     if (isContractTemplateId(body.template)) {
       await prisma.$executeRaw`UPDATE "Contract" SET "template" = ${body.template} WHERE id = ${contract.id}`;
+    }
+    // amountCents idem — même workaround (voir schema.prisma).
+    if (amountCents !== undefined && amountCents !== null) {
+      await prisma.$executeRaw`UPDATE "Contract" SET "amountCents" = ${amountCents} WHERE id = ${contract.id}`;
     }
 
     // Si le studio a choisi un client, on lui envoie directement le lien de signature par

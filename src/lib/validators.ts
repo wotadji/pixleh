@@ -79,6 +79,10 @@ export const contractSchema = z.object({
   clientId: z.string().optional().nullable(),
   title: z.string().min(1),
   bodyHtml: z.string().min(1),
+  // Montant total convenu du contrat, en centimes (31/07/2026, demande d'Adriel : sert de
+  // référence au suivi facturé/payé via les factures liées, voir Contract.amountCents dans
+  // schema.prisma). Nullable : un contrat n'a pas toujours un prix figé à la rédaction.
+  amountCents: z.number().int().nonnegative().optional().nullable(),
 });
 
 export const invoiceSchema = z.object({
