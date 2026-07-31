@@ -241,7 +241,7 @@ export default function AdminOrdersPage() {
             tableau et mettre plutot [...] laba" — les produits commandés ont leur propre
             colonne au lieu d'être renvoyés en dessous du client sur toute la largeur). */}
         {filtered.length > 0 && (
-          <div className="hidden grid-cols-[minmax(0,1.3fr)_minmax(0,1.4fr)_auto] gap-4 border-b border-gray-100 bg-gray-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:grid">
+          <div className="hidden grid-cols-[minmax(0,280px)_minmax(0,1.6fr)_auto] gap-3 border-b border-gray-100 bg-gray-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:grid">
             <span>Client</span>
             <span>Produits</span>
             <span className="text-right">Montant</span>
@@ -263,7 +263,7 @@ export default function AdminOrdersPage() {
             return (
               <div
                 key={o.id}
-                className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1.4fr)_auto] sm:items-center sm:gap-4"
+                className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-[minmax(0,280px)_minmax(0,1.6fr)_auto] sm:items-center sm:gap-3"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700">
