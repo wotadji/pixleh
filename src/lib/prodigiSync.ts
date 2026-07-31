@@ -65,7 +65,17 @@ export async function getProdigiQuote(params: {
 
     const data = await res.json().catch(() => null);
     if (!res.ok || !data) {
-      return { synced: false, error: `Prodigi a répondu ${res.status}` };
+      // On remonte le détail brut renvoyé par Prodigi (outcome + éventuel message/erreurs) au
+      // lieu d'un simple code HTTP — un 400 seul ne dit pas SI c'est le SKU, l'attribut requis
+      // manquant (ex: finition papier) ou le pays de destination non supporté par ce produit.
+      const detail =
+        data?.error?.message || data?.message || (data?.outcome ? `outcome: ${data.outcome}` : null);
+      return {
+        synced: false,
+        error: `Prodigi a répondu ${res.status}${detail ? ` — ${detail}` : ""}${
+          data ? ` (${JSON.stringify(data).slice(0, 300)})` : ""
+        }`,
+      };
     }
     if (data.outcome !== "Created" && data.outcome !== "CreatedWithIssues") {
       return { synced: false, error: `Réponse Prodigi inattendue (${data.outcome ?? "inconnue"})` };
