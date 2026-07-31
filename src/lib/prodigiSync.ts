@@ -53,46 +53,82 @@ export async function getProdigiQuote(params: {
   const currencyCode = params.currencyCode || "EUR";
 
   try {
-    const res = await fetch(`${baseUrl}/quotes`, {
-      method: "POST",
-      headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        destinationCountryCode,
-        currencyCode,
-        items: [{ sku: params.sku, copies: 1, attributes: {}, assets: [{ printArea: "default" }] }],
-      }),
-    });
+    // Beaucoup de SKUs Prodigi exigent des attributs produit (ex: finition papier "finish" pour
+    // les tirages photo, "wrap" pour les toiles, couleur de cadre...) qu'on ne connaît pas à
+    // l'avance. Premier essai sans attribut ; si Prodigi répond "MissingRequiredAttributes", on
+    // retente UNE fois avec la première valeur valide qu'il propose pour chaque attribut manquant
+    // (ex: finish=Lustre) plutôt que d'échouer — un devis avec la finition par défaut reste un
+    // coût de revient représentatif pour fixer le prix de vente.
+    let attributes: Record<string, string> = {};
+    let lastData: any = null;
+    let lastStatus = 0;
 
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data) {
-      // On remonte le détail brut renvoyé par Prodigi (outcome + éventuel message/erreurs) au
-      // lieu d'un simple code HTTP — un 400 seul ne dit pas SI c'est le SKU, l'attribut requis
-      // manquant (ex: finition papier) ou le pays de destination non supporté par ce produit.
-      const detail =
-        data?.error?.message || data?.message || (data?.outcome ? `outcome: ${data.outcome}` : null);
-      return {
-        synced: false,
-        error: `Prodigi a répondu ${res.status}${detail ? ` — ${detail}` : ""}${
-          data ? ` (${JSON.stringify(data).slice(0, 300)})` : ""
-        }`,
-      };
-    }
-    if (data.outcome !== "Created" && data.outcome !== "CreatedWithIssues") {
-      return { synced: false, error: `Réponse Prodigi inattendue (${data.outcome ?? "inconnue"})` };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = await fetch(`${baseUrl}/quotes`, {
+        method: "POST",
+        headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          destinationCountryCode,
+          currencyCode,
+          items: [{ sku: params.sku, copies: 1, attributes, assets: [{ printArea: "default" }] }],
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      lastData = data;
+      lastStatus = res.status;
+
+      if (res.ok && data) {
+        if (data.outcome !== "Created" && data.outcome !== "CreatedWithIssues") {
+          return { synced: false, error: `Réponse Prodigi inattendue (${data.outcome ?? "inconnue"})` };
+        }
+        // On prend le premier devis (première méthode d'envoi renvoyée, aucune n'étant précisée
+        // dans la requête) et son premier item (un seul SKU demandé) — voir doc "Quote object".
+        const item = data.quotes?.[0]?.items?.[0];
+        const amount = item?.unitCost?.amount;
+        if (!amount) {
+          return { synced: false, error: "Coût de revient introuvable dans la réponse Prodigi" };
+        }
+        return {
+          synced: true,
+          unitCostCents: Math.round(parseFloat(amount) * 100),
+          currency: item.unitCost.currency || currencyCode,
+        };
+      }
+
+      // Tente d'extraire les attributs manquants (forme observée : data.failures["items[0].attributes"]
+      // = [{ code: "MissingRequiredAttributes", missingItems: { attributes: [{ name, validValues }] } }]).
+      if (attempt === 0 && data?.outcome === "ValidationFailed" && data?.failures) {
+        const missingAttrs: Array<{ name: string; validValues?: string[] }> = [];
+        for (const failureList of Object.values(data.failures) as any[]) {
+          for (const failure of Array.isArray(failureList) ? failureList : []) {
+            if (failure?.code === "MissingRequiredAttributes") {
+              for (const attr of failure?.missingItems?.attributes ?? []) {
+                if (attr?.name) missingAttrs.push(attr);
+              }
+            }
+          }
+        }
+        if (missingAttrs.length > 0) {
+          attributes = { ...attributes };
+          for (const attr of missingAttrs) {
+            if (attr.validValues?.[0]) attributes[attr.name] = attr.validValues[0];
+          }
+          continue; // deuxième et dernière tentative avec ces attributs par défaut
+        }
+      }
+      break;
     }
 
-    // On prend le premier devis (première méthode d'envoi renvoyée, aucune n'étant précisée
-    // dans la requête) et son premier item (un seul SKU demandé) — voir la doc "Quote object".
-    const item = data.quotes?.[0]?.items?.[0];
-    const amount = item?.unitCost?.amount;
-    if (!amount) {
-      return { synced: false, error: "Coût de revient introuvable dans la réponse Prodigi" };
-    }
-
+    // On remonte le détail brut renvoyé par Prodigi (outcome + éventuel message/erreurs) au lieu
+    // d'un simple code HTTP — un 400 seul ne dit pas SI c'est le SKU, un attribut requis manquant
+    // ou le pays de destination non supporté par ce produit.
+    const detail =
+      lastData?.error?.message || lastData?.message || (lastData?.outcome ? `outcome: ${lastData.outcome}` : null);
     return {
-      synced: true,
-      unitCostCents: Math.round(parseFloat(amount) * 100),
-      currency: item.unitCost.currency || currencyCode,
+      synced: false,
+      error: `Prodigi a répondu ${lastStatus}${detail ? ` — ${detail}` : ""}${
+        lastData ? ` (${JSON.stringify(lastData).slice(0, 300)})` : ""
+      }`,
     };
   } catch (e) {
     console.error("Échec de synchronisation Prodigi pour le SKU", params.sku, e);
