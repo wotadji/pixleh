@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { PixlehLogo } from "@/components/marketing/PixlehLogo";
 import { PayInvoiceButton } from "@/components/site/PayInvoiceButton";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +12,34 @@ interface LineItem {
   unitPriceCents: number;
 }
 
+const STATUS_STYLES: Record<string, string> = {
+  DRAFT: "bg-gray-100 text-gray-500",
+  SENT: "bg-amber-50 text-amber-700",
+  PAID: "bg-green-50 text-green-700",
+  OVERDUE: "bg-red-50 text-red-600",
+  CANCELLED: "bg-gray-100 text-gray-400",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Brouillon",
+  SENT: "En attente de paiement",
+  PAID: "Payée",
+  OVERDUE: "En retard",
+  CANCELLED: "Annulée",
+};
+
+function formatMoney(cents: number, currency: string) {
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency }).format(cents / 100);
+}
+
+/**
+ * Page publique de paiement d'une facture — refonte du 31/07/2026 (demande d'Adriel : amener
+ * la facturation au même niveau de rigueur/professionnalisme que la page de signature de
+ * contrat /c/[id], voir ce fichier pour la mise en page de référence : lettrine minimale,
+ * carte de contenu, bandeau vert une fois réglée, bouton de téléchargement PDF). Lit Prisma
+ * directement (Server Component) plutôt que de passer par /api/invoices/[id], qui est
+ * désormais authentifié — même logique que /c/[id].
+ */
 export default async function InvoicePage({ params }: { params: { id: string } }) {
   const invoice = await prisma.invoice.findUnique({
     where: { id: params.id },
@@ -17,35 +47,193 @@ export default async function InvoicePage({ params }: { params: { id: string } }
   });
   if (!invoice) notFound();
 
+  // notes/amountPaidCents n'existent pas encore dans le Prisma Client généré du sandbox (voir
+  // schema.prisma) — lus à part via $queryRaw, même workaround que /c/[id].
+  const [row] = await prisma.$queryRaw<{ notes: string | null; amountPaidCents: number }[]>`
+    SELECT notes, "amountPaidCents" FROM "Invoice" WHERE id = ${invoice.id}
+  `;
+  const notes = row?.notes || null;
+  const amountPaidCents = row?.amountPaidCents ?? 0;
+  const balanceDue = invoice.totalCents - amountPaidCents;
+
   const lineItems = invoice.lineItems as unknown as LineItem[];
 
+  const emittedLine = `Émise le ${invoice.createdAt.toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })}${
+    invoice.dueDate
+      ? ` · Échéance le ${invoice.dueDate.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`
+      : ""
+  }`;
+
   return (
-    <div className="mx-auto max-w-xl px-6 py-16">
-      <p className="text-sm text-gray-500">{invoice.studio.name}</p>
-      <h1 className="font-serif text-2xl font-semibold">Facture {invoice.number}</h1>
+    <div className="flex min-h-screen flex-col bg-gray-50">
+      <header className="border-b border-gray-100 bg-white px-6 py-4">
+        <div className="mx-auto max-w-2xl">
+          <Link href="/">
+            <PixlehLogo size={22} />
+          </Link>
+        </div>
+      </header>
 
-      <div className="mt-6 divide-y divide-gray-100 rounded-xl border border-gray-200">
-        {lineItems.map((item, i) => (
-          <div key={i} className="flex justify-between p-4 text-sm">
-            <span>
-              {item.description} × {item.quantity}
+      <main className="flex-1 px-6 py-12">
+        <div className="mx-auto max-w-2xl">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              {invoice.studio.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={invoice.studio.logoUrl}
+                  alt={invoice.studio.name}
+                  className="h-6 w-6 rounded-full object-cover"
+                />
+              ) : (
+                <span
+                  className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold text-white"
+                  style={{ backgroundColor: invoice.studio.brandColor || "#7c3aed" }}
+                >
+                  {invoice.studio.name.slice(0, 1).toUpperCase()}
+                </span>
+              )}
+              <p className="text-sm text-gray-500">{invoice.studio.name}</p>
+            </div>
+            <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[invoice.status]}`}>
+              {STATUS_LABELS[invoice.status]}
             </span>
-            <span>{((item.unitPriceCents * item.quantity) / 100).toFixed(2)} €</span>
           </div>
-        ))}
-      </div>
+          <h1 className="mt-1 font-serif text-2xl font-semibold text-gray-900">Facture {invoice.number}</h1>
+          <p className="mt-2 text-xs text-gray-400">{emittedLine}</p>
 
-      <p className="mt-4 text-right text-lg font-semibold">
-        Total : {(invoice.totalCents / 100).toFixed(2)} €
-      </p>
+          {invoice.client && (
+            <div className="mt-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <p className="text-xs uppercase tracking-wide text-gray-400">Facturé à</p>
+              <p className="mt-1 text-sm font-medium text-gray-900">{invoice.client.name}</p>
+              {invoice.client.email && <p className="text-sm text-gray-500">{invoice.client.email}</p>}
+            </div>
+          )}
 
-      {invoice.status === "PAID" ? (
-        <p className="mt-6 rounded-lg bg-green-50 p-4 text-green-700">
-          Cette facture a été payée{invoice.paidAt ? ` le ${invoice.paidAt.toLocaleDateString("fr-FR")}` : ""}.
-        </p>
-      ) : (
-        <PayInvoiceButton invoiceId={invoice.id} />
-      )}
+          <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="grid grid-cols-[1fr_50px_90px_90px] gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-gray-400">
+              <span>Description</span>
+              <span className="text-center">Qté</span>
+              <span className="text-right">Prix unit.</span>
+              <span className="text-right">Total</span>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {lineItems.map((item, i) => (
+                <div key={i} className="grid grid-cols-[1fr_50px_90px_90px] gap-2 px-4 py-3 text-sm">
+                  <span className="text-gray-700">{item.description}</span>
+                  <span className="text-center text-gray-500">{item.quantity}</span>
+                  <span className="text-right text-gray-500">{formatMoney(item.unitPriceCents, invoice.currency)}</span>
+                  <span className="text-right font-medium text-gray-900">
+                    {formatMoney(item.unitPriceCents * item.quantity, invoice.currency)}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-gray-100 bg-gray-50 px-4 py-3">
+              <div className="flex justify-end">
+                <div className="w-56 space-y-1">
+                  <div className="flex justify-between text-base font-semibold text-gray-900">
+                    <span>Total</span>
+                    <span>{formatMoney(invoice.totalCents, invoice.currency)}</span>
+                  </div>
+                  {amountPaidCents > 0 && invoice.status !== "PAID" && (
+                    <>
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Déjà réglé</span>
+                        <span>{formatMoney(amountPaidCents, invoice.currency)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs font-medium text-amber-600">
+                        <span>Solde dû</span>
+                        <span>{formatMoney(balanceDue, invoice.currency)}</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {notes && (
+            <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <p className="text-xs uppercase tracking-wide text-gray-400">Notes</p>
+              <p className="mt-1 whitespace-pre-line text-sm text-gray-600">{notes}</p>
+            </div>
+          )}
+
+          {invoice.status === "PAID" ? (
+            <div className="mt-6 rounded-xl border border-green-100 bg-green-50 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-green-800">Facture payée</p>
+                  <p className="mt-1 text-sm text-green-700">
+                    {invoice.paidAt
+                      ? `Réglée le ${invoice.paidAt.toLocaleDateString("fr-FR", {
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                        })}.`
+                      : "Cette facture a été réglée."}
+                  </p>
+                </div>
+                <a
+                  href={`/api/invoices/${invoice.id}/pdf`}
+                  className="flex shrink-0 items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-green-800 shadow-sm hover:bg-green-100"
+                >
+                  <IconDownload />
+                  Télécharger le PDF
+                </a>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-gray-900">Paiement</p>
+                <a
+                  href={`/api/invoices/${invoice.id}/pdf`}
+                  className="flex shrink-0 items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                >
+                  <IconDownload />
+                  Télécharger le PDF
+                </a>
+              </div>
+              {invoice.status !== "CANCELLED" && <PayInvoiceButton invoiceId={invoice.id} />}
+            </div>
+          )}
+        </div>
+      </main>
+
+      <footer className="border-t border-gray-100 bg-white px-6 py-6">
+        <div className="mx-auto flex max-w-2xl flex-col items-center justify-between gap-3 text-xs text-gray-400 sm:flex-row">
+          <p>© {new Date().getFullYear()} pixleh — Groupe Lehwu</p>
+          <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1">
+            <Link href="/mentions-legales" target="_blank" className="hover:text-gray-600 hover:underline">
+              Mentions légales
+            </Link>
+            <Link href="/cgu" target="_blank" className="hover:text-gray-600 hover:underline">
+              CGU
+            </Link>
+            <Link href="/cgv" target="_blank" className="hover:text-gray-600 hover:underline">
+              CGV
+            </Link>
+            <Link href="/confidentialite" target="_blank" className="hover:text-gray-600 hover:underline">
+              Confidentialité
+            </Link>
+          </nav>
+        </div>
+      </footer>
     </div>
+  );
+}
+
+function IconDownload() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 19h16" strokeLinecap="round" />
+    </svg>
   );
 }
