@@ -14,14 +14,20 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     });
 
-    // archived n'existe pas encore dans le Prisma Client généré du sandbox (voir commentaire
-    // sur ce champ dans schema.prisma) — lu à part via $queryRaw, même workaround que
-    // studioSignatureDataUrl/place, puis fusionné dans la liste typée ci-dessus.
-    const archivedRows = await prisma.$queryRaw<{ id: string; archived: boolean }[]>`
-      SELECT id, archived FROM "Contract" WHERE "studioId" = ${session.user.studioId}
+    // archived/amountCents n'existent pas encore dans le Prisma Client généré du sandbox (voir
+    // commentaire sur ces champs dans schema.prisma) — lus à part via $queryRaw, même
+    // workaround que studioSignatureDataUrl/place, puis fusionnés dans la liste typée
+    // ci-dessus. amountCents (31/07/2026) sert au suivi facturé/payé affiché sur la liste des
+    // contrats et pré-remplit le formulaire de facture liée (voir InvoiceForm).
+    const extraRows = await prisma.$queryRaw<{ id: string; archived: boolean; amountCents: number | null }[]>`
+      SELECT id, archived, "amountCents" FROM "Contract" WHERE "studioId" = ${session.user.studioId}
     `;
-    const archivedById = new Map(archivedRows.map((r) => [r.id, r.archived]));
-    const withArchived = contracts.map((c) => ({ ...c, archived: archivedById.get(c.id) ?? false }));
+    const extraById = new Map(extraRows.map((r) => [r.id, r]));
+    const withArchived = contracts.map((c) => ({
+      ...c,
+      archived: extraById.get(c.id)?.archived ?? false,
+      amountCents: extraById.get(c.id)?.amountCents ?? null,
+    }));
 
     return NextResponse.json({ contracts: withArchived });
   } catch (e) {

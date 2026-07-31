@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { InvoiceForm, InvoiceFormValues } from "@/components/studio/InvoiceForm";
-import { DEFAULT_INVOICE_TEMPLATE } from "@/lib/invoiceTemplates";
+import { DEFAULT_INVOICE_TEMPLATE, isInvoiceTemplateId } from "@/lib/invoiceTemplates";
 
 interface ClientOption {
   id: string;
@@ -18,27 +18,36 @@ interface ContractOption {
   clientId: string | null;
   amountCents: number | null;
 }
+interface InvoiceDTO {
+  status: string;
+  client: { id: string } | null;
+  contractId: string | null;
+  dueDate: string | null;
+  lineItems: { description: string; quantity: number; unitPriceCents: number }[];
+  notes: string | null;
+  template: string | null;
+}
 
-export default function NewInvoicePage() {
+export default function EditInvoicePage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  // Deuxième point d'entrée demandé par Adriel : /dashboard/invoices/new?contractId=... —
-  // pré-remplit le contrat (et son client) depuis le bouton "Facturer" sur /dashboard/contracts.
-  const prefillContractId = searchParams.get("contractId") || "";
+  const params = useParams<{ id: string }>();
   const { t } = useLanguage();
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [contracts, setContracts] = useState<ContractOption[]>([]);
   const [studioBrandColor, setStudioBrandColor] = useState<string | null>(null);
+  const [invoice, setInvoice] = useState<InvoiceDTO | null>(null);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/clients").then((r) => r.json()),
       fetch("/api/settings").then((r) => r.json()),
       fetch("/api/contracts").then((r) => r.json()),
+      fetch(`/api/invoices/${params.id}`).then((r) => r.json()),
     ])
-      .then(([clientsData, settingsData, contractsData]) => {
+      .then(([clientsData, settingsData, contractsData, invoiceData]) => {
         setClients(clientsData.clients || []);
         setStudioBrandColor(settingsData.studio?.brandColor || null);
         setContracts(
@@ -49,18 +58,19 @@ export default function NewInvoicePage() {
             amountCents: c.amountCents,
           }))
         );
+        if (invoiceData.invoice) setInvoice(invoiceData.invoice);
+        else setNotFound(true);
       })
       .finally(() => setPageLoading(false));
-  }, []);
+  }, [params.id]);
 
   if (pageLoading) return <PageSpinner />;
-
-  const prefillContract = contracts.find((c) => c.id === prefillContractId);
+  if (notFound || !invoice) return <p className="text-sm text-gray-500">{t("invoiceForm.notFound")}</p>;
 
   async function handleSubmit(values: InvoiceFormValues) {
     setLoading(true);
-    const res = await fetch("/api/invoices", {
-      method: "POST",
+    const res = await fetch(`/api/invoices/${params.id}`, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         clientId: values.clientId || null,
@@ -77,13 +87,6 @@ export default function NewInvoicePage() {
       alert(data?.error || t("common.error"));
       return;
     }
-    if (values.clientId && !data.emailSent) {
-      alert(
-        data.emailError
-          ? `${t("invoiceForm.createdEmailFailed")} ${data.emailError}`
-          : t("invoiceForm.createdEmailFailedGeneric")
-      );
-    }
     router.push("/dashboard/invoices");
   }
 
@@ -92,26 +95,34 @@ export default function NewInvoicePage() {
       <Link href="/dashboard/invoices" className="text-sm text-gray-500 hover:text-gray-800">
         ← {t("invoices.title")}
       </Link>
-      <h1 className="mt-2 font-serif text-2xl font-semibold">{t("invoiceForm.title")}</h1>
-      <p className="mt-1 text-sm text-gray-500">{t("invoiceForm.subtitle")}</p>
+      <h1 className="mt-2 font-serif text-2xl font-semibold">{t("invoiceForm.editTitle")}</h1>
 
-      <InvoiceForm
-        clients={clients}
-        contracts={contracts}
-        studioBrandColor={studioBrandColor}
-        initial={{
-          clientId: prefillContract?.clientId || "",
-          contractId: prefillContractId,
-          dueDate: "",
-          lineItems: [{ description: "", quantity: 1, unitPriceCents: 0 }],
-          notes: "",
-          template: DEFAULT_INVOICE_TEMPLATE,
-        }}
-        submitLabel={t("invoiceForm.create")}
-        submittingLabel={t("common.creating")}
-        submitting={loading}
-        onSubmit={handleSubmit}
-      />
+      {invoice.status === "PAID" ? (
+        <p className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-6 text-sm text-gray-600">
+          {t("invoiceForm.alreadyPaid")}
+        </p>
+      ) : (
+        <>
+          <p className="mt-1 text-sm text-gray-500">{t("invoiceForm.editSubtitle")}</p>
+          <InvoiceForm
+            clients={clients}
+            contracts={contracts}
+            studioBrandColor={studioBrandColor}
+            initial={{
+              clientId: invoice.client?.id || "",
+              contractId: invoice.contractId || "",
+              dueDate: invoice.dueDate ? invoice.dueDate.slice(0, 10) : "",
+              lineItems: invoice.lineItems?.length ? invoice.lineItems : [{ description: "", quantity: 1, unitPriceCents: 0 }],
+              notes: invoice.notes || "",
+              template: isInvoiceTemplateId(invoice.template) ? invoice.template : DEFAULT_INVOICE_TEMPLATE,
+            }}
+            submitLabel={t("invoiceForm.save")}
+            submittingLabel={t("invoiceForm.saving")}
+            submitting={loading}
+            onSubmit={handleSubmit}
+          />
+        </>
+      )}
     </div>
   );
 }
