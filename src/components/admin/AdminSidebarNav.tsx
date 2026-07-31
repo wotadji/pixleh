@@ -9,6 +9,7 @@ import { usePathname } from "next/navigation";
 const ICONS: Record<string, JSX.Element> = {
   "/admin": <IconGrid />,
   "/admin/studios": <IconBuilding />,
+  "/admin/orders": <IconBag />,
   "/admin/site": <IconLayout />,
   "/admin/plans": <IconTag />,
   "/admin/print-catalog": <IconPrinter />,
@@ -64,6 +65,15 @@ function IconBuilding() {
       <rect x="4" y="3" width="11" height="18" rx="1" />
       <rect x="15" y="9" width="5" height="12" rx="1" />
       <path d="M7 7h1M11 7h1M7 11h1M11 11h1M7 15h1M11 15h1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconBag() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M6 8h12l1 12.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20.5L6 8Z" strokeLinejoin="round" />
+      <path d="M9 8V6a3 3 0 0 1 6 0v2" strokeLinecap="round" />
     </svg>
   );
 }

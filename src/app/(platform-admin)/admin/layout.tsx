@@ -20,6 +20,10 @@ export default async function PlatformAdminLayout({ children }: { children: Reac
   const nav = [
     { href: "/admin", label: "Vue d'ensemble" },
     { href: "/admin/studios", label: "Studios" },
+    // "Commandes" ajouté le 01/08/2026 (demande d'Adriel) : vue transverse à tous les studios,
+    // avec filtre par studio — voir /api/admin/orders. Complète /dashboard/orders (vue studio
+    // sur ses propres commandes), ne la remplace pas.
+    { href: "/admin/orders", label: "Commandes" },
     { href: "/admin/site", label: "Contenu du site" },
     { href: "/admin/plans", label: "Plans tarifaires" },
     { href: "/admin/print-catalog", label: "Catalogue impression" },
