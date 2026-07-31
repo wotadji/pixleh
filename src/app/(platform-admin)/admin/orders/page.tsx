@@ -276,7 +276,7 @@ export default function AdminOrdersPage() {
                         {o.studioName}
                       </span>
                     </p>
-                    <p className="truncate text-sm text-gray-500">
+                    <p className="text-sm text-gray-500">
                       {o.customerEmail} · {o.galleryTitle || "—"}
                     </p>
                     <p className="mt-0.5 text-[11px] text-gray-400">{formatDate(o.createdAt)}</p>
