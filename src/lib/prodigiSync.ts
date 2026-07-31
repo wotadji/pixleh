@@ -22,12 +22,69 @@
 
 const DEFAULT_BASE_URL = "https://api.sandbox.prodigi.com/v4.0";
 
+/**
+ * Extrait les attributs manquants d'une réponse Prodigi "ValidationFailed" (forme observée :
+ * data.failures["items[0].attributes"] = [{ code: "MissingRequiredAttributes", missingItems:
+ * { attributes: [{ name, validValues }] } }]). Partagé entre getProdigiQuote (devis, phase 1) et
+ * submitProdigiOrder (commande réelle, src/lib/prodigiOrder.ts, phase 2) — les deux endpoints
+ * Prodigi (/quotes et /orders) renvoient la même forme d'erreur pour un attribut produit requis
+ * non fourni (ex: finition papier).
+ */
+export function extractMissingAttributes(data: any): Array<{ name: string; validValues?: string[] }> {
+  const missingAttrs: Array<{ name: string; validValues?: string[] }> = [];
+  if (!data?.failures) return missingAttrs;
+  for (const failureList of Object.values(data.failures) as any[]) {
+    for (const failure of Array.isArray(failureList) ? failureList : []) {
+      if (failure?.code === "MissingRequiredAttributes") {
+        for (const attr of failure?.missingItems?.attributes ?? []) {
+          if (attr?.name) missingAttrs.push(attr);
+        }
+      }
+    }
+  }
+  return missingAttrs;
+}
+
+/**
+ * Même extraction que extractMissingAttributes, mais indexée par item — nécessaire pour
+ * submitProdigiOrder (src/lib/prodigiOrder.ts) qui soumet PLUSIEURS items en une seule commande
+ * (contrairement à getProdigiQuote, un item par appel) : la clé de `data.failures` encode
+ * l'index de l'item concerné (ex: "items[2].attributes"), qu'il faut préserver pour ne corriger
+ * QUE l'item fautif plutôt que d'appliquer les mêmes attributs par défaut à tous.
+ */
+export function extractMissingAttributesByItemIndex(
+  data: any
+): Record<number, Array<{ name: string; validValues?: string[] }>> {
+  const result: Record<number, Array<{ name: string; validValues?: string[] }>> = {};
+  if (!data?.failures) return result;
+  for (const [key, failureList] of Object.entries(data.failures) as [string, any[]][]) {
+    const match = /^items\[(\d+)\]/.exec(key);
+    if (!match) continue;
+    const index = Number(match[1]);
+    for (const failure of Array.isArray(failureList) ? failureList : []) {
+      if (failure?.code === "MissingRequiredAttributes") {
+        for (const attr of failure?.missingItems?.attributes ?? []) {
+          if (attr?.name) {
+            result[index] = result[index] || [];
+            result[index].push(attr);
+          }
+        }
+      }
+    }
+  }
+  return result;
+}
+
 export interface ProdigiQuoteResult {
   synced: boolean;
   /** Coût de revient d'UN exemplaire, en centimes — null si non synchronisé. */
   unitCostCents?: number;
   currency?: string;
   error?: string;
+  /** Attributs (ex: {finish: "Lustre"}) qui ont permis d'obtenir ce devis — vide si le SKU n'en
+   * exige aucun. Persisté sur Product.prodigiAttributes (voir la route [id]/quote) et réutilisé
+   * tel quel par la soumission de commande réelle (src/lib/prodigiOrder.ts), phase 2. */
+  attributesUsed?: Record<string, string>;
 }
 
 /**
@@ -92,22 +149,14 @@ export async function getProdigiQuote(params: {
           synced: true,
           unitCostCents: Math.round(parseFloat(amount) * 100),
           currency: item.unitCost.currency || currencyCode,
+          attributesUsed: attributes,
         };
       }
 
       // Tente d'extraire les attributs manquants (forme observée : data.failures["items[0].attributes"]
       // = [{ code: "MissingRequiredAttributes", missingItems: { attributes: [{ name, validValues }] } }]).
       if (attempt === 0 && data?.outcome === "ValidationFailed" && data?.failures) {
-        const missingAttrs: Array<{ name: string; validValues?: string[] }> = [];
-        for (const failureList of Object.values(data.failures) as any[]) {
-          for (const failure of Array.isArray(failureList) ? failureList : []) {
-            if (failure?.code === "MissingRequiredAttributes") {
-              for (const attr of failure?.missingItems?.attributes ?? []) {
-                if (attr?.name) missingAttrs.push(attr);
-              }
-            }
-          }
-        }
+        const missingAttrs = extractMissingAttributes(data);
         if (missingAttrs.length > 0) {
           attributes = { ...attributes };
           for (const attr of missingAttrs) {

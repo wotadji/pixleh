@@ -33,6 +33,10 @@ interface OrderDTO {
   totalCents: number;
   currency: string;
   status: OrderStatus;
+  /** "SUBMITTED" | "FAILED" | null (aucun article catalogue plateforme, ou pas encore payée) —
+   * voir src/lib/prodigiOrder.ts, chantier "impression pixleh Phase 2" (01/08/2026). */
+  prodigiStatus: string | null;
+  prodigiError: string | null;
   items: OrderItemDTO[];
 }
 
@@ -125,6 +129,28 @@ export default function AdminOrdersPage() {
   const [detailGroup, setDetailGroup] = useState<ProductGroup | null>(null);
   const [detailGalleryId, setDetailGalleryId] = useState<string | null>(null);
   const [zoomIndex, setZoomIndex] = useState<number | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  async function retryProdigi(orderId: string) {
+    setRetryingId(orderId);
+    try {
+      const res = await fetch(`/api/admin/orders/${orderId}/retry-prodigi`, { method: "POST" });
+      const result = await res.json();
+      setOrders((prev) =>
+        (prev || []).map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                prodigiStatus: result.submitted ? "SUBMITTED" : result.skipped ? o.prodigiStatus : "FAILED",
+                prodigiError: result.submitted ? null : result.error || o.prodigiError,
+              }
+            : o
+        )
+      );
+    } finally {
+      setRetryingId(null);
+    }
+  }
 
   useEffect(() => {
     fetch("/api/admin/studios")
@@ -312,6 +338,26 @@ export default function AdminOrdersPage() {
                   <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[o.status]}`}>
                     {STATUS_LABELS[o.status]}
                   </span>
+                  {/* Statut de soumission Prodigi (chantier "impression pixleh Phase 2",
+                      01/08/2026) — soumission automatique au paiement (voir webhook Stripe),
+                      bouton "Réessayer" si échec (Prodigi indisponible, adresse incomplète...). */}
+                  {o.prodigiStatus === "SUBMITTED" && (
+                    <span className="mt-1 block text-[11px] font-medium text-green-600">Envoyée à l&apos;impression</span>
+                  )}
+                  {o.prodigiStatus === "FAILED" && (
+                    <div className="mt-1 flex flex-col items-start gap-1 sm:items-end">
+                      <span className="text-[11px] font-medium text-red-600" title={o.prodigiError || undefined}>
+                        Échec impression Prodigi
+                      </span>
+                      <button
+                        onClick={() => retryProdigi(o.id)}
+                        disabled={retryingId === o.id}
+                        className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                      >
+                        {retryingId === o.id ? "Envoi..." : "Réessayer"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             );

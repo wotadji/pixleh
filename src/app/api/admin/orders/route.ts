@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requirePlatformAdmin, handleApiError } from "@/lib/access";
 
@@ -34,6 +35,17 @@ export async function GET(req: Request) {
       take: 300,
     });
 
+    // Order.prodigiStatus/prodigiError n'existent pas encore dans le Prisma Client généré du
+    // sandbox (tâche #254) — même workaround $queryRaw que le reste du catalogue impression.
+    // Chargés à part puis fusionnés par id plutôt que d'ajouter ces colonnes à l'include
+    // ci-dessus, qui casserait au runtime avec le client actuellement généré.
+    const prodigiMeta = orders.length
+      ? await prisma.$queryRaw<Array<{ id: string; prodigiStatus: string | null; prodigiError: string | null }>>`
+          SELECT "id", "prodigiStatus", "prodigiError" FROM "Order" WHERE "id" IN (${Prisma.join(orders.map((o) => o.id))})
+        `
+      : [];
+    const prodigiById = new Map(prodigiMeta.map((p) => [p.id, p]));
+
     const data = orders.map((o) => ({
       id: o.id,
       studioId: o.studioId,
@@ -46,6 +58,8 @@ export async function GET(req: Request) {
       totalCents: o.totalCents,
       currency: o.currency,
       status: o.status,
+      prodigiStatus: prodigiById.get(o.id)?.prodigiStatus ?? null,
+      prodigiError: prodigiById.get(o.id)?.prodigiError ?? null,
       items: o.items.map((item) => ({
         id: item.id,
         quantity: item.quantity,

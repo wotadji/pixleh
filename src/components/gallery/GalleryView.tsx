@@ -2468,6 +2468,23 @@ function IconMore() {
  * "Commander" réutilise /api/cart/checkout, qui associe déjà chaque OrderItem à une photo
  * ET à un produit précis — chaque photo garde donc son propre service à la commande.
  */
+// Sélection courte de pays (code ISO 3166-1 alpha-2 attendu par Prodigi) — France en premier
+// (marché ciblé en priorité par pixleh), suivie des pays limitrophes/francophones les plus
+// probables pour un studio photo français. Liste volontairement restreinte plutôt qu'exhaustive
+// (Prodigi livre bien plus largement) : peut être étendue plus tard si le besoin se confirme.
+const SHIPPING_COUNTRY_OPTIONS = [
+  { code: "FR", label: "France" },
+  { code: "BE", label: "Belgique" },
+  { code: "CH", label: "Suisse" },
+  { code: "LU", label: "Luxembourg" },
+  { code: "DE", label: "Allemagne" },
+  { code: "ES", label: "Espagne" },
+  { code: "IT", label: "Italie" },
+  { code: "GB", label: "Royaume-Uni" },
+  { code: "US", label: "États-Unis" },
+  { code: "CA", label: "Canada" },
+];
+
 function PrintSelectionPanel({
   photos,
   printProducts,
@@ -2486,6 +2503,18 @@ function PrintSelectionPanel({
   onClose: () => void;
 }) {
   const [customer, setCustomer] = useState({ name: "", email: "" });
+  // Adresse de livraison (chantier "impression pixleh Phase 2", 01/08/2026) — collectée ici,
+  // avant paiement, plutôt que via Stripe Checkout (choix d'Adriel) : transmise à
+  // /api/cart/checkout puis à Prodigi une fois la commande payée (voir src/lib/prodigiOrder.ts)
+  // pour l'expédition réelle des tirages.
+  const [shipping, setShipping] = useState({
+    line1: "",
+    line2: "",
+    city: "",
+    postalCode: "",
+    countryCode: "FR",
+    phone: "",
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Sélection locale au panneau (toutes vues confondues), utilisée pour la suppression et
@@ -2562,6 +2591,10 @@ function PrintSelectionPanel({
       setError("Merci de renseigner votre nom et votre email.");
       return;
     }
+    if (!shipping.line1 || !shipping.city || !shipping.postalCode || !shipping.countryCode) {
+      setError("Merci de renseigner votre adresse de livraison complète.");
+      return;
+    }
     const items = photos.map((p) => ({ productId: p.productId as string, quantity: 1, photoId: p.id }));
     setLoading(true);
     const res = await fetch("/api/cart/checkout", {
@@ -2572,6 +2605,7 @@ function PrintSelectionPanel({
         items,
         customerName: customer.name,
         customerEmail: customer.email,
+        shippingAddress: { name: customer.name, ...shipping },
       }),
     });
     const data = await res.json();
@@ -2800,6 +2834,58 @@ function PrintSelectionPanel({
                     onChange={(e) => setCustomer({ ...customer, email: e.target.value })}
                   />
                 </div>
+
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                    Adresse de livraison des tirages
+                  </p>
+                  <input
+                    placeholder="Adresse"
+                    className="input"
+                    value={shipping.line1}
+                    onChange={(e) => setShipping({ ...shipping, line1: e.target.value })}
+                  />
+                  <input
+                    placeholder="Complément d'adresse (optionnel)"
+                    className="input"
+                    value={shipping.line2}
+                    onChange={(e) => setShipping({ ...shipping, line2: e.target.value })}
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      placeholder="Code postal"
+                      className="input"
+                      value={shipping.postalCode}
+                      onChange={(e) => setShipping({ ...shipping, postalCode: e.target.value })}
+                    />
+                    <input
+                      placeholder="Ville"
+                      className="input"
+                      value={shipping.city}
+                      onChange={(e) => setShipping({ ...shipping, city: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <select
+                      className="input"
+                      value={shipping.countryCode}
+                      onChange={(e) => setShipping({ ...shipping, countryCode: e.target.value })}
+                    >
+                      {SHIPPING_COUNTRY_OPTIONS.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      placeholder="Téléphone (optionnel)"
+                      className="input"
+                      value={shipping.phone}
+                      onChange={(e) => setShipping({ ...shipping, phone: e.target.value })}
+                    />
+                  </div>
+                </div>
+
                 {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm text-gray-600">

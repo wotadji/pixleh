@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { syncSubscriptionFromStripe } from "@/lib/subscriptionSync";
 import { sendStudioOrderPaidEmail } from "@/lib/notifications";
 import { markInvoicePaidFromStripe } from "@/lib/invoicePayment";
+import { submitProdigiOrder } from "@/lib/prodigiOrder";
 import type Stripe from "stripe";
 
 export const runtime = "nodejs";
@@ -53,6 +54,13 @@ export async function POST(req: Request) {
           totalCents: order.totalCents,
           currency: order.currency,
         }).catch((e) => console.error("Échec de la notification de commande payée :", e));
+
+        // Soumission automatique à Prodigi (chantier "impression pixleh Phase 2", 01/08/2026,
+        // demande d'Adriel : "passons à la phase 2" — envoi automatique, pas de validation
+        // manuelle). Best-effort comme la notification ci-dessus : ne modifie que Order.prodigi*
+        // en cas d'échec (voir src/lib/prodigiOrder.ts), visible et rejouable depuis
+        // /admin/orders — ne bloque jamais la confirmation de paiement au client.
+        submitProdigiOrder(order.id).catch((e) => console.error("Échec de la soumission Prodigi :", e));
       }
 
       const invoiceId = session.metadata?.invoiceId;

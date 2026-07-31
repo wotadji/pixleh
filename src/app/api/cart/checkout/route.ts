@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
 import { checkGalleryAccess } from "@/lib/access";
 import { getActivePrintCatalogItemsByIds } from "@/lib/printCatalog";
+import { isShippingAddressComplete, type ShippingAddress } from "@/lib/shippingAddress";
 
 interface CartItem {
   productId: string;
@@ -16,11 +17,12 @@ interface CartItem {
  * PENDING, mise à jour en PAID par le webhook Stripe une fois le paiement confirmé.
  */
 export async function POST(req: Request) {
-  const { galleryId, items, customerEmail, customerName } = (await req.json()) as {
+  const { galleryId, items, customerEmail, customerName, shippingAddress } = (await req.json()) as {
     galleryId: string;
     items: CartItem[];
     customerEmail: string;
     customerName: string;
+    shippingAddress?: Partial<ShippingAddress> | null;
   };
 
   if (!items || items.length === 0) {
@@ -49,6 +51,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Produit invalide" }, { status: 400 });
   }
 
+  // Une adresse de livraison est requise dès que le panier contient au moins un article du
+  // catalogue impression plateforme (chantier "impression pixleh Phase 2", 01/08/2026) — c'est
+  // elle qui sera transmise à Prodigi pour l'expédition une fois la commande payée (voir
+  // src/lib/prodigiOrder.ts). Un panier 100% studio (téléchargement numérique, album...) n'en a
+  // jamais besoin, d'où cette vérification conditionnelle plutôt qu'un champ obligatoire global.
+  const printCatalogIds = new Set(printCatalogItems.map((p) => p.id));
+  const needsShipping = items.some((item) => printCatalogIds.has(item.productId));
+  if (needsShipping && !isShippingAddressComplete(shippingAddress)) {
+    return NextResponse.json({ error: "Adresse de livraison incomplète" }, { status: 400 });
+  }
+
   const totalCents = items.reduce((sum, item) => {
     const product = products.find((p) => p.id === item.productId)!;
     return sum + product.priceCents * item.quantity;
@@ -63,6 +76,7 @@ export async function POST(req: Request) {
       totalCents,
       currency: products[0]?.currency || "EUR",
       status: "PENDING",
+      shippingAddress: needsShipping ? JSON.stringify(shippingAddress) : undefined,
       items: {
         create: items.map((item) => {
           const product = products.find((p) => p.id === item.productId)!;

@@ -209,10 +209,14 @@ directement au compte pixleh (les studios ne gèrent plus l'impression depuis le
 4. Sans `PRODIGI_API_KEY`, le catalogue reste utilisable : saisissez le coût de revient à la
    main, sans resynchronisation automatique.
 
-**Non inclus dans cette livraison** : la soumission réelle de la commande à Prodigi (impression
-et expédition effectives) après un paiement client — seul le devis de coût est intégré pour
-l'instant. À ajouter lors d'une prochaine étape (webhook Stripe `checkout.session.completed` +
-adresse de livraison du client + suivi de statut d'expédition).
+**Soumission réelle des commandes (Phase 2)** : dès qu'un client paie un article du catalogue
+impression, la commande est **automatiquement soumise à Prodigi** pour impression et expédition
+(webhook Stripe `checkout.session.completed` → `src/lib/prodigiOrder.ts`) — Prodigi facture alors
+réellement votre compte. Le client renseigne son adresse de livraison directement dans le
+panneau de sélection impression, avant le paiement. En cas d'échec (Prodigi indisponible,
+attribut produit manquant, adresse invalide...), la commande reste visible dans `/admin/orders`
+avec le détail de l'erreur et un bouton « Réessayer » — rien n'est perdu, mais rien n'est non
+plus renvoyé automatiquement sans action de votre part après un échec.
 
 ---
 

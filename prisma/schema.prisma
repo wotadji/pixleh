@@ -772,6 +772,13 @@ model Product {
   /// (voir src/lib/prodigiSync.ts) — purement informatif pour aider Adriel à fixer priceCents
   /// (le prix affiché au client) avec sa marge ; ne pilote jamais priceCents automatiquement.
   wholesaleCostCents Int?
+  /// Attributs Prodigi (JSON, ex: {"finish":"Lustre"}) retenus lors du dernier Quote réussi
+  /// (voir getProdigiQuote, chantier "impression pixleh Phase 2", 01/08/2026) — beaucoup de SKUs
+  /// exigent un attribut (finition papier, wrap toile...) que Prodigi ne révèle qu'en réponse à
+  /// un premier essai raté. Réutilisé tel quel par la soumission de commande réelle
+  /// (src/lib/prodigiOrder.ts) pour éviter de redécouvrir/deviner ces attributs à chaque
+  /// commande cliente — jamais éditable à la main, uniquement écrit par la resynchro.
+  prodigiAttributes String? @db.Text
   galleries   Gallery[]   @relation("GalleryProducts")
   orderItems  OrderItem[]
   selections  Selection[]
@@ -802,7 +809,27 @@ model Order {
   totalCents    Int
   currency      String      @default("EUR")
   stripeSessionId String?   @unique
+  /// JSON structuré depuis le chantier "impression pixleh Phase 2" (01/08/2026) :
+  /// {name, line1, line2?, city, postalCode, countryCode, phone?} — saisi par le client dans
+  /// PrintSelectionPanel avant paiement (voir /api/cart/checkout), requis dès que le panier
+  /// contient un article du catalogue impression plateforme. Colonne déjà existante avant ce
+  /// chantier (jamais utilisée jusqu'ici) : réutilisée telle quelle pour ne pas dépendre d'une
+  /// nouvelle migration.
   shippingAddress String?   @db.Text
+  /// Identifiant de la commande chez Prodigi une fois soumise avec succès (voir
+  /// src/lib/prodigiOrder.ts) — null tant qu'aucun article catalogue plateforme n'a été soumis.
+  prodigiOrderId  String?
+  /// "SUBMITTED" | "FAILED" | null (non applicable : aucun article catalogue plateforme, ou pas
+  /// encore payée) — piloté uniquement par submitProdigiOrder, jamais par l'admin directement.
+  prodigiStatus   String?
+  /// Dernier message d'erreur Prodigi si prodigiStatus = "FAILED", pour diagnostic dans
+  /// /admin/orders (bouton "Réessayer l'envoi à Prodigi") sans avoir à consulter les logs serveur.
+  prodigiError    String?   @db.Text
+  /// Token opaque généré à la première tentative de soumission Prodigi — permet à
+  /// /api/prodigi-assets/[orderId]/[photoId] de servir les photos commandées à Prodigi (serveur
+  /// à serveur, sans cookie de session) sans exposer les fichiers originaux à quiconque devine
+  /// une URL. Voir cette route pour la vérification.
+  prodigiAssetToken String?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
