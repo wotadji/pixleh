@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useDropzone } from "react-dropzone";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { Modal } from "@/components/ui/Modal";
+import { Spinner } from "@/components/ui/Spinner";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { CoverFocalPointModal } from "@/components/studio/CoverFocalPointModal";
 import {
@@ -185,6 +186,19 @@ export function GalleryManager({
   const [remarks, setRemarks] = useState<RemarkDTO[] | null>(null);
   const [remarksLoading, setRemarksLoading] = useState(false);
   const [remarksFilter, setRemarksFilter] = useState<"all" | "pending" | "resolved">("pending");
+  // Remplacement du fichier d'une photo depuis une remarque (voir replacePhotoForRemark) —
+  // demandé par Adriel, 31/07/2026 : le studio/photographe/vidéaste uploade la photo
+  // retouchée après avoir traité la remarque du client, sans créer une nouvelle photo (même
+  // id conservé, voir PUT /api/galleries/[id]/photos/[photoId]/replace). `id` de la remarque
+  // en cours de remplacement (état de chargement par ligne), `null` si aucune en cours.
+  const [replacingRemarkId, setReplacingRemarkId] = useState<string | null>(null);
+  const [replaceError, setReplaceError] = useState<string | null>(null);
+  const replaceFileInputRef = useRef<HTMLInputElement | null>(null);
+  // Remarque ciblée par le prochain choix de fichier — le <input type="file"> est unique et
+  // partagé entre toutes les lignes (déclenché via .click() sur le bon bouton), donc on doit
+  // mémoriser QUELLE remarque a demandé l'ouverture du sélecteur avant que l'utilisateur ne
+  // choisisse son fichier.
+  const [replaceTargetRemarkId, setReplaceTargetRemarkId] = useState<string | null>(null);
   const [videos, setVideos] = useState<VideoDTO[] | null>(null);
   const [videosLoading, setVideosLoading] = useState(false);
   const [videoUrlInput, setVideoUrlInput] = useState("");
@@ -802,6 +816,61 @@ export function GalleryManager({
     });
     if (!res.ok) {
       setRemarks((list) => list?.map((r) => (r.id === id ? { ...r, resolved: !resolved } : r)) ?? list);
+    }
+  }
+
+  // Ouvre le sélecteur de fichier natif pour la photo de CETTE remarque — voir
+  // replaceTargetRemarkId/onReplaceFileChange plus bas pour la suite du flux.
+  function beginReplacePhotoForRemark(remarkId: string) {
+    if (replacingRemarkId) return;
+    setReplaceTargetRemarkId(remarkId);
+    replaceFileInputRef.current?.click();
+  }
+
+  async function onReplaceFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    const remarkId = replaceTargetRemarkId;
+    e.target.value = ""; // permet de resélectionner le même fichier une prochaine fois
+    setReplaceTargetRemarkId(null);
+    if (!file || !remarkId) return;
+    const remark = remarks?.find((r) => r.id === remarkId);
+    if (!remark) return;
+
+    setReplacingRemarkId(remarkId);
+    setReplaceError(null);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      body.append("remarkId", remarkId);
+      const res = await fetch(`/api/galleries/${gallery.id}/photos/${remark.photo.id}/replace`, {
+        method: "PUT",
+        body,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const reason = typeof data?.error === "string" ? data.error : null;
+        setReplaceError(
+          reason === "unsupportedType"
+            ? t("remarks.replaceUnsupportedType")
+            : reason === "tooLarge"
+            ? t("remarks.replaceTooLarge")
+            : reason === "quotaExceeded"
+            ? t("remarks.replaceQuotaExceeded")
+            : t("gm.uploadFailed") + (reason || "")
+        );
+        return;
+      }
+      // La photo a changé de fichier (updatedAt bumpé côté serveur) et la remarque est
+      // désormais résolue : on recharge les deux plutôt que de rafistoler le state local,
+      // le thumbUrl dépendant de gallery.photos (prop serveur) pour son cache-busting.
+      setRemarks((list) =>
+        list?.map((r) => (r.id === remarkId ? { ...r, resolved: true } : r)) ?? list
+      );
+      router.refresh();
+    } catch {
+      setReplaceError(t("gm.networkError"));
+    } finally {
+      setReplacingRemarkId(null);
     }
   }
 
@@ -2109,6 +2178,25 @@ export function GalleryManager({
               <h2 className="font-serif text-lg font-semibold">{t("remarks.title")}</h2>
               <p className="mt-1 text-sm text-gray-500">{t("remarks.hint")}</p>
 
+              {/* Sélecteur de fichier unique, partagé entre toutes les lignes — voir
+                  beginReplacePhotoForRemark/onReplaceFileChange. */}
+              <input
+                ref={replaceFileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/tiff"
+                className="hidden"
+                onChange={onReplaceFileChange}
+              />
+
+              {replaceError && (
+                <div className="mt-4 flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  <span>{replaceError}</span>
+                  <button onClick={() => setReplaceError(null)} className="shrink-0 text-red-400 hover:text-red-600">
+                    ✕
+                  </button>
+                </div>
+              )}
+
               <div className="mt-4 flex gap-2">
                 {(["pending", "resolved", "all"] as const).map((f) => (
                   <button
@@ -2169,16 +2257,31 @@ export function GalleryManager({
                             })}
                           </p>
                         </div>
-                        <button
-                          onClick={() => toggleRemarkResolved(r.id, !r.resolved)}
-                          className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
-                            r.resolved
-                              ? "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                              : "bg-green-100 text-green-700 hover:bg-green-200"
-                          }`}
-                        >
-                          {r.resolved ? t("remarks.markPending") : t("remarks.markResolved")}
-                        </button>
+                        <div className="flex shrink-0 flex-col items-end gap-1.5">
+                          <button
+                            onClick={() => beginReplacePhotoForRemark(r.id)}
+                            disabled={replacingRemarkId === r.id}
+                            title={t("remarks.replacePhotoHint")}
+                            className="flex items-center gap-1 rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-60"
+                          >
+                            {replacingRemarkId === r.id ? (
+                              <Spinner size={12} />
+                            ) : (
+                              <IconUpload />
+                            )}
+                            {t("remarks.replacePhoto")}
+                          </button>
+                          <button
+                            onClick={() => toggleRemarkResolved(r.id, !r.resolved)}
+                            className={`rounded-full px-3 py-1 text-xs font-medium ${
+                              r.resolved
+                                ? "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                : "bg-green-100 text-green-700 hover:bg-green-200"
+                            }`}
+                          >
+                            {r.resolved ? t("remarks.markPending") : t("remarks.markResolved")}
+                          </button>
+                        </div>
                       </div>
                     ));
                   })()}
@@ -2836,6 +2939,16 @@ function IconRemarksTab() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
+    </svg>
+  );
+}
+
+function IconUpload() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 16V4" strokeLinecap="round" />
+      <path d="M7 9l5-5 5 5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
