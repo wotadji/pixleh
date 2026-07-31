@@ -178,6 +178,7 @@ export async function POST(req: Request) {
           settings: studio.settings
             ? { contactEmail: studio.settings.contactEmail, contactPhone: studio.settings.contactPhone }
             : null,
+          notes: data.notes,
         });
         emailSent = result.ok;
         emailError = result.error;

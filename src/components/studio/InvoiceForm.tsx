@@ -403,6 +403,7 @@ export function InvoiceForm({
             value={form.notes}
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
           />
+          <p className="mt-1.5 text-xs text-gray-400">{t("invoiceForm.notesIbanHint")}</p>
         </div>
 
         <div className="flex items-center justify-end gap-3 border-t border-gray-100 pt-4">

@@ -210,18 +210,30 @@ export async function sendInvoiceEmail(params: {
   dueDate: Date | null;
   studio: { name: string; slug: string; logoUrl: string | null; brandColor: string | null };
   settings: { contactEmail: string | null; contactPhone: string | null } | null;
+  /** Notes libres de la facture (voir Invoice.notes / InvoiceForm) — reprises telles quelles
+   * dans l'email plutôt que seulement sur /i/[id] et le PDF (demande d'Adriel, 31/07/2026) :
+   * en attendant Stripe Connect, un studio qui accepte les paiements par virement y indique
+   * son IBAN, qui doit être visible par le client sans qu'il ait besoin de cliquer sur le
+   * lien de la facture. */
+  notes?: string | null;
 }) {
   const link = appUrl(`/i/${params.invoiceId}`);
+  const pdfLink = appUrl(`/api/invoices/${params.invoiceId}/pdf`);
   const signature = buildEmailSignature(params.studio, params.settings);
   const amount = formatAmount(params.totalCents, params.currency);
   const dueLine = params.dueDate ? ` — échéance le ${params.dueDate.toLocaleDateString("fr-FR")}` : "";
+  const notesBlock = buildInvoiceNotesBlock(params.notes);
 
   const html = wrapEmail(`
     <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Nouvelle facture</h2>
     <p>Bonjour ${escapeHtml(params.clientName)},</p>
     <p><strong>${escapeHtml(params.studio.name)}</strong> vous a envoyé la facture
     <strong>${escapeHtml(params.invoiceNumber)}</strong> d'un montant de <strong>${amount}</strong>${dueLine}.</p>
+    ${notesBlock.html}
     <a href="${link}" style="${BUTTON_STYLE}">Consulter et payer</a>
+    <p style="margin-top:14px;font-size:13px;">
+      <a href="${pdfLink}" style="color:#6b7280;text-decoration:underline;">Télécharger la facture (PDF)</a>
+    </p>
   `);
 
   // Renvoie le résultat de sendMail (voir sendContractSignEmail ci-dessus) pour que l'appelant
@@ -232,8 +244,15 @@ export async function sendInvoiceEmail(params: {
     subject: `Facture ${params.invoiceNumber} — ${amount}`,
     text: [
       `Bonjour ${params.clientName}, ${params.studio.name} vous a envoyé la facture ${params.invoiceNumber} (${amount})${dueLine}. Consultez-la et payez ici : ${link}`,
+      notesBlock.text,
+      // Lien direct de téléchargement du PDF — demandé par Adriel, 31/07/2026 : le client
+      // doit pouvoir simplement récupérer la facture (ex: pour un règlement par virement à
+      // partir de l'IBAN indiqué en note) sans passer par la page de paiement en ligne.
+      `Télécharger la facture (PDF) : ${pdfLink}`,
       signature.text,
-    ].join("\n\n"),
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
     html: `${html}${signature.html}`,
   });
 }
@@ -242,9 +261,11 @@ export async function sendInvoiceEmail(params: {
  * même contenu que sendInvoiceEmail mais formulé comme un rappel plutôt qu'un premier envoi. */
 export async function sendInvoiceReminderEmail(params: Parameters<typeof sendInvoiceEmail>[0]) {
   const link = appUrl(`/i/${params.invoiceId}`);
+  const pdfLink = appUrl(`/api/invoices/${params.invoiceId}/pdf`);
   const signature = buildEmailSignature(params.studio, params.settings);
   const amount = formatAmount(params.totalCents, params.currency);
   const dueLine = params.dueDate ? ` — échéance le ${params.dueDate.toLocaleDateString("fr-FR")}` : "";
+  const notesBlock = buildInvoiceNotesBlock(params.notes);
 
   const html = wrapEmail(`
     <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Rappel : facture en attente</h2>
@@ -252,7 +273,11 @@ export async function sendInvoiceReminderEmail(params: Parameters<typeof sendInv
     <p>Petit rappel : la facture <strong>${escapeHtml(params.invoiceNumber)}</strong> de
     <strong>${amount}</strong>${dueLine} envoyée par <strong>${escapeHtml(params.studio.name)}</strong>
     est toujours en attente de règlement.</p>
+    ${notesBlock.html}
     <a href="${link}" style="${BUTTON_STYLE}">Consulter et payer</a>
+    <p style="margin-top:14px;font-size:13px;">
+      <a href="${pdfLink}" style="color:#6b7280;text-decoration:underline;">Télécharger la facture (PDF)</a>
+    </p>
   `);
 
   return sendMail({
@@ -260,10 +285,26 @@ export async function sendInvoiceReminderEmail(params: Parameters<typeof sendInv
     subject: `Rappel — Facture ${params.invoiceNumber} en attente (${amount})`,
     text: [
       `Bonjour ${params.clientName}, rappel : la facture ${params.invoiceNumber} (${amount})${dueLine} de ${params.studio.name} est toujours en attente de règlement. Consultez-la et payez ici : ${link}`,
+      notesBlock.text,
+      `Télécharger la facture (PDF) : ${pdfLink}`,
       signature.text,
-    ].join("\n\n"),
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
     html: `${html}${signature.html}`,
   });
+}
+
+/** Bloc "Notes du studio" partagé par sendInvoiceEmail/sendInvoiceReminderEmail — voir la doc
+ * du paramètre `notes` ci-dessus. Retourne des chaînes vides (pas null) pour rester simple à
+ * insérer directement dans les templates HTML/texte sans conditionnelle supplémentaire côté
+ * appelant. */
+function buildInvoiceNotesBlock(notes?: string | null): { html: string; text: string } {
+  if (!notes || !notes.trim()) return { html: "", text: "" };
+  return {
+    html: `<p style="background:#f9fafb;border-radius:8px;padding:12px 14px;white-space:pre-line;color:#374151;">${escapeHtml(notes)}</p>`,
+    text: notes,
+  };
 }
 
 /** Confirmation envoyée au client après un paiement en ligne réussi (Stripe Checkout) —

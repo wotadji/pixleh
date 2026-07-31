@@ -525,6 +525,26 @@ function MarkPaidModal({
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium text-gray-700">{t("invoices.paymentMethod")}</label>
+          {/* Boutons rapides (31/07/2026, demande d'Adriel) : "Marquer payée" sert aussi bien
+              à valider un virement bancaire (le studio vérifie son compte puis confirme ici)
+              qu'un paiement en espèces ou par chèque — ces raccourcis rendent ces trois cas
+              d'usage explicites plutôt que de dépendre uniquement de la saisie libre. */}
+          <div className="mb-1.5 flex flex-wrap gap-1.5">
+            {[t("invoices.methodCash"), t("invoices.methodCheck"), t("invoices.methodTransfer")].map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setMethod(preset)}
+                className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+                  method === preset
+                    ? "border-brand-500 bg-brand-50 text-brand-700"
+                    : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+                }`}
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
           <input
             className="input"
             placeholder={t("invoices.paymentMethodPlaceholder")}

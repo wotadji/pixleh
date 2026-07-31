@@ -28,6 +28,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     });
     if (!studio) throw new AccessError("Studio introuvable", 404);
 
+    // notes n'existe pas encore dans le Prisma Client généré du sandbox (voir schema.prisma)
+    // — lu à part via $queryRaw, même workaround que le reste des champs récents d'Invoice.
+    // Repris dans l'email (voir sendInvoiceEmail) pour l'IBAN qu'un studio peut y indiquer en
+    // vue d'un paiement par virement (demande d'Adriel, 31/07/2026).
+    const [row] = await prisma.$queryRaw<{ notes: string | null }[]>`
+      SELECT notes FROM "Invoice" WHERE id = ${invoice.id}
+    `;
+
     const body = await req.json().catch(() => ({}));
     const send = body?.reminder ? sendInvoiceReminderEmail : sendInvoiceEmail;
 
@@ -43,6 +51,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       settings: studio.settings
         ? { contactEmail: studio.settings.contactEmail, contactPhone: studio.settings.contactPhone }
         : null,
+      notes: row?.notes ?? null,
     });
 
     if (result.ok) {
