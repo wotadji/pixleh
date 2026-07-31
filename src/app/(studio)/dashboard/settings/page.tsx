@@ -27,7 +27,7 @@ function makeSlideId() {
   return `slide-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-type SettingsTab = "profile" | "account" | "password" | "watermark" | "carousel" | "bookingTypes";
+type SettingsTab = "profile" | "account" | "password" | "watermark" | "carousel" | "bookingTypes" | "billing";
 
 export default function SettingsPage() {
   const { t } = useLanguage();
@@ -72,6 +72,7 @@ export default function SettingsPage() {
     { key: "watermark", label: t("settings.watermarkSection") },
     { key: "carousel", label: t("settings.carouselSection") },
     { key: "bookingTypes", label: t("settings.bookingTypesSection") },
+    { key: "billing", label: t("settings.billingSection") },
   ];
 
   // Profil studio (affiché aux clients : couvertures de galerie, site public...)
@@ -118,6 +119,21 @@ export default function SettingsPage() {
     null
   );
 
+  // Facturation (31/07/2026, demande d'Adriel : refonte pro de la facturation) — mentions
+  // légales/bancaires affichées sur le PDF des factures, voir StudioSettings dans
+  // schema.prisma et src/lib/pdf.tsx (renderInvoicePdf).
+  const [legalForm, setLegalForm] = useState("");
+  const [siret, setSiret] = useState("");
+  const [vatNumber, setVatNumber] = useState("");
+  const [vatExempt, setVatExempt] = useState(true);
+  const [iban, setIban] = useState("");
+  const [bic, setBic] = useState("");
+  const [invoiceLegalMentions, setInvoiceLegalMentions] = useState("");
+  const [invoiceNumberPrefix, setInvoiceNumberPrefix] = useState("");
+  const [billingSaved, setBillingSaved] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
+  const [billingSaving, setBillingSaving] = useState(false);
+
   const [bookingTypes, setBookingTypes] = useState<BookingTypeDTO[]>([]);
   const [newType, setNewType] = useState({ name: "", durationMinutes: 60, priceCents: 0 });
   const [saved, setSaved] = useState(false);
@@ -141,6 +157,14 @@ export default function SettingsPage() {
         setAboutBody(d.studio?.settings?.aboutBody || "");
         setAccountName(d.user?.name || "");
         setAccountEmail(d.user?.email || "");
+        setLegalForm(d.studio?.settings?.legalForm || "");
+        setSiret(d.studio?.settings?.siret || "");
+        setVatNumber(d.studio?.settings?.vatNumber || "");
+        setVatExempt(d.studio?.settings?.vatExempt ?? true);
+        setIban(d.studio?.settings?.iban || "");
+        setBic(d.studio?.settings?.bic || "");
+        setInvoiceLegalMentions(d.studio?.settings?.invoiceLegalMentions || "");
+        setInvoiceNumberPrefix(d.studio?.settings?.invoiceNumberPrefix || "");
         setCarouselSlides(
           Array.isArray(d.studio?.settings?.carouselSlides) ? d.studio.settings.carouselSlides : []
         );
@@ -372,6 +396,39 @@ export default function SettingsPage() {
       setCarouselError(t("settings.serverUnreachable"));
     } finally {
       setCarouselSaving(false);
+    }
+  }
+
+  async function saveBilling(e: React.FormEvent) {
+    e.preventDefault();
+    setBillingError(null);
+    setBillingSaving(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          legalForm,
+          siret,
+          vatNumber,
+          vatExempt,
+          iban,
+          bic,
+          invoiceLegalMentions,
+          invoiceNumberPrefix,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setBillingError(data?.error ? String(data.error) : `${t("common.error")} ${res.status}`);
+        return;
+      }
+      setBillingSaved(true);
+      setTimeout(() => setBillingSaved(false), 2000);
+    } catch {
+      setBillingError(t("settings.serverUnreachable"));
+    } finally {
+      setBillingSaving(false);
     }
   }
 
@@ -766,6 +823,82 @@ export default function SettingsPage() {
               ))}
             </ul>
           </div>
+        )}
+
+        {tab === "billing" && (
+          <form onSubmit={saveBilling} className="card space-y-4">
+            <p className="text-xs text-gray-500">{t("settings.billingHint")}</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  {t("settings.legalFormLabel")}
+                </label>
+                <input
+                  className="input w-full"
+                  placeholder={t("settings.legalFormPlaceholder")}
+                  value={legalForm}
+                  onChange={(e) => setLegalForm(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">{t("settings.siretLabel")}</label>
+                <input className="input w-full" value={siret} onChange={(e) => setSiret(e.target.value)} />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  {t("settings.invoicePrefixLabel")}
+                </label>
+                <input
+                  className="input w-full"
+                  placeholder="FAC"
+                  value={invoiceNumberPrefix}
+                  onChange={(e) => setInvoiceNumberPrefix(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={vatExempt} onChange={(e) => setVatExempt(e.target.checked)} />
+              {t("settings.vatExemptLabel")}
+            </label>
+            {!vatExempt && (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  {t("settings.vatNumberLabel")}
+                </label>
+                <input className="input w-full" value={vatNumber} onChange={(e) => setVatNumber(e.target.value)} />
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">{t("settings.ibanLabel")}</label>
+                <input className="input w-full" value={iban} onChange={(e) => setIban(e.target.value)} />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">{t("settings.bicLabel")}</label>
+                <input className="input w-full" value={bic} onChange={(e) => setBic(e.target.value)} />
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">
+                {t("settings.invoiceLegalMentionsLabel")}
+              </label>
+              <textarea
+                className="input min-h-[90px] w-full"
+                placeholder={t("settings.invoiceLegalMentionsPlaceholder")}
+                value={invoiceLegalMentions}
+                onChange={(e) => setInvoiceLegalMentions(e.target.value)}
+              />
+            </div>
+
+            <button type="submit" disabled={billingSaving} className="btn-primary text-sm">
+              {t("common.save")}
+            </button>
+            {billingSaved && <span className="ml-2 text-sm text-green-600">{t("common.saved")}</span>}
+            {billingError && <span className="ml-2 text-sm text-red-600">{billingError}</span>}
+          </form>
         )}
       </div>
 
