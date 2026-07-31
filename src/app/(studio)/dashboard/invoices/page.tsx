@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { Modal } from "@/components/ui/Modal";
+import { ContractInfoBubble } from "@/components/shared/ContractInfoBubble";
 
 type InvoiceStatus = "DRAFT" | "SENT" | "PAID" | "OVERDUE" | "CANCELLED";
 
@@ -21,6 +22,21 @@ interface InvoiceDTO {
   guestClientName: string | null;
   contractId: string | null;
   archived: boolean;
+}
+
+// Infos minimales sur les contrats liés — récupérées à part (31/07/2026, demande d'Adriel :
+// bulle rappelant le montant total du contrat + le facturé/payé cumulé quand une facture en
+// est issue), même agrégation que billingSummary sur /dashboard/contracts.
+interface ContractSummary {
+  title: string;
+  amountCents: number | null;
+  billedCents: number;
+  paidCents: number;
+}
+
+function formatPercent(part: number, total: number | null): string | null {
+  if (!total || total <= 0) return null;
+  return `${Math.round((part / total) * 100)} %`;
 }
 
 const PAGE_SIZE = 8;
@@ -61,6 +77,7 @@ export default function InvoicesPage() {
   };
 
   const [invoices, setInvoices] = useState<InvoiceDTO[]>([]);
+  const [contractSummaries, setContractSummaries] = useState<Record<string, ContractSummary>>({});
   const [pageLoading, setPageLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | "ALL">("ALL");
@@ -71,9 +88,30 @@ export default function InvoicesPage() {
   const [markPaidTarget, setMarkPaidTarget] = useState<InvoiceDTO | null>(null);
 
   function load() {
-    fetch("/api/invoices")
-      .then((r) => r.json())
-      .then((d) => setInvoices(d.invoices || []))
+    Promise.all([
+      fetch("/api/invoices").then((r) => r.json()),
+      fetch("/api/contracts").then((r) => r.json()),
+    ])
+      .then(([invoicesData, contractsData]) => {
+        const allInvoices: InvoiceDTO[] = invoicesData.invoices || [];
+        setInvoices(allInvoices);
+
+        // Agrégation facturé/payé par contrat (hors CANCELLED) — même logique que
+        // billingSummary sur /dashboard/contracts, pour alimenter la bulle sur l'icône lien.
+        const contracts: { id: string; title: string; amountCents: number | null }[] =
+          contractsData.contracts || [];
+        const summaries: Record<string, ContractSummary> = {};
+        for (const c of contracts) {
+          const linked = allInvoices.filter((i) => i.contractId === c.id && i.status !== "CANCELLED");
+          summaries[c.id] = {
+            title: c.title,
+            amountCents: c.amountCents,
+            billedCents: linked.reduce((sum, i) => sum + i.totalCents, 0),
+            paidCents: linked.reduce((sum, i) => sum + i.amountPaidCents, 0),
+          };
+        }
+        setContractSummaries(summaries);
+      })
       .finally(() => setPageLoading(false));
   }
 
@@ -233,11 +271,54 @@ export default function InvoicesPage() {
                 <div className="min-w-0">
                   <p className="flex items-center gap-1.5 truncate font-medium text-gray-900">
                     {inv.number}
-                    {inv.contractId && (
-                      <span title={t("invoices.linkedToContract")} className="text-gray-400">
-                        <IconLink />
-                      </span>
-                    )}
+                    {inv.contractId &&
+                      (contractSummaries[inv.contractId] ? (
+                        <ContractInfoBubble
+                          triggerLabel={t("invoices.linkedToContract")}
+                          title={contractSummaries[inv.contractId].title}
+                          lines={[
+                            {
+                              label: t("invoices.contractTotal"),
+                              value:
+                                contractSummaries[inv.contractId].amountCents != null
+                                  ? formatMoney(contractSummaries[inv.contractId].amountCents!, inv.currency)
+                                  : t("invoices.contractAmountUnset"),
+                            },
+                            {
+                              label: t("invoices.contractBilled"),
+                              value: `${formatMoney(contractSummaries[inv.contractId].billedCents, inv.currency)}${
+                                formatPercent(
+                                  contractSummaries[inv.contractId].billedCents,
+                                  contractSummaries[inv.contractId].amountCents
+                                )
+                                  ? ` (${formatPercent(
+                                      contractSummaries[inv.contractId].billedCents,
+                                      contractSummaries[inv.contractId].amountCents
+                                    )})`
+                                  : ""
+                              }`,
+                            },
+                            {
+                              label: t("invoices.contractPaid"),
+                              value: `${formatMoney(contractSummaries[inv.contractId].paidCents, inv.currency)}${
+                                formatPercent(
+                                  contractSummaries[inv.contractId].paidCents,
+                                  contractSummaries[inv.contractId].amountCents
+                                )
+                                  ? ` (${formatPercent(
+                                      contractSummaries[inv.contractId].paidCents,
+                                      contractSummaries[inv.contractId].amountCents
+                                    )})`
+                                  : ""
+                              }`,
+                            },
+                          ]}
+                        />
+                      ) : (
+                        <span title={t("invoices.linkedToContract")} className="text-gray-400">
+                          <IconLink />
+                        </span>
+                      ))}
                   </p>
                   <p className="truncate text-sm text-gray-500">
                     {inv.client?.name || inv.guestClientName || t("common.noClient")} · {formatDate(inv.createdAt, locale)}

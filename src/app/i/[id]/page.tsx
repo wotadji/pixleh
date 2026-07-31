@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PixlehLogo } from "@/components/marketing/PixlehLogo";
 import { PayInvoiceButton } from "@/components/site/PayInvoiceButton";
+import { ContractInfoBubble } from "@/components/shared/ContractInfoBubble";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,11 @@ function formatMoney(cents: number, currency: string) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency }).format(cents / 100);
 }
 
+function formatPercent(part: number, total: number | null): string | null {
+  if (!total || total <= 0) return null;
+  return `${Math.round((part / total) * 100)} %`;
+}
+
 /**
  * Page publique de paiement d'une facture — refonte du 31/07/2026 (demande d'Adriel : amener
  * la facturation au même niveau de rigueur/professionnalisme que la page de signature de
@@ -47,24 +53,50 @@ export default async function InvoicePage({ params }: { params: { id: string } }
   });
   if (!invoice) notFound();
 
-  // notes/amountPaidCents/guestClientName/vatRate n'existent pas encore dans le Prisma Client
-  // généré du sandbox (voir schema.prisma) — lus à part via $queryRaw, même workaround que
-  // /c/[id].
+  // notes/amountPaidCents/guestClientName/vatRate/contractId n'existent pas encore dans le
+  // Prisma Client généré du sandbox (voir schema.prisma) — lus à part via $queryRaw, même
+  // workaround que /c/[id].
   const [row] = await prisma.$queryRaw<
     {
       notes: string | null;
       amountPaidCents: number;
       guestClientName: string | null;
       vatRate: number | null;
+      contractId: string | null;
     }[]
   >`
-    SELECT notes, "amountPaidCents", "guestClientName", "vatRate" FROM "Invoice" WHERE id = ${invoice.id}
+    SELECT notes, "amountPaidCents", "guestClientName", "vatRate", "contractId"
+    FROM "Invoice" WHERE id = ${invoice.id}
   `;
   const notes = row?.notes || null;
   const amountPaidCents = row?.amountPaidCents ?? 0;
   const balanceDue = invoice.totalCents - amountPaidCents;
   const guestClientName = row?.guestClientName || null;
   const vatRate = row?.vatRate ?? null;
+  const contractId = row?.contractId || null;
+
+  // Infos du contrat lié — demandé par Adriel, 31/07/2026 : une bulle qui rappelle au client
+  // qui paie le montant total convenu par contrat et où se situe cette facture dedans (déjà
+  // facturé / déjà payé / solde), même agrégation que /dashboard/contracts (billingSummary).
+  let contractBubble: { title: string; amountCents: number | null; billedCents: number; paidCents: number } | null =
+    null;
+  if (contractId) {
+    const [contractRow] = await prisma.$queryRaw<
+      { title: string; amountCents: number | null }[]
+    >`SELECT title, "amountCents" FROM "Contract" WHERE id = ${contractId}`;
+    if (contractRow) {
+      const linkedInvoices = await prisma.$queryRaw<
+        { totalCents: number; amountPaidCents: number; status: string }[]
+      >`SELECT "totalCents", "amountPaidCents", status FROM "Invoice" WHERE "contractId" = ${contractId}`;
+      const nonCancelled = linkedInvoices.filter((i) => i.status !== "CANCELLED");
+      contractBubble = {
+        title: contractRow.title,
+        amountCents: contractRow.amountCents,
+        billedCents: nonCancelled.reduce((sum, i) => sum + i.totalCents, 0),
+        paidCents: nonCancelled.reduce((sum, i) => sum + i.amountPaidCents, 0),
+      };
+    }
+  }
 
   const lineItems = invoice.lineItems as unknown as LineItem[];
   // Sous-total HT dérivé des lignes, TVA affichée = différence avec le total stocké (voir
@@ -118,7 +150,52 @@ export default async function InvoicePage({ params }: { params: { id: string } }
               {STATUS_LABELS[invoice.status]}
             </span>
           </div>
-          <h1 className="mt-1 font-serif text-2xl font-semibold text-gray-900">Facture {invoice.number}</h1>
+          <h1 className="mt-1 flex items-center gap-2 font-serif text-2xl font-semibold text-gray-900">
+            Facture {invoice.number}
+            {contractBubble && (
+              <ContractInfoBubble
+                triggerLabel="Voir les informations du contrat lié"
+                title={`Contrat « ${contractBubble.title} »`}
+                lines={[
+                  {
+                    label: "Montant total du contrat",
+                    value:
+                      contractBubble.amountCents != null
+                        ? formatMoney(contractBubble.amountCents, invoice.currency)
+                        : "Non renseigné",
+                  },
+                  {
+                    label: "Déjà facturé",
+                    value: `${formatMoney(contractBubble.billedCents, invoice.currency)}${
+                      formatPercent(contractBubble.billedCents, contractBubble.amountCents)
+                        ? ` (${formatPercent(contractBubble.billedCents, contractBubble.amountCents)})`
+                        : ""
+                    }`,
+                  },
+                  {
+                    label: "Déjà payé",
+                    value: `${formatMoney(contractBubble.paidCents, invoice.currency)}${
+                      formatPercent(contractBubble.paidCents, contractBubble.amountCents)
+                        ? ` (${formatPercent(contractBubble.paidCents, contractBubble.amountCents)})`
+                        : ""
+                    }`,
+                  },
+                  ...(contractBubble.amountCents != null
+                    ? [
+                        {
+                          label: "Solde restant du contrat",
+                          value: formatMoney(
+                            Math.max(0, contractBubble.amountCents - contractBubble.paidCents),
+                            invoice.currency
+                          ),
+                          muted: true,
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+            )}
+          </h1>
           <p className="mt-2 text-xs text-gray-400">{emittedLine}</p>
 
           {(invoice.client || guestClientName) && (
