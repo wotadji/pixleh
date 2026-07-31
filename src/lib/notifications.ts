@@ -230,7 +230,7 @@ export async function sendInvoiceEmail(params: {
     <p><strong>${escapeHtml(params.studio.name)}</strong> vous a envoyé la facture
     <strong>${escapeHtml(params.invoiceNumber)}</strong> d'un montant de <strong>${amount}</strong>${dueLine}.</p>
     ${notesBlock.html}
-    <a href="${link}" style="${BUTTON_STYLE}">Consulter et payer</a>
+    <a href="${link}" style="${BUTTON_STYLE}">Consulter votre facture</a>
     <p style="margin-top:14px;font-size:13px;">
       <a href="${pdfLink}" style="color:#6b7280;text-decoration:underline;">Télécharger la facture (PDF)</a>
     </p>
@@ -243,7 +243,7 @@ export async function sendInvoiceEmail(params: {
     to: params.clientEmail,
     subject: `Facture ${params.invoiceNumber} — ${amount}`,
     text: [
-      `Bonjour ${params.clientName}, ${params.studio.name} vous a envoyé la facture ${params.invoiceNumber} (${amount})${dueLine}. Consultez-la et payez ici : ${link}`,
+      `Bonjour ${params.clientName}, ${params.studio.name} vous a envoyé la facture ${params.invoiceNumber} (${amount})${dueLine}. Consultez votre facture ici : ${link}`,
       notesBlock.text,
       // Lien direct de téléchargement du PDF — demandé par Adriel, 31/07/2026 : le client
       // doit pouvoir simplement récupérer la facture (ex: pour un règlement par virement à
@@ -274,7 +274,7 @@ export async function sendInvoiceReminderEmail(params: Parameters<typeof sendInv
     <strong>${amount}</strong>${dueLine} envoyée par <strong>${escapeHtml(params.studio.name)}</strong>
     est toujours en attente de règlement.</p>
     ${notesBlock.html}
-    <a href="${link}" style="${BUTTON_STYLE}">Consulter et payer</a>
+    <a href="${link}" style="${BUTTON_STYLE}">Consulter votre facture</a>
     <p style="margin-top:14px;font-size:13px;">
       <a href="${pdfLink}" style="color:#6b7280;text-decoration:underline;">Télécharger la facture (PDF)</a>
     </p>
@@ -284,7 +284,7 @@ export async function sendInvoiceReminderEmail(params: Parameters<typeof sendInv
     to: params.clientEmail,
     subject: `Rappel — Facture ${params.invoiceNumber} en attente (${amount})`,
     text: [
-      `Bonjour ${params.clientName}, rappel : la facture ${params.invoiceNumber} (${amount})${dueLine} de ${params.studio.name} est toujours en attente de règlement. Consultez-la et payez ici : ${link}`,
+      `Bonjour ${params.clientName}, rappel : la facture ${params.invoiceNumber} (${amount})${dueLine} de ${params.studio.name} est toujours en attente de règlement. Consultez votre facture ici : ${link}`,
       notesBlock.text,
       `Télécharger la facture (PDF) : ${pdfLink}`,
       signature.text,

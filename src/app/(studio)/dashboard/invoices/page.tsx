@@ -81,6 +81,9 @@ export default function InvoicesPage() {
   const [pageLoading, setPageLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | "ALL">("ALL");
+  // Filtre par contrat (31/07/2026, demande d'Adriel : "regrouper les factures par contrat")
+  // — "ALL" (défaut), "NONE" (factures sans contrat lié), ou l'id d'un contrat précis.
+  const [contractFilter, setContractFilter] = useState<string>("ALL");
   const [page, setPage] = useState(1);
   const [showArchived, setShowArchived] = useState(false);
   const [archiving, setArchiving] = useState<string | null>(null);
@@ -151,6 +154,15 @@ export default function InvoicesPage() {
   const activeCount = useMemo(() => invoices.filter((i) => !i.archived).length, [invoices]);
   const archivedCount = useMemo(() => invoices.filter((i) => i.archived).length, [invoices]);
 
+  // Contrats à proposer dans le filtre : uniquement ceux ayant au moins une facture, triés
+  // par nom (évite de lister des contrats sans rapport avec les factures affichées ici).
+  const contractOptions = useMemo(() => {
+    const ids = new Set(invoices.map((i) => i.contractId).filter((id): id is string => !!id));
+    return Array.from(ids)
+      .map((id) => ({ id, title: contractSummaries[id]?.title || id }))
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }, [invoices, contractSummaries]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return invoices.filter((i) => {
@@ -160,13 +172,16 @@ export default function InvoicesPage() {
         i.number.toLowerCase().includes(q) ||
         (i.client?.name || i.guestClientName || "").toLowerCase().includes(q);
       const matchesStatus = statusFilter === "ALL" || i.status === statusFilter;
-      return matchesSearch && matchesStatus;
+      const matchesContract =
+        contractFilter === "ALL" ||
+        (contractFilter === "NONE" ? !i.contractId : i.contractId === contractFilter);
+      return matchesSearch && matchesStatus && matchesContract;
     });
-  }, [invoices, search, statusFilter, showArchived]);
+  }, [invoices, search, statusFilter, contractFilter, showArchived]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, showArchived]);
+  }, [search, statusFilter, contractFilter, showArchived]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -219,19 +234,38 @@ export default function InvoicesPage() {
             className="input"
           />
         </div>
-        <div className="w-44 shrink-0">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as InvoiceStatus | "ALL")}
-            className="input"
-          >
-            <option value="ALL">{t("invoices.allStatuses")}</option>
-            {(Object.keys(STATUS_LABELS) as InvoiceStatus[]).map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABELS[s]}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-wrap gap-2">
+          {contractOptions.length > 0 && (
+            <div className="w-52 shrink-0">
+              <select
+                value={contractFilter}
+                onChange={(e) => setContractFilter(e.target.value)}
+                className="input"
+              >
+                <option value="ALL">{t("invoices.allContracts")}</option>
+                <option value="NONE">{t("invoices.noContractFilter")}</option>
+                {contractOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="w-44 shrink-0">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as InvoiceStatus | "ALL")}
+              className="input"
+            >
+              <option value="ALL">{t("invoices.allStatuses")}</option>
+              {(Object.keys(STATUS_LABELS) as InvoiceStatus[]).map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_LABELS[s]}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 

@@ -8,6 +8,15 @@ import { ContractInfoBubble } from "@/components/shared/ContractInfoBubble";
 
 export const dynamic = "force-dynamic";
 
+// Paiement en ligne temporairement désactivé (31/07/2026, demande d'Adriel) : tant que Stripe
+// Connect n'est pas développé (voir tâche différée jusqu'au lancement de la v1), l'argent d'un
+// paiement Stripe Checkout atterrit sur le compte pixleh, pas sur celui du studio — il ne faut
+// donc pas proposer de payer en ligne pour l'instant. Le studio indique son IBAN dans les
+// Notes de la facture (repris dans l'email et ici) pour un règlement par virement, validé
+// manuellement via "Marquer payée". Remettre à `true` une fois Stripe Connect en place pour
+// réafficher le bouton PayInvoiceButton ci-dessous.
+const ONLINE_PAYMENT_ENABLED = false;
+
 interface LineItem {
   description: string;
   quantity: number;
@@ -298,7 +307,9 @@ export default async function InvoicePage({ params }: { params: { id: string } }
           ) : (
             <div className="mt-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-gray-900">Paiement</p>
+                <p className="text-sm font-medium text-gray-900">
+                  {ONLINE_PAYMENT_ENABLED ? "Paiement" : "Facture"}
+                </p>
                 <a
                   href={`/api/invoices/${invoice.id}/pdf`}
                   className="flex shrink-0 items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
@@ -307,7 +318,9 @@ export default async function InvoicePage({ params }: { params: { id: string } }
                   Télécharger le PDF
                 </a>
               </div>
-              {invoice.status !== "CANCELLED" && <PayInvoiceButton invoiceId={invoice.id} />}
+              {ONLINE_PAYMENT_ENABLED && invoice.status !== "CANCELLED" && (
+                <PayInvoiceButton invoiceId={invoice.id} />
+              )}
             </div>
           )}
         </div>
