@@ -216,6 +216,11 @@ export async function sendInvoiceEmail(params: {
    * son IBAN, qui doit être visible par le client sans qu'il ait besoin de cliquer sur le
    * lien de la facture. */
   notes?: string | null;
+  /** Coordonnées bancaires du studio (StudioSettings.iban/bic/bankName) — reprises
+   * automatiquement dans un bloc dédié "Réglez par virement" (31/07/2026, demande d'Adriel :
+   * éviter au studio de devoir retaper son IBAN dans les Notes de chaque facture). Absent ou
+   * iban null → bloc omis. */
+  bankDetails?: { iban: string | null; bic: string | null; bankName: string | null } | null;
 }) {
   const link = appUrl(`/i/${params.invoiceId}`);
   const pdfLink = appUrl(`/api/invoices/${params.invoiceId}/pdf`);
@@ -223,6 +228,7 @@ export async function sendInvoiceEmail(params: {
   const amount = formatAmount(params.totalCents, params.currency);
   const dueLine = params.dueDate ? ` — échéance le ${params.dueDate.toLocaleDateString("fr-FR")}` : "";
   const notesBlock = buildInvoiceNotesBlock(params.notes);
+  const bankBlock = buildBankDetailsBlock(params.bankDetails);
 
   const html = wrapEmail(`
     <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Nouvelle facture</h2>
@@ -230,6 +236,7 @@ export async function sendInvoiceEmail(params: {
     <p><strong>${escapeHtml(params.studio.name)}</strong> vous a envoyé la facture
     <strong>${escapeHtml(params.invoiceNumber)}</strong> d'un montant de <strong>${amount}</strong>${dueLine}.</p>
     ${notesBlock.html}
+    ${bankBlock.html}
     <a href="${link}" style="${BUTTON_STYLE}">Consulter votre facture</a>
     <p style="margin-top:14px;font-size:13px;">
       <a href="${pdfLink}" style="color:#6b7280;text-decoration:underline;">Télécharger la facture (PDF)</a>
@@ -245,6 +252,7 @@ export async function sendInvoiceEmail(params: {
     text: [
       `Bonjour ${params.clientName}, ${params.studio.name} vous a envoyé la facture ${params.invoiceNumber} (${amount})${dueLine}. Consultez votre facture ici : ${link}`,
       notesBlock.text,
+      bankBlock.text,
       // Lien direct de téléchargement du PDF — demandé par Adriel, 31/07/2026 : le client
       // doit pouvoir simplement récupérer la facture (ex: pour un règlement par virement à
       // partir de l'IBAN indiqué en note) sans passer par la page de paiement en ligne.
@@ -259,21 +267,42 @@ export async function sendInvoiceEmail(params: {
 
 /** Relance manuelle d'une facture en attente (bouton "Relancer" sur /dashboard/invoices) —
  * même contenu que sendInvoiceEmail mais formulé comme un rappel plutôt qu'un premier envoi. */
-export async function sendInvoiceReminderEmail(params: Parameters<typeof sendInvoiceEmail>[0]) {
+/**
+ * `stage` distingue les 3 paliers de relance automatique (31/07/2026, demande d'Adriel : "un
+ * send mail de rappel au client à chaque 2 jours avant, puis 1 jour avant et le jour J") du
+ * bouton "Relancer" manuel existant (stage omis) — ajuste seulement le titre/objet pour rester
+ * cohérent avec l'échéance réelle, le corps de l'email reste identique. Voir
+ * /api/cron/invoice-reminders pour l'appelant automatique et /api/invoices/[id]/send pour le
+ * bouton manuel (qui n'envoie pas de stage, comportement inchangé).
+ */
+export async function sendInvoiceReminderEmail(
+  params: Parameters<typeof sendInvoiceEmail>[0] & { stage?: "2d" | "1d" | "due" }
+) {
   const link = appUrl(`/i/${params.invoiceId}`);
   const pdfLink = appUrl(`/api/invoices/${params.invoiceId}/pdf`);
   const signature = buildEmailSignature(params.studio, params.settings);
   const amount = formatAmount(params.totalCents, params.currency);
   const dueLine = params.dueDate ? ` — échéance le ${params.dueDate.toLocaleDateString("fr-FR")}` : "";
   const notesBlock = buildInvoiceNotesBlock(params.notes);
+  const bankBlock = buildBankDetailsBlock(params.bankDetails);
+  const stageLabel =
+    params.stage === "2d"
+      ? "L'échéance approche : plus que 2 jours"
+      : params.stage === "1d"
+        ? "L'échéance approche : plus que 1 jour"
+        : params.stage === "due"
+          ? "La facture arrive à échéance aujourd'hui"
+          : null;
 
   const html = wrapEmail(`
     <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Rappel : facture en attente</h2>
     <p>Bonjour ${escapeHtml(params.clientName)},</p>
+    ${stageLabel ? `<p style="color:#b45309;font-weight:600;">${stageLabel}</p>` : ""}
     <p>Petit rappel : la facture <strong>${escapeHtml(params.invoiceNumber)}</strong> de
     <strong>${amount}</strong>${dueLine} envoyée par <strong>${escapeHtml(params.studio.name)}</strong>
     est toujours en attente de règlement.</p>
     ${notesBlock.html}
+    ${bankBlock.html}
     <a href="${link}" style="${BUTTON_STYLE}">Consulter votre facture</a>
     <p style="margin-top:14px;font-size:13px;">
       <a href="${pdfLink}" style="color:#6b7280;text-decoration:underline;">Télécharger la facture (PDF)</a>
@@ -286,6 +315,7 @@ export async function sendInvoiceReminderEmail(params: Parameters<typeof sendInv
     text: [
       `Bonjour ${params.clientName}, rappel : la facture ${params.invoiceNumber} (${amount})${dueLine} de ${params.studio.name} est toujours en attente de règlement. Consultez votre facture ici : ${link}`,
       notesBlock.text,
+      bankBlock.text,
       `Télécharger la facture (PDF) : ${pdfLink}`,
       signature.text,
     ]
@@ -304,6 +334,31 @@ function buildInvoiceNotesBlock(notes?: string | null): { html: string; text: st
   return {
     html: `<p style="background:#f9fafb;border-radius:8px;padding:12px 14px;white-space:pre-line;color:#374151;">${escapeHtml(notes)}</p>`,
     text: notes,
+  };
+}
+
+/** Bloc "Réglez par virement" partagé par sendInvoiceEmail/sendInvoiceReminderEmail — reprend
+ * automatiquement StudioSettings.iban/bic/bankName (31/07/2026, demande d'Adriel : remplacer le
+ * copier-coller manuel de l'IBAN dans les Notes de chaque facture par un réglage unique,
+ * réutilisé partout). Omis si l'IBAN n'est pas renseigné. */
+function buildBankDetailsBlock(
+  bank?: { iban: string | null; bic: string | null; bankName: string | null } | null
+): { html: string; text: string } {
+  if (!bank?.iban) return { html: "", text: "" };
+  const lines = [
+    { label: "IBAN", value: bank.iban },
+    { label: "BIC", value: bank.bic },
+    { label: "Banque", value: bank.bankName },
+  ].filter((l) => l.value);
+
+  return {
+    html: `
+      <div style="background:#f5f3ff;border-radius:8px;padding:12px 14px;margin-top:10px;">
+        <p style="margin:0 0 6px;font-weight:600;color:#5b21b6;">Réglez par virement</p>
+        ${lines.map((l) => `<p style="margin:0;color:#374151;">${l.label} : <strong>${escapeHtml(l.value as string)}</strong></p>`).join("")}
+      </div>
+    `,
+    text: ["Réglez par virement :", ...lines.map((l) => `${l.label} : ${l.value}`)].join("\n"),
   };
 }
 

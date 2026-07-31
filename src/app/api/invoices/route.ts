@@ -4,6 +4,7 @@ import { requireStudioSession, AccessError } from "@/lib/access";
 import { invoiceSchema } from "@/lib/validators";
 import { sendInvoiceEmail } from "@/lib/notifications";
 import { isInvoiceTemplateId } from "@/lib/invoiceTemplates";
+import { fetchStudioBankDetails } from "@/lib/studioBankDetails";
 
 /**
  * Liste des factures du studio — refonte du 31/07/2026 (demande d'Adriel : amener la
@@ -179,6 +180,7 @@ export async function POST(req: Request) {
             ? { contactEmail: studio.settings.contactEmail, contactPhone: studio.settings.contactPhone }
             : null,
           notes: data.notes,
+          bankDetails: await fetchStudioBankDetails(session.user.studioId),
         });
         emailSent = result.ok;
         emailError = result.error;

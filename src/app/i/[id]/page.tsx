@@ -11,10 +11,10 @@ export const dynamic = "force-dynamic";
 // Paiement en ligne temporairement désactivé (31/07/2026, demande d'Adriel) : tant que Stripe
 // Connect n'est pas développé (voir tâche différée jusqu'au lancement de la v1), l'argent d'un
 // paiement Stripe Checkout atterrit sur le compte pixleh, pas sur celui du studio — il ne faut
-// donc pas proposer de payer en ligne pour l'instant. Le studio indique son IBAN dans les
-// Notes de la facture (repris dans l'email et ici) pour un règlement par virement, validé
-// manuellement via "Marquer payée". Remettre à `true` une fois Stripe Connect en place pour
-// réafficher le bouton PayInvoiceButton ci-dessous.
+// donc pas proposer de payer en ligne pour l'instant. Le studio renseigne son IBAN une fois
+// dans Réglages > Facturation, repris automatiquement ici et dans l'email pour un règlement par
+// virement, validé manuellement via "Marquer payée". Remettre à `true` une fois Stripe Connect
+// en place pour réafficher le bouton PayInvoiceButton ci-dessous.
 const ONLINE_PAYMENT_ENABLED = false;
 
 interface LineItem {
@@ -107,6 +107,15 @@ export default async function InvoicePage({ params }: { params: { id: string } }
       };
     }
   }
+
+  // IBAN/BIC/nom de banque du studio (StudioSettings) — réutilisés automatiquement ici et dans
+  // l'email (31/07/2026, demande d'Adriel : ne plus retaper l'IBAN dans les Notes de chaque
+  // facture, voir buildBankDetailsBlock dans src/lib/notifications.ts pour la même logique côté
+  // email). N'existe pas encore dans le Prisma Client généré du sandbox — lu via $queryRaw.
+  const [bankRow] = await prisma.$queryRaw<
+    { iban: string | null; bic: string | null; bankName: string | null }[]
+  >`SELECT iban, bic, "bankName" FROM "StudioSettings" WHERE "studioId" = ${invoice.studioId}`;
+  const bankDetails = bankRow?.iban ? bankRow : null;
 
   const lineItems = invoice.lineItems as unknown as LineItem[];
   // Sous-total HT dérivé des lignes, TVA affichée = différence avec le total stocké (voir
@@ -277,6 +286,27 @@ export default async function InvoicePage({ params }: { params: { id: string } }
             <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
               <p className="text-xs uppercase tracking-wide text-gray-400">Notes</p>
               <p className="mt-1 whitespace-pre-line text-sm text-gray-600">{notes}</p>
+            </div>
+          )}
+
+          {bankDetails && invoice.status !== "PAID" && invoice.status !== "CANCELLED" && (
+            <div className="mt-4 rounded-xl border border-brand-100 bg-brand-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Réglez par virement</p>
+              <div className="mt-1.5 space-y-0.5 text-sm text-gray-700">
+                <p>
+                  IBAN : <span className="font-medium">{bankDetails.iban}</span>
+                </p>
+                {bankDetails.bic && (
+                  <p>
+                    BIC : <span className="font-medium">{bankDetails.bic}</span>
+                  </p>
+                )}
+                {bankDetails.bankName && (
+                  <p>
+                    Banque : <span className="font-medium">{bankDetails.bankName}</span>
+                  </p>
+                )}
+              </div>
             </div>
           )}
 

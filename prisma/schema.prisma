@@ -233,6 +233,12 @@ model StudioSettings {
   vatExempt          Boolean @default(true)
   iban               String?
   bic                String?
+  /// Nom de la banque (31/07/2026, demande d'Adriel) — purement informatif, affiché à côté de
+  /// l'IBAN/BIC (email de facture + page publique /i/[id]) pour que le client identifie plus
+  /// facilement le virement à effectuer. Renseigné une seule fois ici plutôt que retapé par le
+  /// studio dans les Notes de chaque facture (workaround temporaire abandonné au profit de ce
+  /// champ dédié, réutilisé automatiquement partout où l'IBAN doit apparaître).
+  bankName           String?
   /// Texte légal libre affiché en bas de facture (pénalités de retard, indemnité forfaitaire
   /// de recouvrement...) — pré-rempli avec une formule standard à la création du studio,
   /// modifiable librement dans Réglages > Facturation.
@@ -967,6 +973,13 @@ model Invoice {
   amountPaidCents Int         @default(0)
   /// Mode du dernier paiement enregistré : "stripe" | "bank_transfer" | "cash" | "check".
   paymentMethod String?
+  /// Relances automatiques d'échéance (31/07/2026, demande d'Adriel) — horodatage du dernier
+  /// envoi de chaque palier pour ne jamais relancer deux fois le même (voir
+  /// /api/cron/invoice-reminders, à appeler quotidiennement par une tâche cron externe).
+  /// null tant que le palier correspondant n'a pas été envoyé.
+  reminder2dSentAt      DateTime?
+  reminder1dSentAt      DateTime?
+  reminderDueDaySentAt  DateTime?
   /// Template de mise en page PDF ("classic" | "minimal" | "elegant", voir
   /// src/lib/invoiceTemplates.ts) — même mécanisme que Contract.template.
   template      String        @default("classic")

@@ -25,11 +25,12 @@ export async function GET() {
           vatExempt: boolean;
           iban: string | null;
           bic: string | null;
+          bankName: string | null;
           invoiceLegalMentions: string | null;
           invoiceNumberPrefix: string | null;
         }[]
       >`
-        SELECT "legalForm", siret, "vatNumber", "vatExempt", iban, bic, "invoiceLegalMentions", "invoiceNumberPrefix"
+        SELECT "legalForm", siret, "vatNumber", "vatExempt", iban, bic, "bankName", "invoiceLegalMentions", "invoiceNumberPrefix"
         FROM "StudioSettings" WHERE "studioId" = ${session.user.studioId}
       `;
       studioWithBilling = {
@@ -42,6 +43,7 @@ export async function GET() {
           vatExempt: billingRow?.vatExempt ?? true,
           iban: billingRow?.iban ?? null,
           bic: billingRow?.bic ?? null,
+          bankName: billingRow?.bankName ?? null,
           invoiceLegalMentions: billingRow?.invoiceLegalMentions ?? null,
           invoiceNumberPrefix: billingRow?.invoiceNumberPrefix ?? null,
         },
@@ -117,6 +119,9 @@ export async function PATCH(req: Request) {
     }
     if (body.bic !== undefined) {
       await prisma.$executeRaw`UPDATE "StudioSettings" SET bic = ${body.bic} WHERE "studioId" = ${session.user.studioId}`;
+    }
+    if (body.bankName !== undefined) {
+      await prisma.$executeRaw`UPDATE "StudioSettings" SET "bankName" = ${body.bankName} WHERE "studioId" = ${session.user.studioId}`;
     }
     if (body.invoiceLegalMentions !== undefined) {
       await prisma.$executeRaw`UPDATE "StudioSettings" SET "invoiceLegalMentions" = ${body.invoiceLegalMentions} WHERE "studioId" = ${session.user.studioId}`;

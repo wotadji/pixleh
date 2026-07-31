@@ -161,12 +161,24 @@ Renseignez `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` d
 Sans configuration, les emails (ex : notification de formulaire de contact) sont simplement
 ignorés avec un avertissement en log — le reste de l'application continue de fonctionner.
 
-## 8. Tâches périodiques (cron, optionnel)
+## 8. Tâches périodiques (cron)
 
-Depuis cPanel → **Cron Jobs**, vous pouvez ajouter des tâches de maintenance, par exemple :
-un script qui archive automatiquement les galeries expirées, ou relance les factures en retard.
-Ces scripts ne sont pas fournis par défaut mais peuvent être ajoutés comme routes API appelées
-par `curl` depuis un cron (avec une clé secrète de protection).
+Depuis cPanel → **Cron Jobs**, ajoutez une tâche quotidienne qui appelle
+`/api/cron/invoice-reminders` : elle envoie un rappel de paiement au client 2 jours avant
+l'échéance, 1 jour avant, et le jour même (une seule fois par palier et par facture), et fait
+passer une facture en retard au statut « En retard ».
+
+1. Définissez `CRON_SECRET` dans les variables d'environnement (voir `.env.example`,
+   `openssl rand -hex 24` pour en générer une).
+2. Dans cPanel → Cron Jobs, ajoutez une commande exécutée une fois par jour (ex : tous les jours
+   à 8h) :
+   ```
+   curl -s "https://votredomaine.com/api/cron/invoice-reminders?secret=VOTRE_CRON_SECRET"
+   ```
+
+D'autres tâches de maintenance (ex : archivage automatique des galeries expirées) peuvent être
+ajoutées sur le même principe : une route API dédiée, appelée par `curl` depuis un cron, protégée
+par une clé secrète.
 
 ## 9. Alternative : VPS avec Docker
 

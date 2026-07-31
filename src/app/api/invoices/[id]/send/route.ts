@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireStudioSession, AccessError } from "@/lib/access";
 import { sendInvoiceEmail, sendInvoiceReminderEmail } from "@/lib/notifications";
+import { fetchStudioBankDetails } from "@/lib/studioBankDetails";
 
 /**
  * (Re)envoi manuel d'une facture au client (bouton "Renvoyer" / "Relancer" sur
@@ -52,6 +53,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         ? { contactEmail: studio.settings.contactEmail, contactPhone: studio.settings.contactPhone }
         : null,
       notes: row?.notes ?? null,
+      bankDetails: await fetchStudioBankDetails(session.user.studioId),
     });
 
     if (result.ok) {

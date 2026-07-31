@@ -6,6 +6,7 @@ import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { Modal } from "@/components/ui/Modal";
 import { ContractInfoBubble } from "@/components/shared/ContractInfoBubble";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 
 type InvoiceStatus = "DRAFT" | "SENT" | "PAID" | "OVERDUE" | "CANCELLED";
 
@@ -237,19 +238,17 @@ export default function InvoicesPage() {
         <div className="flex flex-wrap gap-2">
           {contractOptions.length > 0 && (
             <div className="w-52 shrink-0">
-              <select
+              <SearchableSelect
                 value={contractFilter}
-                onChange={(e) => setContractFilter(e.target.value)}
-                className="input"
-              >
-                <option value="ALL">{t("invoices.allContracts")}</option>
-                <option value="NONE">{t("invoices.noContractFilter")}</option>
-                {contractOptions.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.title}
-                  </option>
-                ))}
-              </select>
+                onChange={setContractFilter}
+                placeholder={t("invoices.allContracts")}
+                searchPlaceholder={t("common.searchPlaceholder")}
+                options={[
+                  { value: "ALL", label: t("invoices.allContracts") },
+                  { value: "NONE", label: t("invoices.noContractFilter") },
+                  ...contractOptions.map((c) => ({ value: c.id, label: c.title })),
+                ]}
+              />
             </div>
           )}
           <div className="w-44 shrink-0">

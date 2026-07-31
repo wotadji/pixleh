@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { INVOICE_TEMPLATE_IDS, DEFAULT_INVOICE_TEMPLATE, type InvoiceTemplateId } from "@/lib/invoiceTemplates";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 
 interface ClientOption {
   id: string;
@@ -229,23 +230,18 @@ export function InvoiceForm({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">{t("invoiceForm.clientLabel")}</label>
-            <select
-              className="input"
+            <SearchableSelect
               value={form.clientId}
-              onChange={(e) => {
-                const clientId = e.target.value;
+              onChange={(clientId) => {
                 // Sans client CRM, un contrat lié n'a plus de sens (voir superRefine côté
                 // serveur) — on efface donc contractId dès qu'on repasse sur "Aucun client".
                 setForm({ ...form, clientId, contractId: clientId ? form.contractId : "" });
               }}
-            >
-              <option value="">{t("common.noClientOption")}</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              placeholder={t("common.noClientOption")}
+              searchPlaceholder={t("common.searchPlaceholder")}
+              emptyOptionLabel={t("common.noClientOption")}
+              options={clients.map((c) => ({ value: c.id, label: c.name }))}
+            />
           </div>
 
           {!form.clientId && (
@@ -267,18 +263,14 @@ export function InvoiceForm({
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">{t("invoiceForm.contractLabel")}</label>
             {form.clientId ? (
-              <select
-                className="input"
+              <SearchableSelect
                 value={form.contractId}
-                onChange={(e) => setForm({ ...form, contractId: e.target.value })}
-              >
-                <option value="">{t("invoiceForm.noContractOption")}</option>
-                {sortedContracts.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.title}
-                  </option>
-                ))}
-              </select>
+                onChange={(contractId) => setForm({ ...form, contractId })}
+                placeholder={t("invoiceForm.noContractOption")}
+                searchPlaceholder={t("common.searchPlaceholder")}
+                emptyOptionLabel={t("invoiceForm.noContractOption")}
+                options={sortedContracts.map((c) => ({ value: c.id, label: c.title }))}
+              />
             ) : (
               <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
                 <IconWarning className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
@@ -403,7 +395,12 @@ export function InvoiceForm({
             value={form.notes}
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
           />
-          <p className="mt-1.5 text-xs text-gray-400">{t("invoiceForm.notesIbanHint")}</p>
+          <p className="mt-1.5 text-xs text-gray-400">
+            {t("invoiceForm.notesIbanHint")}{" "}
+            <Link href="/dashboard/settings?tab=billing" className="text-brand-600 hover:underline">
+              {t("invoiceForm.notesIbanHintLink")}
+            </Link>
+          </p>
         </div>
 
         <div className="flex items-center justify-end gap-3 border-t border-gray-100 pt-4">

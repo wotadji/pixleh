@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { LogoCropModal } from "@/components/studio/LogoCropModal";
@@ -32,7 +33,12 @@ type SettingsTab = "profile" | "account" | "password" | "watermark" | "carousel"
 export default function SettingsPage() {
   const { t } = useLanguage();
   const { data: authSession } = useSession();
-  const [tab, setTab] = useState<SettingsTab>("profile");
+  const searchParams = useSearchParams();
+  // Permet un lien direct vers un onglet précis (ex: /dashboard/settings?tab=billing depuis
+  // l'astuce IBAN de InvoiceForm.tsx, 31/07/2026) — même patron que ?contractId= sur
+  // /dashboard/invoices/new.
+  const initialTab = (searchParams.get("tab") as SettingsTab | null) || "profile";
+  const [tab, setTab] = useState<SettingsTab>(initialTab);
 
   // Suppression de compte (droit à l'effacement RGPD) — réservée au rôle OWNER, voir
   // POST /api/account/delete. Double confirmation volontaire (mot de passe + saisie du mot
@@ -128,6 +134,9 @@ export default function SettingsPage() {
   const [vatExempt, setVatExempt] = useState(true);
   const [iban, setIban] = useState("");
   const [bic, setBic] = useState("");
+  // Nom de la banque (31/07/2026, demande d'Adriel) — renseigné une fois ici, réutilisé
+  // automatiquement dans l'email de facture et sur /i/[id] (voir sendInvoiceEmail).
+  const [bankName, setBankName] = useState("");
   const [invoiceLegalMentions, setInvoiceLegalMentions] = useState("");
   const [invoiceNumberPrefix, setInvoiceNumberPrefix] = useState("");
   const [billingSaved, setBillingSaved] = useState(false);
@@ -163,6 +172,7 @@ export default function SettingsPage() {
         setVatExempt(d.studio?.settings?.vatExempt ?? true);
         setIban(d.studio?.settings?.iban || "");
         setBic(d.studio?.settings?.bic || "");
+        setBankName(d.studio?.settings?.bankName || "");
         setInvoiceLegalMentions(d.studio?.settings?.invoiceLegalMentions || "");
         setInvoiceNumberPrefix(d.studio?.settings?.invoiceNumberPrefix || "");
         setCarouselSlides(
@@ -414,6 +424,7 @@ export default function SettingsPage() {
           vatExempt,
           iban,
           bic,
+          bankName,
           invoiceLegalMentions,
           invoiceNumberPrefix,
         }),
@@ -870,7 +881,7 @@ export default function SettingsPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600">{t("settings.ibanLabel")}</label>
                 <input className="input w-full" value={iban} onChange={(e) => setIban(e.target.value)} />
@@ -879,7 +890,14 @@ export default function SettingsPage() {
                 <label className="mb-1 block text-xs font-medium text-gray-600">{t("settings.bicLabel")}</label>
                 <input className="input w-full" value={bic} onChange={(e) => setBic(e.target.value)} />
               </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">{t("settings.bankNameLabel")}</label>
+                <input className="input w-full" value={bankName} onChange={(e) => setBankName(e.target.value)} />
+              </div>
             </div>
+            {iban && (
+              <p className="text-xs text-gray-400">{t("settings.ibanAutoHint")}</p>
+            )}
 
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-600">
