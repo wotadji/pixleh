@@ -6,6 +6,7 @@ import { GalleryEntryChooser } from "@/components/gallery/GalleryEntryChooser";
 import { GalleryView } from "@/components/gallery/GalleryView";
 import { sortPhotos, resolvePhotoSortKey } from "@/lib/photoSort";
 import { resolveGalleryDesign } from "@/lib/galleryDesign";
+import { getActivePrintCatalog } from "@/lib/printCatalog";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,9 @@ export default async function GalleryEntryPage({
       // Vidéos externes (Vimeo/YouTube) — mode client uniquement, comme avant.
       videos: { orderBy: { position: "asc" } },
       studio: { select: { name: true, slug: true, logoUrl: true, settings: true } },
-      products: true,
+      // "products: true" retiré le 31/07/2026 — plus lu nulle part dans ce fichier depuis que
+      // les tarifs d'impression viennent du catalogue plateforme (voir printProducts plus bas,
+      // getActivePrintCatalog) plutôt que de Product rattachés à la galerie via GalleryProducts.
     },
   });
 
@@ -161,18 +164,13 @@ export default async function GalleryEntryPage({
     },
   });
 
-  // Tarif(s) d'impression proposés par le photographe pour cette galerie : produits de
-  // type PRINT explicitement rattachés à la galerie, ou à défaut tous les produits PRINT
-  // actifs du studio (même logique de repli que /store) — sert au panneau "Sélection
-  // impression" (icône imprimante sur chaque vignette) pour calculer le total. Non proposé
-  // en mode invité (comme avant, voir /invite/[guestSlug]).
-  const galleryProducts =
-    mode === "guest"
-      ? []
-      : gallery.products.length > 0
-        ? gallery.products
-        : await prisma.product.findMany({ where: { studioId: gallery.studioId, active: true } });
-  const printProducts = galleryProducts.filter((p) => p.type === "PRINT" && p.active);
+  // Tarif(s) d'impression : depuis le 31/07/2026 (chantier "impression pixleh/Prodigi",
+  // demande d'Adriel), ce n'est plus un Product du studio mais le catalogue plateforme
+  // (/admin/print-catalog, géré par pixleh) — automatiquement proposé dans TOUTES les
+  // galeries, sans affectation par le studio. Sert au panneau "Sélection impression" (icône
+  // imprimante sur chaque vignette) pour calculer le total. Non proposé en mode invité (comme
+  // avant, voir /invite/[guestSlug]).
+  const printProducts = mode === "guest" ? [] : await getActivePrintCatalog();
 
   return (
     <GalleryView

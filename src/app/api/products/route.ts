@@ -24,6 +24,18 @@ export async function POST(req: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
+    // Les produits d'impression (PRINT) ne sont plus créables par un studio depuis le
+    // 31/07/2026 (chantier "impression pixleh/Prodigi", demande d'Adriel) — ils vivent
+    // désormais uniquement dans le catalogue plateforme (/admin/print-catalog, voir
+    // src/lib/printCatalog.ts), pour que pixleh en garde la main sur le fulfillment ET la
+    // marge. Défense en profondeur : l'UI (dashboard/store/products) ne propose déjà plus ce
+    // type dans son sélecteur, ceci bloque aussi un appel API direct.
+    if (parsed.data.type === "PRINT") {
+      throw new AccessError(
+        "Les produits d'impression sont désormais gérés par pixleh, pas par le studio.",
+        403
+      );
+    }
     const product = await prisma.product.create({
       data: { studioId: session.user.studioId, ...parsed.data },
     });

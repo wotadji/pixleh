@@ -745,16 +745,33 @@ enum ProductType {
 
 model Product {
   id          String      @id @default(cuid())
-  studioId    String
-  studio      Studio      @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  /// Nullable depuis le 31/07/2026 (chantier "impression pixleh/Prodigi", demande d'Adriel :
+  /// "je veux que Boutique — Produits soit géré dans le panel Administrateur [...] c'est un
+  /// service de pixleh pas du studio"). null = produit de CATALOGUE PLATEFORME (voir
+  /// platformManaged ci-dessous), géré uniquement depuis /admin/print-catalog, jamais par un
+  /// studio. Un studioId non-null reste le fonctionnement historique (DIGITAL_DOWNLOAD/ALBUM/
+  /// PACKAGE créés par le studio lui-même, voir POST /api/products).
+  studioId    String?
+  studio      Studio?     @relation(fields: [studioId], references: [id], onDelete: Cascade)
   type        ProductType
   name        String
   description String?     @db.Text
   priceCents  Int
   currency    String      @default("EUR")
+  /// Générique historiquement ; sur une ligne de catalogue plateforme (platformManaged=true)
+  /// c'est le SKU chez le fournisseur d'impression (Prodigi) — sert à interroger le coût de
+  /// revient réel (Quote) et, plus tard, à soumettre la commande une fois payée.
   sku         String?
   imageUrl    String?
   active      Boolean     @default(true)
+  /// true = produit de catalogue plateforme (impression via Prodigi) : studioId est null,
+  /// géré uniquement dans /admin/print-catalog, automatiquement proposé dans TOUTES les
+  /// galeries (aucune affectation par studio nécessaire) — voir src/lib/printCatalog.ts.
+  platformManaged    Boolean @default(false)
+  /// Dernier coût de revient connu chez le fournisseur (centimes), mis en cache à la synchro
+  /// (voir src/lib/prodigiSync.ts) — purement informatif pour aider Adriel à fixer priceCents
+  /// (le prix affiché au client) avec sa marge ; ne pilote jamais priceCents automatiquement.
+  wholesaleCostCents Int?
   galleries   Gallery[]   @relation("GalleryProducts")
   orderItems  OrderItem[]
   selections  Selection[]

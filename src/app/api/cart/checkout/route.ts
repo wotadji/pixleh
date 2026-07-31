@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
 import { checkGalleryAccess } from "@/lib/access";
+import { getActivePrintCatalogItemsByIds } from "@/lib/printCatalog";
 
 interface CartItem {
   productId: string;
@@ -33,9 +34,17 @@ export async function POST(req: Request) {
   if (!access.granted) return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
 
   const productIds = items.map((i) => i.productId);
-  const products = await prisma.product.findMany({
-    where: { id: { in: productIds }, studioId: gallery.studioId, active: true },
-  });
+  // Un produit du panier peut venir soit du studio (téléchargement numérique, album,
+  // package), soit du catalogue impression plateforme (studioId NULL, voir
+  // /admin/print-catalog) — les deux sources sont interrogées puis fusionnées, chacune avec
+  // sa propre règle d'appartenance (studioId pour l'un, platformManaged pour l'autre).
+  const [studioProducts, printCatalogItems] = await Promise.all([
+    prisma.product.findMany({
+      where: { id: { in: productIds }, studioId: gallery.studioId, active: true },
+    }),
+    getActivePrintCatalogItemsByIds(productIds),
+  ]);
+  const products = [...studioProducts, ...printCatalogItems];
   if (products.length !== new Set(productIds).size) {
     return NextResponse.json({ error: "Produit invalide" }, { status: 400 });
   }

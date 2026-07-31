@@ -65,6 +65,20 @@ export const productSchema = z.object({
   active: z.boolean().optional(),
 });
 
+/** Catalogue impression plateforme (/admin/print-catalog) — voir src/lib/printCatalog.ts.
+ * `sku` porte ici le SKU Prodigi (ex: "GLOBAL-CAN-10x10"), utilisé pour la synchro du coût de
+ * revient (voir prodigiSync.ts) et, plus tard, la soumission de commande. */
+export const printCatalogItemSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional().nullable(),
+  priceCents: z.number().int().nonnegative(),
+  currency: z.string().min(3).max(3).default("eur"),
+  sku: z.string().optional().nullable(),
+  imageUrl: z.string().optional().nullable(),
+  active: z.boolean().optional(),
+  wholesaleCostCents: z.number().int().nonnegative().optional().nullable(),
+});
+
 export const bookingRequestSchema = z.object({
   bookingTypeId: z.string().optional().nullable(),
   customerName: z.string().min(1),

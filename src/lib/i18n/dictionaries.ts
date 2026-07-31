@@ -384,6 +384,7 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "clients.attachment.tooLarge": "Fichier trop volumineux (10 Mo maximum).",
 
     "products.title": "Boutique — Produits",
+    "products.printMovedToAdminNote": "Les produits d'impression (tirages, toiles...) sont désormais un service pixleh géré centralement — ils ne sont plus créés ici. Cette page reste pour vos éventuels téléchargements numériques, albums ou packages.",
     "products.typeLabel": "Type",
     "products.nameLabel": "Nom",
     "products.priceLabel": "Prix (€)",
@@ -1155,6 +1156,7 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "clients.attachment.tooLarge": "File too large (10 MB maximum).",
 
     "products.title": "Store — Products",
+    "products.printMovedToAdminNote": "Print products (prints, canvases...) are now a centrally-managed pixleh service — they're no longer created here. This page remains for any digital downloads, albums or packages you offer.",
     "products.typeLabel": "Type",
     "products.nameLabel": "Name",
     "products.priceLabel": "Price ($)",
@@ -1926,6 +1928,7 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "clients.attachment.tooLarge": "Archivo demasiado grande (10 MB máximo).",
 
     "products.title": "Tienda — Productos",
+    "products.printMovedToAdminNote": "Los productos de impresión (copias, lienzos...) son ahora un servicio pixleh gestionado de forma centralizada — ya no se crean aquí. Esta página sigue disponible para tus descargas digitales, álbumes o packs.",
     "products.typeLabel": "Tipo",
     "products.nameLabel": "Nombre",
     "products.priceLabel": "Precio (€)",
@@ -2697,6 +2700,7 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "clients.attachment.tooLarge": "Arquivo muito grande (10 MB no máximo).",
 
     "products.title": "Loja — Produtos",
+    "products.printMovedToAdminNote": "Os produtos de impressão (cópias, telas...) agora são um serviço pixleh gerido centralmente — deixaram de ser criados aqui. Esta página continua disponível para seus downloads digitais, álbuns ou pacotes.",
     "products.typeLabel": "Tipo",
     "products.nameLabel": "Nome",
     "products.priceLabel": "Preço (€)",
@@ -3468,6 +3472,7 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "clients.attachment.tooLarge": "文件过大（最大 10 MB）。",
 
     "products.title": "商店 — 产品",
+    "products.printMovedToAdminNote": "印刷产品（照片打印、画布等）现在是由平台统一管理的 pixleh 服务 — 不再在此创建。此页面仍可用于数字下载、相册或套餐。",
     "products.typeLabel": "类型",
     "products.nameLabel": "名称",
     "products.priceLabel": "价格（€）",
@@ -4238,6 +4243,7 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "clients.attachment.tooLarge": "الملف كبير جدًا (10 ميغابايت كحد أقصى).",
 
     "products.title": "المتجر — المنتجات",
+    "products.printMovedToAdminNote": "أصبحت منتجات الطباعة (الصور المطبوعة، اللوحات...) خدمة تديرها pixleh مركزيًا — لم تعد تُنشأ هنا. تبقى هذه الصفحة متاحة للتنزيلات الرقمية أو الألبومات أو الباقات.",
     "products.typeLabel": "النوع",
     "products.nameLabel": "الاسم",
     "products.priceLabel": "السعر (€)",

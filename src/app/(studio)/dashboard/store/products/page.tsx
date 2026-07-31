@@ -14,12 +14,18 @@ interface ProductDTO {
 
 export default function ProductsPage() {
   const { t } = useLanguage();
+  // "PRINT" retiré des types sélectionnables (31/07/2026, demande d'Adriel : "je veux que
+  // Boutique — Produits soit géré dans le panel Administrateur [...] c'est un service de
+  // pixleh pas du studio") — géré désormais uniquement dans /admin/print-catalog. On garde
+  // le libellé dans TYPE_LABELS pour continuer d'afficher correctement d'éventuels produits
+  // PRINT créés par le studio avant ce changement (voir le filtre ci-dessous).
   const TYPE_LABELS: Record<string, string> = {
     DIGITAL_DOWNLOAD: t("productType.digital"),
     PRINT: t("productType.print"),
     ALBUM: t("productType.album"),
     PACKAGE: t("productType.package"),
   };
+  const CREATABLE_TYPES = ["DIGITAL_DOWNLOAD", "ALBUM", "PACKAGE"] as const;
 
   const [products, setProducts] = useState<ProductDTO[]>([]);
   const [form, setForm] = useState({ type: "DIGITAL_DOWNLOAD", name: "", priceCents: 0 });
@@ -52,6 +58,7 @@ export default function ProductsPage() {
   return (
     <div>
       <h1 className="font-serif text-2xl font-semibold">{t("products.title")}</h1>
+      <p className="mt-1 text-sm text-gray-500">{t("products.printMovedToAdminNote")}</p>
 
       <form onSubmit={handleSubmit} className="mt-6 flex flex-wrap items-end gap-3">
         <div>
@@ -61,9 +68,9 @@ export default function ProductsPage() {
             value={form.type}
             onChange={(e) => setForm({ ...form, type: e.target.value })}
           >
-            {Object.entries(TYPE_LABELS).map(([k, v]) => (
+            {CREATABLE_TYPES.map((k) => (
               <option key={k} value={k}>
-                {v}
+                {TYPE_LABELS[k]}
               </option>
             ))}
           </select>

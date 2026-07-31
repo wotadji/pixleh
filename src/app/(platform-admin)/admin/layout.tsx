@@ -21,6 +21,7 @@ export default async function PlatformAdminLayout({ children }: { children: Reac
     { href: "/admin/studios", label: "Studios" },
     { href: "/admin/site", label: "Contenu du site" },
     { href: "/admin/plans", label: "Plans tarifaires" },
+    { href: "/admin/print-catalog", label: "Catalogue impression" },
     { href: "/admin/features", label: "Fonctionnalités" },
   ];
 

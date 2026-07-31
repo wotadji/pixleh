@@ -190,6 +190,30 @@ npm run build
 npm run start:next   # équivalent à `next start`, avec un reverse proxy (nginx) devant
 ```
 
+## 10. Catalogue impression (Prodigi)
+
+Depuis le panel Administrateur (`/admin/print-catalog`), pixleh gère un catalogue d'articles
+d'impression (tirages, etc.) proposé automatiquement dans toutes les galeries de tous les
+studios — c'est un service pixleh, pas un produit studio : le paiement Stripe du client va
+directement au compte pixleh (les studios ne gèrent plus l'impression depuis leur panel).
+
+1. Créez un compte sur [prodigi.com](https://www.prodigi.com), récupérez une clé API sandbox
+   (gratuite, pour tester) sur `dashboard.prodigi.com`, puis une clé live une fois prêt à
+   produire de vraies commandes.
+2. Renseignez `PRODIGI_API_KEY` dans `.env` (et `PRODIGI_API_BASE_URL` si vous passez en live,
+   voir `.env.example`).
+3. Dans `/admin/print-catalog`, créez un article avec le SKU du produit Prodigi souhaité : le
+   coût de revient Prodigi est récupéré automatiquement, et vous définissez librement le prix
+   de vente pixleh (ex : coût 0,20 € → prix de vente 0,40 €). Le bouton « Resynchroniser »
+   rafraîchit le coût de revient à tout moment.
+4. Sans `PRODIGI_API_KEY`, le catalogue reste utilisable : saisissez le coût de revient à la
+   main, sans resynchronisation automatique.
+
+**Non inclus dans cette livraison** : la soumission réelle de la commande à Prodigi (impression
+et expédition effectives) après un paiement client — seul le devis de coût est intégré pour
+l'instant. À ajouter lors d'une prochaine étape (webhook Stripe `checkout.session.completed` +
+adresse de livraison du client + suivi de statut d'expédition).
+
 ---
 
 ## Limite importante de cette livraison
