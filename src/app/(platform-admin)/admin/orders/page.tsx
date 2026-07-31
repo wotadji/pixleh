@@ -236,22 +236,35 @@ export default function AdminOrdersPage() {
         </div>
       </div>
 
-      <div className="mt-4 divide-y divide-gray-100 rounded-xl border border-gray-200">
-        {filtered.length === 0 && (
-          <div className="flex flex-col items-center gap-3 p-12 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-50 text-gray-300">
-              <IconBag />
-            </div>
-            <p className="text-sm text-gray-500">
-              {orders.length === 0 ? "Aucune commande pour le moment." : "Aucune commande ne correspond à ta recherche."}
-            </p>
+      <div className="mt-4 overflow-hidden rounded-xl border border-gray-200">
+        {/* En-tête de colonnes (05/08/2026, demande d'Adriel : "ajoutes une colonne dan le
+            tableau et mettre plutot [...] laba" — les produits commandés ont leur propre
+            colonne au lieu d'être renvoyés en dessous du client sur toute la largeur). */}
+        {filtered.length > 0 && (
+          <div className="hidden grid-cols-[minmax(0,1.3fr)_minmax(0,1.4fr)_auto] gap-4 border-b border-gray-100 bg-gray-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:grid">
+            <span>Client</span>
+            <span>Produits</span>
+            <span className="text-right">Montant</span>
           </div>
         )}
-        {paginated.map((o) => {
-          const groups = groupItems(o.items);
-          return (
-            <div key={o.id} className="p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="divide-y divide-gray-100">
+          {filtered.length === 0 && (
+            <div className="flex flex-col items-center gap-3 p-12 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-50 text-gray-300">
+                <IconBag />
+              </div>
+              <p className="text-sm text-gray-500">
+                {orders.length === 0 ? "Aucune commande pour le moment." : "Aucune commande ne correspond à ta recherche."}
+              </p>
+            </div>
+          )}
+          {paginated.map((o) => {
+            const groups = groupItems(o.items);
+            return (
+              <div
+                key={o.id}
+                className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1.4fr)_auto] sm:items-center sm:gap-4"
+              >
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700">
                     {initials(o.customerName)}
@@ -269,39 +282,41 @@ export default function AdminOrdersPage() {
                     <p className="mt-0.5 text-[11px] text-gray-400">{formatDate(o.createdAt)}</p>
                   </div>
                 </div>
-                <div className="shrink-0 text-right">
+
+                <div className="flex flex-col items-start gap-1.5">
+                  {groups.map((g) => (
+                    <div
+                      key={g.productId}
+                      className="flex items-center gap-2 rounded-full bg-gray-50 py-1 pl-3 pr-1 text-xs text-gray-700"
+                    >
+                      <span>
+                        {g.count} × {g.productName}
+                      </span>
+                      {g.photos.length > 0 && (
+                        <button
+                          onClick={() => {
+                            setDetailGroup(g);
+                            setDetailGalleryId(o.galleryId);
+                          }}
+                          className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-brand-700 shadow-sm hover:bg-brand-50"
+                        >
+                          Plus de détail
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="text-left sm:text-right">
                   <p className="font-medium text-gray-900">{formatMoney(o.totalCents, o.currency)}</p>
                   <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[o.status]}`}>
                     {STATUS_LABELS[o.status]}
                   </span>
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {groups.map((g) => (
-                  <div
-                    key={g.productId}
-                    className="flex items-center gap-2 rounded-full bg-gray-50 py-1 pl-3 pr-1 text-xs text-gray-700"
-                  >
-                    <span>
-                      {g.count} × {g.productName}
-                    </span>
-                    {g.photos.length > 0 && (
-                      <button
-                        onClick={() => {
-                          setDetailGroup(g);
-                          setDetailGalleryId(o.galleryId);
-                        }}
-                        className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-brand-700 shadow-sm hover:bg-brand-50"
-                      >
-                        Plus de détail
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       {filtered.length > 0 && (
