@@ -64,11 +64,13 @@ export default function NewInvoicePage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         clientId: values.clientId || null,
-        contractId: values.contractId || null,
+        guestClientName: !values.clientId ? values.guestClientName || null : null,
+        contractId: values.clientId ? values.contractId || null : null,
         dueDate: values.dueDate || null,
         lineItems: values.lineItems,
         notes: values.notes || null,
         template: values.template,
+        vatRate: values.applyVat ? values.vatRate : null,
       }),
     });
     setLoading(false);
@@ -101,11 +103,14 @@ export default function NewInvoicePage() {
         studioBrandColor={studioBrandColor}
         initial={{
           clientId: prefillContract?.clientId || "",
+          guestClientName: "",
           contractId: prefillContractId,
           dueDate: "",
           lineItems: [{ description: "", quantity: 1, unitPriceCents: 0 }],
           notes: "",
           template: DEFAULT_INVOICE_TEMPLATE,
+          applyVat: false,
+          vatRate: 20,
         }}
         submitLabel={t("invoiceForm.create")}
         submittingLabel={t("common.creating")}

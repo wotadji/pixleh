@@ -47,16 +47,31 @@ export default async function InvoicePage({ params }: { params: { id: string } }
   });
   if (!invoice) notFound();
 
-  // notes/amountPaidCents n'existent pas encore dans le Prisma Client généré du sandbox (voir
-  // schema.prisma) — lus à part via $queryRaw, même workaround que /c/[id].
-  const [row] = await prisma.$queryRaw<{ notes: string | null; amountPaidCents: number }[]>`
-    SELECT notes, "amountPaidCents" FROM "Invoice" WHERE id = ${invoice.id}
+  // notes/amountPaidCents/guestClientName/vatRate n'existent pas encore dans le Prisma Client
+  // généré du sandbox (voir schema.prisma) — lus à part via $queryRaw, même workaround que
+  // /c/[id].
+  const [row] = await prisma.$queryRaw<
+    {
+      notes: string | null;
+      amountPaidCents: number;
+      guestClientName: string | null;
+      vatRate: number | null;
+    }[]
+  >`
+    SELECT notes, "amountPaidCents", "guestClientName", "vatRate" FROM "Invoice" WHERE id = ${invoice.id}
   `;
   const notes = row?.notes || null;
   const amountPaidCents = row?.amountPaidCents ?? 0;
   const balanceDue = invoice.totalCents - amountPaidCents;
+  const guestClientName = row?.guestClientName || null;
+  const vatRate = row?.vatRate ?? null;
 
   const lineItems = invoice.lineItems as unknown as LineItem[];
+  // Sous-total HT dérivé des lignes, TVA affichée = différence avec le total stocké (voir
+  // renderInvoicePdf dans src/lib/pdf.tsx pour la même logique) — reste toujours exact par
+  // rapport au montant réellement facturé, même en cas d'arrondi.
+  const subtotalCents = lineItems.reduce((sum, item) => sum + item.quantity * item.unitPriceCents, 0);
+  const vatAmountCents = invoice.totalCents - subtotalCents;
 
   const emittedLine = `Émise le ${invoice.createdAt.toLocaleDateString("fr-FR", {
     day: "numeric",
@@ -106,11 +121,11 @@ export default async function InvoicePage({ params }: { params: { id: string } }
           <h1 className="mt-1 font-serif text-2xl font-semibold text-gray-900">Facture {invoice.number}</h1>
           <p className="mt-2 text-xs text-gray-400">{emittedLine}</p>
 
-          {invoice.client && (
+          {(invoice.client || guestClientName) && (
             <div className="mt-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
               <p className="text-xs uppercase tracking-wide text-gray-400">Facturé à</p>
-              <p className="mt-1 text-sm font-medium text-gray-900">{invoice.client.name}</p>
-              {invoice.client.email && <p className="text-sm text-gray-500">{invoice.client.email}</p>}
+              <p className="mt-1 text-sm font-medium text-gray-900">{invoice.client?.name || guestClientName}</p>
+              {invoice.client?.email && <p className="text-sm text-gray-500">{invoice.client.email}</p>}
             </div>
           )}
 
@@ -136,8 +151,20 @@ export default async function InvoicePage({ params }: { params: { id: string } }
             <div className="border-t border-gray-100 bg-gray-50 px-4 py-3">
               <div className="flex justify-end">
                 <div className="w-56 space-y-1">
+                  {vatRate != null && (
+                    <>
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Sous-total (HT)</span>
+                        <span>{formatMoney(subtotalCents, invoice.currency)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>TVA ({vatRate}%)</span>
+                        <span>{formatMoney(vatAmountCents, invoice.currency)}</span>
+                      </div>
+                    </>
+                  )}
                   <div className="flex justify-between text-base font-semibold text-gray-900">
-                    <span>Total</span>
+                    <span>{vatRate != null ? "Total (TTC)" : "Total"}</span>
                     <span>{formatMoney(invoice.totalCents, invoice.currency)}</span>
                   </div>
                   {amountPaidCents > 0 && invoice.status !== "PAID" && (

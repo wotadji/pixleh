@@ -31,9 +31,12 @@ export async function GET() {
         template: string;
         archived: boolean;
         sentAt: Date | null;
+        guestClientName: string | null;
+        vatRate: number | null;
       }[]
     >`
-      SELECT id, "contractId", notes, "amountPaidCents", "paymentMethod", template, archived, "sentAt"
+      SELECT id, "contractId", notes, "amountPaidCents", "paymentMethod", template, archived, "sentAt",
+        "guestClientName", "vatRate"
       FROM "Invoice" WHERE "studioId" = ${session.user.studioId}
     `;
     const extraById = new Map(extraRows.map((r) => [r.id, r]));
@@ -49,6 +52,8 @@ export async function GET() {
         template: extra?.template ?? "classic",
         archived: extra?.archived ?? false,
         sentAt: extra?.sentAt ?? null,
+        guestClientName: extra?.guestClientName ?? null,
+        vatRate: extra?.vatRate ?? null,
       };
     });
 
@@ -88,10 +93,15 @@ export async function POST(req: Request) {
     });
     const number = `${prefix}-${year}-${String(countThisYear + 1).padStart(4, "0")}`;
 
-    const totalCents = data.lineItems.reduce(
+    // Sous-total HT : toujours dérivé des lineItems (source de vérité unique, voir
+    // schema.prisma sur Invoice.totalCents). Si une TVA est appliquée (31/07/2026, demande
+    // d'Adriel), totalCents devient le montant TTC ; sinon il reste égal au sous-total.
+    const subtotalCents = data.lineItems.reduce(
       (sum, item) => sum + item.quantity * item.unitPriceCents,
       0
     );
+    const totalCents =
+      data.vatRate != null ? Math.round(subtotalCents * (1 + data.vatRate / 100)) : subtotalCents;
 
     const invoice = await prisma.invoice.create({
       data: {
@@ -105,9 +115,9 @@ export async function POST(req: Request) {
       },
     });
 
-    // contractId/notes/template/sentAt n'existent pas encore dans le Prisma Client généré du
-    // sandbox (voir schema.prisma) — écrits à part via $executeRaw, même workaround que pour
-    // les contrats (studioSignatureDataUrl/place/template).
+    // contractId/notes/template/sentAt/guestClientName/vatRate n'existent pas encore dans le
+    // Prisma Client généré du sandbox (voir schema.prisma) — écrits à part via $executeRaw,
+    // même workaround que pour les contrats (studioSignatureDataUrl/place/template).
     if (data.contractId) {
       await prisma.$executeRaw`UPDATE "Invoice" SET "contractId" = ${data.contractId} WHERE id = ${invoice.id}`;
     }
@@ -116,6 +126,14 @@ export async function POST(req: Request) {
     }
     if (isInvoiceTemplateId(data.template)) {
       await prisma.$executeRaw`UPDATE "Invoice" SET template = ${data.template} WHERE id = ${invoice.id}`;
+    }
+    // Nom libre du client (facture "à la volée" sans fiche CRM) — seulement pertinent quand
+    // aucun clientId n'est défini, voir invoiceSchema.superRefine.
+    if (!data.clientId && data.guestClientName) {
+      await prisma.$executeRaw`UPDATE "Invoice" SET "guestClientName" = ${data.guestClientName} WHERE id = ${invoice.id}`;
+    }
+    if (data.vatRate != null) {
+      await prisma.$executeRaw`UPDATE "Invoice" SET "vatRate" = ${data.vatRate} WHERE id = ${invoice.id}`;
     }
     const sentAt = new Date();
     await prisma.$executeRaw`UPDATE "Invoice" SET "sentAt" = ${sentAt} WHERE id = ${invoice.id}`;
@@ -146,7 +164,19 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ invoice: { ...invoice, sentAt }, emailSent, emailError }, { status: 201 });
+    return NextResponse.json(
+      {
+        invoice: {
+          ...invoice,
+          sentAt,
+          guestClientName: !data.clientId ? data.guestClientName ?? null : null,
+          vatRate: data.vatRate ?? null,
+        },
+        emailSent,
+        emailError,
+      },
+      { status: 201 }
+    );
   } catch (e) {
     return handleError(e);
   }

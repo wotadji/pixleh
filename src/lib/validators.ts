@@ -85,26 +85,53 @@ export const contractSchema = z.object({
   amountCents: z.number().int().nonnegative().optional().nullable(),
 });
 
-export const invoiceSchema = z.object({
-  clientId: z.string().optional().nullable(),
-  // Rattachement optionnel à un contrat (31/07/2026, refonte facturation demandée par Adriel :
-  // "une qui nous permet de créer une facture à la demande et l'autre lié au contrat") — sert
-  // au suivi facturé/payé affiché sur le contrat (voir Contract.amountCents) et permet le
-  // schéma acompte + solde (plusieurs factures liées à un même contrat).
-  contractId: z.string().optional().nullable(),
-  lineItems: z
-    .array(
-      z.object({
-        description: z.string().min(1),
-        quantity: z.number().int().positive(),
-        unitPriceCents: z.number().int().nonnegative(),
-      })
-    )
-    .min(1),
-  dueDate: z.string().optional().nullable(),
-  notes: z.string().optional().nullable(),
-  template: z.string().optional().nullable(),
-});
+export const invoiceSchema = z
+  .object({
+    clientId: z.string().optional().nullable(),
+    // Nom saisi librement quand aucun Client du CRM n'est sélectionné (31/07/2026, demande
+    // d'Adriel) — obligatoire dans ce cas précis, voir superRefine ci-dessous.
+    guestClientName: z.string().optional().nullable(),
+    // Rattachement optionnel à un contrat (31/07/2026, refonte facturation demandée par Adriel :
+    // "une qui nous permet de créer une facture à la demande et l'autre lié au contrat") — sert
+    // au suivi facturé/payé affiché sur le contrat (voir Contract.amountCents) et permet le
+    // schéma acompte + solde (plusieurs factures liées à un même contrat). Un contrat ne peut
+    // être lié qu'à une facture ayant un clientId défini (voir superRefine ci-dessous : sans
+    // Client identifié, il n'y a pas de "propriétaire" cohérent auquel rattacher le contrat).
+    contractId: z.string().optional().nullable(),
+    lineItems: z
+      .array(
+        z.object({
+          description: z.string().min(1),
+          quantity: z.number().int().positive(),
+          unitPriceCents: z.number().int().nonnegative(),
+        })
+      )
+      .min(1),
+    dueDate: z.string().optional().nullable(),
+    notes: z.string().optional().nullable(),
+    template: z.string().optional().nullable(),
+    // Taux de TVA optionnel (31/07/2026, demande d'Adriel : case à cocher "Appliquer la TVA")
+    // — en pourcentage (ex: 20 pour 20%), null/absent = pas de TVA sur cette facture.
+    vatRate: z.number().min(0).max(100).optional().nullable(),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.clientId) {
+      if (!data.guestClientName || !data.guestClientName.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["guestClientName"],
+          message: "Le nom du client est requis si aucun client du CRM n'est sélectionné.",
+        });
+      }
+      if (data.contractId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["contractId"],
+          message: "Un contrat ne peut être lié qu'à une facture rattachée à un client.",
+        });
+      }
+    }
+  });
 
 /// Grille tarifaire (panel admin plateforme /admin/plans) — voir modèle Plan dans le
 /// schéma Prisma. `slug` sert d'identifiant stable (ex: dans l'URL de /tarifs, ou pour

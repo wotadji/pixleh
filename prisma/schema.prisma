@@ -927,14 +927,33 @@ model Invoice {
   studio        Studio        @relation(fields: [studioId], references: [id], onDelete: Cascade)
   clientId      String?
   client        Client?       @relation(fields: [clientId], references: [id])
+  /// Nom saisi librement quand la facture n'est rattachée à AUCUN Client du CRM (demande
+  /// d'Adriel, 31/07/2026) — obligatoire dans ce cas (voir invoiceSchema côté validation).
+  /// Un contrat ne peut être lié qu'à une facture ayant un clientId défini (voir contractId
+  /// ci-dessous et l'alerte affichée dans InvoiceForm.tsx quand aucun client n'est choisi) :
+  /// sans Client identifié, il n'y a pas de "propriétaire" cohérent auquel rattacher le
+  /// contrat. Ignoré/non affiché si clientId est défini (client.name prévaut alors).
+  guestClientName String?
   /// Facture liée à un contrat (acompte/solde) — optionnel, une facture peut aussi être créée
   /// "à la demande" sans contrat (voir /dashboard/invoices/new, avec ou sans ?contractId=).
+  /// Toujours null si clientId est null (voir guestClientName ci-dessus).
   contractId    String?
   contract      Contract?     @relation(fields: [contractId], references: [id])
   number        String        // numéro séquentiel affiché (ex: FAC-2026-0001)
   status        InvoiceStatus @default(DRAFT)
   lineItems     Json          // [{ description, quantity, unitPriceCents }]
+  /// Total TTC (toutes taxes comprises) — si vatRate est défini, égal à la somme des lignes
+  /// (HT) majorée de la TVA ; sinon égal à la somme des lignes (comportement historique,
+  /// avant l'ajout de la TVA le 31/07/2026). Le sous-total HT n'est volontairement pas
+  /// persisté : il est recalculé à l'affichage à partir de lineItems (source de vérité
+  /// unique, évite toute désynchronisation si une ligne est éditée).
   totalCents    Int
+  /// Taux de TVA appliqué à cette facture, en pourcentage (ex: 20 pour 20%) — demandé par
+  /// Adriel le 31/07/2026 : case à cocher "Appliquer la TVA" dans InvoiceForm.tsx, activable
+  /// même si le studio est globalement en franchise de TVA (StudioSettings.vatExempt), pour
+  /// les cas particuliers où une facture précise doit malgré tout en comporter. null = pas de
+  /// TVA sur cette facture (totalCents == sous-total des lignes).
+  vatRate       Float?
   currency      String        @default("EUR")
   dueDate       DateTime?
   /// Notes/mentions libres affichées en bas de la facture (conditions de paiement, message de

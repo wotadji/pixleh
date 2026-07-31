@@ -477,6 +477,13 @@ export async function renderInvoicePdf(params: {
   /** Template de mise en page choisi par le studio (Invoice.template — voir
    * src/lib/invoiceTemplates.ts). Repli sur "classic" si absent ou invalide. */
   template?: string | null;
+  /** Taux de TVA appliqué à cette facture, en pourcentage (ex: 20 pour 20%) — demandé par
+   * Adriel, 31/07/2026. null/absent = pas de TVA (comportement historique : un seul "Total").
+   * Le sous-total HT n'est pas passé séparément : il est recalculé ici à partir de lineItems
+   * (source de vérité unique), et le montant de TVA affiché = totalCents - sous-total, pour
+   * rester exactement cohérent avec le total réellement stocké/facturé plutôt que de risquer
+   * un écart d'arrondi en recalculant la TVA à partir du taux. */
+  vatRate?: number | null;
 }) {
   const {
     studioName,
@@ -504,6 +511,7 @@ export async function renderInvoicePdf(params: {
     studioBic,
     studioLegalMentions,
     template,
+    vatRate,
   } = params;
 
   const tmpl: InvoiceTemplateId = isInvoiceTemplateId(template) ? template : DEFAULT_INVOICE_TEMPLATE;
@@ -515,6 +523,11 @@ export async function renderInvoicePdf(params: {
   const format = (cents: number) => `${(cents / 100).toFixed(2)} ${currency}`;
   const isPaid = amountPaidCents >= totalCents && totalCents > 0;
   const balanceDue = totalCents - amountPaidCents;
+  // Sous-total HT recalculé depuis lineItems (source de vérité unique) ; le montant de TVA
+  // affiché est la différence avec totalCents (TTC, stocké tel quel) plutôt qu'un recalcul à
+  // partir du taux, pour rester exactement cohérent au centime près avec ce qui est facturé.
+  const subtotalCents = lineItems.reduce((sum, item) => sum + item.quantity * item.unitPriceCents, 0);
+  const vatAmountCents = totalCents - subtotalCents;
 
   const metaLine = [
     createdAt ? `Émise le ${createdAt.toLocaleDateString("fr-FR")}` : null,
@@ -580,8 +593,22 @@ export async function renderInvoicePdf(params: {
         </View>
 
         <View style={styles.totalsBlock} wrap={false}>
+          {vatRate != null && (
+            <>
+              <View style={styles.totalsRow}>
+                <Text style={styles.totalsLabel}>Sous-total (HT)</Text>
+                <Text style={styles.totalsValue}>{format(subtotalCents)}</Text>
+              </View>
+              <View style={styles.totalsRow}>
+                <Text style={styles.totalsLabel}>TVA ({vatRate}%)</Text>
+                <Text style={styles.totalsValue}>{format(vatAmountCents)}</Text>
+              </View>
+            </>
+          )}
           <View style={[styles.grandTotalRow, { borderTopColor: tableAccent }]}>
-            <Text style={[styles.grandTotalLabel, { fontFamily: grandTotalFontFamily }]}>Total</Text>
+            <Text style={[styles.grandTotalLabel, { fontFamily: grandTotalFontFamily }]}>
+              {vatRate != null ? "Total (TTC)" : "Total"}
+            </Text>
             <Text style={[styles.grandTotalValue, { fontFamily: grandTotalFontFamily }]}>{format(totalCents)}</Text>
           </View>
           {amountPaidCents > 0 && !isPaid && (

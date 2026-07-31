@@ -31,12 +31,18 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   }
 
   try {
-    // notes/amountPaidCents/template n'existent pas encore dans le Prisma Client généré du
-    // sandbox (voir schema.prisma) — lus à part via $queryRaw, même workaround que pour les
-    // contrats.
+    // notes/amountPaidCents/template/guestClientName/vatRate n'existent pas encore dans le
+    // Prisma Client généré du sandbox (voir schema.prisma) — lus à part via $queryRaw, même
+    // workaround que pour les contrats.
     const [row] = await prisma.$queryRaw<
-      { notes: string | null; amountPaidCents: number; template: string | null }[]
-    >`SELECT notes, "amountPaidCents", template FROM "Invoice" WHERE id = ${invoice.id}`;
+      {
+        notes: string | null;
+        amountPaidCents: number;
+        template: string | null;
+        guestClientName: string | null;
+        vatRate: number | null;
+      }[]
+    >`SELECT notes, "amountPaidCents", template, "guestClientName", "vatRate" FROM "Invoice" WHERE id = ${invoice.id}`;
 
     // Mentions légales du studio (StudioSettings) — idem, pas encore dans le Prisma Client
     // généré du sandbox.
@@ -60,7 +66,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     const pdfBuffer = await renderInvoicePdf({
       studioName: invoice.studio.name,
       number: invoice.number,
-      clientName: invoice.client?.name || null,
+      clientName: invoice.client?.name || row?.guestClientName || null,
       clientEmail: invoice.client?.email || null,
       lineItems,
       totalCents: invoice.totalCents,
@@ -70,6 +76,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       dueDate: invoice.dueDate,
       createdAt: invoice.createdAt,
       notes: row?.notes || null,
+      vatRate: row?.vatRate ?? null,
       studioLogoUrl: invoice.studio.logoUrl || null,
       brandColor: invoice.studio.brandColor || null,
       studioLegalForm: legalRow?.legalForm || null,

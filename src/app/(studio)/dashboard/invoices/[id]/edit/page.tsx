@@ -21,11 +21,13 @@ interface ContractOption {
 interface InvoiceDTO {
   status: string;
   client: { id: string } | null;
+  guestClientName: string | null;
   contractId: string | null;
   dueDate: string | null;
   lineItems: { description: string; quantity: number; unitPriceCents: number }[];
   notes: string | null;
   template: string | null;
+  vatRate: number | null;
 }
 
 export default function EditInvoicePage() {
@@ -74,11 +76,13 @@ export default function EditInvoicePage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         clientId: values.clientId || null,
-        contractId: values.contractId || null,
+        guestClientName: !values.clientId ? values.guestClientName || null : null,
+        contractId: values.clientId ? values.contractId || null : null,
         dueDate: values.dueDate || null,
         lineItems: values.lineItems,
         notes: values.notes || null,
         template: values.template,
+        vatRate: values.applyVat ? values.vatRate : null,
       }),
     });
     setLoading(false);
@@ -110,11 +114,14 @@ export default function EditInvoicePage() {
             studioBrandColor={studioBrandColor}
             initial={{
               clientId: invoice.client?.id || "",
+              guestClientName: invoice.guestClientName || "",
               contractId: invoice.contractId || "",
               dueDate: invoice.dueDate ? invoice.dueDate.slice(0, 10) : "",
               lineItems: invoice.lineItems?.length ? invoice.lineItems : [{ description: "", quantity: 1, unitPriceCents: 0 }],
               notes: invoice.notes || "",
               template: isInvoiceTemplateId(invoice.template) ? invoice.template : DEFAULT_INVOICE_TEMPLATE,
+              applyVat: invoice.vatRate != null,
+              vatRate: invoice.vatRate ?? 20,
             }}
             submitLabel={t("invoiceForm.save")}
             submittingLabel={t("invoiceForm.saving")}

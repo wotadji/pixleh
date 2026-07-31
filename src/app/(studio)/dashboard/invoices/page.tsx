@@ -18,6 +18,7 @@ interface InvoiceDTO {
   createdAt: string;
   dueDate: string | null;
   client: { name: string } | null;
+  guestClientName: string | null;
   contractId: string | null;
   archived: boolean;
 }
@@ -117,7 +118,9 @@ export default function InvoicesPage() {
     return invoices.filter((i) => {
       if (i.archived !== showArchived) return false;
       const matchesSearch =
-        !q || i.number.toLowerCase().includes(q) || (i.client?.name || "").toLowerCase().includes(q);
+        !q ||
+        i.number.toLowerCase().includes(q) ||
+        (i.client?.name || i.guestClientName || "").toLowerCase().includes(q);
       const matchesStatus = statusFilter === "ALL" || i.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
@@ -218,10 +221,14 @@ export default function InvoicesPage() {
               <div className="flex min-w-0 items-center gap-3">
                 <div
                   className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                    inv.client ? "bg-brand-50 text-brand-700" : "bg-gray-100 text-gray-400"
+                    inv.client || inv.guestClientName ? "bg-brand-50 text-brand-700" : "bg-gray-100 text-gray-400"
                   }`}
                 >
-                  {inv.client ? initials(inv.client.name) : <IconInvoice small />}
+                  {inv.client?.name || inv.guestClientName ? (
+                    initials(inv.client?.name || inv.guestClientName!)
+                  ) : (
+                    <IconInvoice small />
+                  )}
                 </div>
                 <div className="min-w-0">
                   <p className="flex items-center gap-1.5 truncate font-medium text-gray-900">
@@ -233,7 +240,7 @@ export default function InvoicesPage() {
                     )}
                   </p>
                   <p className="truncate text-sm text-gray-500">
-                    {inv.client?.name || t("common.noClient")} · {formatDate(inv.createdAt, locale)}
+                    {inv.client?.name || inv.guestClientName || t("common.noClient")} · {formatDate(inv.createdAt, locale)}
                   </p>
                 </div>
               </div>

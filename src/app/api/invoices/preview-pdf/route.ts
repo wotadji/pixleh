@@ -48,6 +48,8 @@ export async function POST(req: Request) {
       const client = await prisma.client.findUnique({ where: { id: body.clientId } });
       clientName = client?.name || null;
       clientEmail = client?.email || null;
+    } else if (typeof body.guestClientName === "string" && body.guestClientName.trim()) {
+      clientName = body.guestClientName.trim();
     }
 
     const lineItems = Array.isArray(body.lineItems)
@@ -57,10 +59,12 @@ export async function POST(req: Request) {
           unitPriceCents: typeof item.unitPriceCents === "number" ? item.unitPriceCents : 0,
         }))
       : [];
-    const totalCents = lineItems.reduce(
+    const subtotalCents = lineItems.reduce(
       (sum: number, item: { quantity: number; unitPriceCents: number }) => sum + item.quantity * item.unitPriceCents,
       0
     );
+    const vatRate = typeof body.vatRate === "number" ? body.vatRate : null;
+    const totalCents = vatRate != null ? Math.round(subtotalCents * (1 + vatRate / 100)) : subtotalCents;
 
     const pdfBuffer = await renderInvoicePdf({
       studioName: studio.name,
@@ -73,6 +77,7 @@ export async function POST(req: Request) {
       dueDate: body.dueDate ? new Date(body.dueDate) : null,
       createdAt: new Date(),
       notes: typeof body.notes === "string" ? body.notes : null,
+      vatRate,
       studioLogoUrl: studio.logoUrl || null,
       brandColor: studio.brandColor || null,
       studioAddress: studio.settings?.address || null,

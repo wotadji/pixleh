@@ -25,11 +25,20 @@ export interface InvoiceLineItem {
 
 export interface InvoiceFormValues {
   clientId: string;
+  // Nom libre du client, utilisé uniquement quand clientId est vide (31/07/2026, demande
+  // d'Adriel : permettre une facture "à la volée" sans fiche CRM) — voir invoiceSchema côté
+  // serveur (superRefine) pour la validation associée.
+  guestClientName: string;
   contractId: string;
   dueDate: string;
   lineItems: InvoiceLineItem[];
   notes: string;
   template: InvoiceTemplateId;
+  // Case à cocher "Appliquer la TVA" (31/07/2026, demande d'Adriel) : applyVat pilote
+  // l'affichage du champ de taux côté UI ; vatRate n'est envoyé à l'API que si applyVat est
+  // coché (voir handleSubmit ci-dessous).
+  applyVat: boolean;
+  vatRate: number;
 }
 
 /** Aperçu miniature (CSS pur) de chaque template — même composant que ContractForm.tsx
@@ -124,7 +133,12 @@ export function InvoiceForm({
     setForm((f) => ({ ...f, lineItems: [...f.lineItems, { description: "", quantity: 1, unitPriceCents: 0 }] }));
   }
 
-  const total = form.lineItems.reduce((sum, item) => sum + item.quantity * item.unitPriceCents, 0);
+  // Sous-total HT dérivé des lignes ; si la TVA est appliquée, le total affiché devient le TTC
+  // (même logique que côté serveur, voir POST /api/invoices) — la TVA n'est jamais recalculée
+  // à partir d'un total arrondi, toujours dérivée du sous-total pour rester exacte.
+  const subtotal = form.lineItems.reduce((sum, item) => sum + item.quantity * item.unitPriceCents, 0);
+  const vatAmount = form.applyVat ? Math.round(subtotal * (form.vatRate / 100)) : 0;
+  const total = subtotal + vatAmount;
 
   // Filtre les contrats du client sélectionné en tête de liste (les autres restent
   // accessibles, un studio peut vouloir facturer un contrat sans avoir d'abord choisi le
@@ -135,6 +149,33 @@ export function InvoiceForm({
     return aMatch - bMatch;
   });
 
+  // Nettoie les champs interdépendants avant envoi : sans client CRM, pas de contrat lié
+  // possible (voir invoiceSchema.superRefine côté serveur). Utilisé pour onSubmit — les pages
+  // new/edit se chargent ensuite de traduire ces valeurs en corps de requête API (dont le
+  // taux de TVA transmis uniquement si applyVat est coché, voir handleSubmit des pages).
+  function buildPayload(cleaned: InvoiceLineItem[]): InvoiceFormValues {
+    return {
+      ...form,
+      lineItems: cleaned,
+      guestClientName: !form.clientId ? form.guestClientName.trim() : "",
+      contractId: form.clientId ? form.contractId : "",
+    };
+  }
+
+  // Corps de requête pour /api/invoices/preview-pdf — même conversion que les pages new/edit
+  // (voir handleSubmit dans invoices/new/page.tsx et invoices/[id]/edit/page.tsx) : un taux de
+  // TVA à 0 explicite afficherait à tort une ligne "TVA (0%)" dans l'aperçu, d'où le null ici
+  // quand la case n'est pas cochée.
+  function buildPreviewBody(cleaned: InvoiceLineItem[]) {
+    return {
+      ...form,
+      lineItems: cleaned,
+      guestClientName: !form.clientId ? form.guestClientName.trim() || null : null,
+      contractId: form.clientId ? form.contractId || null : null,
+      vatRate: form.applyVat ? form.vatRate : null,
+    };
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const cleaned = form.lineItems.filter((i) => i.description.trim());
@@ -142,7 +183,11 @@ export function InvoiceForm({
       alert(t("invoiceForm.lineRequired"));
       return;
     }
-    onSubmit({ ...form, lineItems: cleaned });
+    if (!form.clientId && !form.guestClientName.trim()) {
+      alert(t("invoiceForm.guestNameRequired"));
+      return;
+    }
+    onSubmit(buildPayload(cleaned));
   }
 
   /** Aperçu PDF de la facture en cours de rédaction, sans rien enregistrer — même patron que
@@ -159,7 +204,7 @@ export function InvoiceForm({
       const res = await fetch("/api/invoices/preview-pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, lineItems: cleaned }),
+        body: JSON.stringify(buildPreviewBody(cleaned)),
       });
       if (!res.ok) {
         previewTab?.close();
@@ -187,7 +232,12 @@ export function InvoiceForm({
             <select
               className="input"
               value={form.clientId}
-              onChange={(e) => setForm({ ...form, clientId: e.target.value })}
+              onChange={(e) => {
+                const clientId = e.target.value;
+                // Sans client CRM, un contrat lié n'a plus de sens (voir superRefine côté
+                // serveur) — on efface donc contractId dès qu'on repasse sur "Aucun client".
+                setForm({ ...form, clientId, contractId: clientId ? form.contractId : "" });
+              }}
             >
               <option value="">{t("common.noClientOption")}</option>
               {clients.map((c) => (
@@ -197,21 +247,46 @@ export function InvoiceForm({
               ))}
             </select>
           </div>
+
+          {!form.clientId && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                {t("invoiceForm.guestNameLabel")}
+              </label>
+              <input
+                type="text"
+                required
+                className="input"
+                placeholder={t("invoiceForm.guestNamePlaceholder")}
+                value={form.guestClientName}
+                onChange={(e) => setForm({ ...form, guestClientName: e.target.value })}
+              />
+            </div>
+          )}
+
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">{t("invoiceForm.contractLabel")}</label>
-            <select
-              className="input"
-              value={form.contractId}
-              onChange={(e) => setForm({ ...form, contractId: e.target.value })}
-            >
-              <option value="">{t("invoiceForm.noContractOption")}</option>
-              {sortedContracts.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title}
-                </option>
-              ))}
-            </select>
+            {form.clientId ? (
+              <select
+                className="input"
+                value={form.contractId}
+                onChange={(e) => setForm({ ...form, contractId: e.target.value })}
+              >
+                <option value="">{t("invoiceForm.noContractOption")}</option>
+                {sortedContracts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+                <IconWarning className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                <span>{t("invoiceForm.contractRequiresClient")}</span>
+              </div>
+            )}
           </div>
+
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">{t("invoiceForm.dueDate")}</label>
             <input
@@ -277,10 +352,46 @@ export function InvoiceForm({
             + {t("invoiceForm.addLine")}
           </button>
 
-          <div className="mt-3 flex justify-end border-t border-gray-100 pt-3">
-            <p className="text-base font-semibold text-gray-900">
-              {t("invoiceForm.total")} : {formatMoney(total)} €
-            </p>
+          <div className="mt-3 border-t border-gray-100 pt-3">
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                checked={form.applyVat}
+                onChange={(e) => setForm({ ...form, applyVat: e.target.checked })}
+              />
+              {t("invoiceForm.applyVatLabel")}
+            </label>
+            {form.applyVat && (
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.1"
+                  className="input w-24"
+                  value={form.vatRate}
+                  onChange={(e) => setForm({ ...form, vatRate: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })}
+                />
+                <span className="text-sm text-gray-500">% — {t("invoiceForm.vatRateLabel")}</span>
+              </div>
+            )}
+
+            <div className="mt-3 flex flex-col items-end gap-1">
+              {form.applyVat && (
+                <>
+                  <p className="text-sm text-gray-600">
+                    {t("invoiceForm.subtotalHt")} : {formatMoney(subtotal)} €
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {t("invoiceForm.vatAmount")} ({form.vatRate}%) : {formatMoney(vatAmount)} €
+                  </p>
+                </>
+              )}
+              <p className="text-base font-semibold text-gray-900">
+                {form.applyVat ? t("invoiceForm.totalTtc") : t("invoiceForm.total")} : {formatMoney(total)} €
+              </p>
+            </div>
           </div>
         </div>
 
@@ -354,6 +465,19 @@ export function InvoiceForm({
         </aside>
       </div>
     </form>
+  );
+}
+
+function IconWarning({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+      <path d="M12 9v4" strokeLinecap="round" />
+      <path d="M12 16.5h.01" strokeLinecap="round" />
+      <path
+        d="M10.29 3.86 1.82 18a1.5 1.5 0 0 0 1.29 2.25h17.78A1.5 1.5 0 0 0 22.18 18L13.71 3.86a1.5 1.5 0 0 0-2.42 0Z"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 

@@ -21,9 +21,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     });
     if (!invoice) throw new AccessError("Facture introuvable", 404);
 
-    // contractId/notes/amountPaidCents/paymentMethod/template/archived/sentAt n'existent pas
-    // encore dans le Prisma Client généré du sandbox (voir schema.prisma) — lus à part via
-    // $queryRaw, même workaround que pour les contrats.
+    // contractId/notes/amountPaidCents/paymentMethod/template/archived/sentAt/guestClientName/
+    // vatRate n'existent pas encore dans le Prisma Client généré du sandbox (voir
+    // schema.prisma) — lus à part via $queryRaw, même workaround que pour les contrats.
     const [row] = await prisma.$queryRaw<
       {
         contractId: string | null;
@@ -33,9 +33,12 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         template: string;
         archived: boolean;
         sentAt: Date | null;
+        guestClientName: string | null;
+        vatRate: number | null;
       }[]
     >`
-      SELECT "contractId", notes, "amountPaidCents", "paymentMethod", template, archived, "sentAt"
+      SELECT "contractId", notes, "amountPaidCents", "paymentMethod", template, archived, "sentAt",
+        "guestClientName", "vatRate"
       FROM "Invoice" WHERE id = ${invoice.id}
     `;
 
@@ -49,6 +52,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         template: row?.template ?? "classic",
         archived: row?.archived ?? false,
         sentAt: row?.sentAt ?? null,
+        guestClientName: row?.guestClientName ?? null,
+        vatRate: row?.vatRate ?? null,
       },
     });
   } catch (e) {
@@ -78,10 +83,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
     const data = parsed.data;
-    const totalCents = data.lineItems.reduce(
+    // Sous-total HT dérivé des lineItems, TVA appliquée dessus le cas échéant (même logique
+    // que POST /api/invoices, voir schema.prisma sur Invoice.totalCents).
+    const subtotalCents = data.lineItems.reduce(
       (sum, item) => sum + item.quantity * item.unitPriceCents,
       0
     );
+    const totalCents =
+      data.vatRate != null ? Math.round(subtotalCents * (1 + data.vatRate / 100)) : subtotalCents;
 
     const invoice = await prisma.invoice.update({
       where: { id: existing.id },
@@ -93,9 +102,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       },
     });
 
-    // contractId/notes/template n'existent pas encore dans le Prisma Client généré du sandbox
-    // (voir schema.prisma) — écrits à part via $executeRaw. `!== undefined` (et pas juste
-    // "truthy") pour permettre explicitement de retirer une valeur existante.
+    // contractId/notes/template/guestClientName/vatRate n'existent pas encore dans le Prisma
+    // Client généré du sandbox (voir schema.prisma) — écrits à part via $executeRaw. `!==
+    // undefined` (et pas juste "truthy") pour permettre explicitement de retirer une valeur
+    // existante.
     if (body.contractId !== undefined) {
       await prisma.$executeRaw`UPDATE "Invoice" SET "contractId" = ${body.contractId || null} WHERE id = ${invoice.id}`;
     }
@@ -105,8 +115,22 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     if (isInvoiceTemplateId(body.template)) {
       await prisma.$executeRaw`UPDATE "Invoice" SET template = ${body.template} WHERE id = ${invoice.id}`;
     }
+    // Nom libre du client, uniquement pertinent tant qu'aucun clientId n'est défini — on
+    // efface toute valeur précédente dès qu'un clientId est (re)choisi.
+    await prisma.$executeRaw`UPDATE "Invoice" SET "guestClientName" = ${
+      !data.clientId && data.guestClientName ? data.guestClientName : null
+    } WHERE id = ${invoice.id}`;
+    if (body.vatRate !== undefined) {
+      await prisma.$executeRaw`UPDATE "Invoice" SET "vatRate" = ${data.vatRate ?? null} WHERE id = ${invoice.id}`;
+    }
 
-    return NextResponse.json({ invoice });
+    return NextResponse.json({
+      invoice: {
+        ...invoice,
+        guestClientName: !data.clientId && data.guestClientName ? data.guestClientName : null,
+        vatRate: data.vatRate ?? null,
+      },
+    });
   } catch (e) {
     return handleError(e);
   }
