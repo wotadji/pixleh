@@ -362,13 +362,12 @@ function buildBankDetailsBlock(
   };
 }
 
-/** Confirmation envoyée au client après un paiement en ligne réussi (Stripe Checkout) —
- * demandé par Adriel, 31/07/2026 : "lui dire paiement effectué et faire un email [...] et
- * notifier qu'il va recevoir la facture dans son email". Déclenchée uniquement pour le
- * paiement en ligne (voir markInvoicePaidFromStripe dans src/lib/invoicePayment.ts) — un
- * règlement enregistré manuellement par le studio (espèces/chèque, voir
- * /api/invoices/[id]/mark-paid) ne l'envoie pas, le client étant déjà en contact direct avec
- * le studio dans ce cas. */
+/** Confirmation envoyée au client après un paiement réussi — demandé par Adriel, 31/07/2026 :
+ * "lui dire paiement effectué et faire un email [...] et notifier qu'il va recevoir la facture
+ * dans son email". Déclenchée à la fois pour le paiement en ligne (voir markInvoicePaidFromStripe
+ * dans src/lib/invoicePayment.ts) et pour un règlement enregistré manuellement par le studio
+ * (espèces/chèque/virement, voir /api/invoices/[id]/mark-paid — même demande d'Adriel, même
+ * jour : "quand on clique sur confirmé le paiement il faut faire un send mail au client"). */
 export async function sendClientInvoicePaidEmail(params: {
   clientEmail: string;
   clientName: string;

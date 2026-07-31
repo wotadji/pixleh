@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireStudioSession, AccessError } from "@/lib/access";
-import { sendStudioInvoicePaidEmail } from "@/lib/notifications";
+import { sendStudioInvoicePaidEmail, sendClientInvoicePaidEmail } from "@/lib/notifications";
 
 /**
  * Enregistrement d'un paiement manuel (espèces, virement, chèque...) — en complément du
@@ -18,7 +18,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const session = await requireStudioSession();
     const existing = await prisma.invoice.findFirst({
       where: { id: params.id, studioId: session.user.studioId },
-      include: { client: true },
+      include: { client: true, studio: { include: { settings: true } } },
     });
     if (!existing) throw new AccessError("Facture introuvable", 404);
     if (existing.status === "PAID") {
@@ -61,6 +61,35 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         totalCents: existing.totalCents,
         currency: existing.currency,
       }).catch((e) => console.error("Échec de la notification de facture payée :", e));
+
+      // Confirmation au client — demandé par Adriel, 31/07/2026 : "quand on clique sur confirmé
+      // le paiement il faut faire un send mail au client", y compris pour un règlement manuel
+      // (espèces/chèque/virement) enregistré ici par le studio, pas seulement pour le paiement
+      // en ligne Stripe (voir markInvoicePaidFromStripe). Uniquement si un client du CRM avec
+      // email est rattaché (une facture "à la volée" via guestClientName n'a pas d'email à qui
+      // écrire).
+      if (existing.client?.email) {
+        sendClientInvoicePaidEmail({
+          clientEmail: existing.client.email,
+          clientName: existing.client.name,
+          invoiceId: existing.id,
+          invoiceNumber: existing.number,
+          totalCents: existing.totalCents,
+          currency: existing.currency,
+          studio: {
+            name: existing.studio.name,
+            slug: existing.studio.slug,
+            logoUrl: existing.studio.logoUrl,
+            brandColor: existing.studio.brandColor,
+          },
+          settings: existing.studio.settings
+            ? {
+                contactEmail: existing.studio.settings.contactEmail,
+                contactPhone: existing.studio.settings.contactPhone,
+              }
+            : null,
+        }).catch((e) => console.error("Échec de la confirmation de paiement (client) :", e));
+      }
     }
 
     return NextResponse.json({
