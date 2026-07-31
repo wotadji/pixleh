@@ -6,10 +6,19 @@ import { SearchableSelect } from "@/components/ui/SearchableSelect";
 
 type OrderStatus = "PENDING" | "PAID" | "FULFILLED" | "CANCELLED" | "REFUNDED";
 
+interface OrderPhoto {
+  id: string;
+  filename: string;
+  thumbUrl: string;
+  previewUrl: string;
+}
+
 interface OrderItemDTO {
   id: string;
   quantity: number;
+  productId: string;
   productName: string;
+  photo: OrderPhoto | null;
 }
 
 interface OrderDTO {
@@ -18,6 +27,7 @@ interface OrderDTO {
   studioName: string;
   customerName: string;
   customerEmail: string;
+  galleryId: string | null;
   galleryTitle: string | null;
   createdAt: string;
   totalCents: number;
@@ -29,6 +39,36 @@ interface OrderDTO {
 interface StudioOption {
   id: string;
   name: string;
+}
+
+/** Un groupe = toutes les lignes d'une commande pour un même produit (ex: 11 tirages
+ * "Impression Photo 10*15") — regroupées pour éviter une ligne par unité, même logique que
+ * OrdersView côté studio (voir /dashboard/orders), demandée ici aussi par Adriel le
+ * 01/08/2026 : "ranger par regroupement (genre 11* pour un produit)". */
+interface ProductGroup {
+  productId: string;
+  productName: string;
+  count: number;
+  photos: OrderPhoto[];
+}
+
+function groupItems(items: OrderItemDTO[]): ProductGroup[] {
+  const byProduct = new Map<string, ProductGroup>();
+  for (const item of items) {
+    const existing = byProduct.get(item.productId);
+    if (existing) {
+      existing.count += item.quantity;
+      if (item.photo) existing.photos.push(item.photo);
+    } else {
+      byProduct.set(item.productId, {
+        productId: item.productId,
+        productName: item.productName,
+        count: item.quantity,
+        photos: item.photo ? [item.photo] : [],
+      });
+    }
+  }
+  return [...byProduct.values()];
 }
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
@@ -68,9 +108,12 @@ function formatMoney(cents: number, currency: string) {
  * Commandes plateforme — vue transverse à tous les studios, demandée par Adriel le 01/08/2026 :
  * "mettre les commandes dans les panels d'administrateur, on peut voir toutes les commandes
  * de tous les studios et des filtres aussi par studio". Complète /dashboard/orders (vue d'UN
- * studio sur ses propres commandes), ne la remplace pas — utile notamment parce qu'une partie
- * de ces commandes (les articles du catalogue impression, /admin/print-catalog) est un revenu
- * pixleh, pas studio.
+ * studio sur ses propres commandes), ne la remplace pas.
+ *
+ * Regroupement par produit + bouton "Plus de détail" ajoutés le 01/08/2026 (même demande) —
+ * reprend le composant OrdersView du dashboard studio. Nécessite que checkGalleryAccess
+ * accorde l'accès aux photos de N'IMPORTE QUEL studio à un admin plateforme (voir
+ * src/lib/access.ts), sinon les vignettes retourneraient 403.
  */
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<OrderDTO[] | null>(null);
@@ -79,6 +122,9 @@ export default function AdminOrdersPage() {
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "ALL">("ALL");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [detailGroup, setDetailGroup] = useState<ProductGroup | null>(null);
+  const [detailGalleryId, setDetailGalleryId] = useState<string | null>(null);
+  const [zoomIndex, setZoomIndex] = useState<number | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/studios")
@@ -201,40 +247,61 @@ export default function AdminOrdersPage() {
             </p>
           </div>
         )}
-        {paginated.map((o) => (
-          <div key={o.id} className="flex flex-wrap items-start justify-between gap-3 p-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700">
-                {initials(o.customerName)}
-              </div>
-              <div className="min-w-0">
-                <p className="flex flex-wrap items-center gap-1.5 truncate font-medium text-gray-900">
-                  {o.customerName}
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
-                    {o.studioName}
+        {paginated.map((o) => {
+          const groups = groupItems(o.items);
+          return (
+            <div key={o.id} className="p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700">
+                    {initials(o.customerName)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="flex flex-wrap items-center gap-1.5 truncate font-medium text-gray-900">
+                      {o.customerName}
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                        {o.studioName}
+                      </span>
+                    </p>
+                    <p className="truncate text-sm text-gray-500">
+                      {o.customerEmail} · {o.galleryTitle || "—"}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-gray-400">{formatDate(o.createdAt)}</p>
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="font-medium text-gray-900">{formatMoney(o.totalCents, o.currency)}</p>
+                  <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[o.status]}`}>
+                    {STATUS_LABELS[o.status]}
                   </span>
-                </p>
-                <p className="truncate text-sm text-gray-500">
-                  {o.customerEmail} · {o.galleryTitle || "—"}
-                </p>
-                <p className="mt-0.5 text-[11px] text-gray-400">{formatDate(o.createdAt)}</p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {o.items.map((item) => (
-                    <span key={item.id} className="rounded-full bg-gray-50 px-2.5 py-1 text-xs text-gray-700">
-                      {item.quantity} × {item.productName}
-                    </span>
-                  ))}
                 </div>
               </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {groups.map((g) => (
+                  <div
+                    key={g.productId}
+                    className="flex items-center gap-2 rounded-full bg-gray-50 py-1 pl-3 pr-1 text-xs text-gray-700"
+                  >
+                    <span>
+                      {g.count} × {g.productName}
+                    </span>
+                    {g.photos.length > 0 && (
+                      <button
+                        onClick={() => {
+                          setDetailGroup(g);
+                          setDetailGalleryId(o.galleryId);
+                        }}
+                        className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-brand-700 shadow-sm hover:bg-brand-50"
+                      >
+                        Plus de détail
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="shrink-0 text-right">
-              <p className="font-medium text-gray-900">{formatMoney(o.totalCents, o.currency)}</p>
-              <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[o.status]}`}>
-                {STATUS_LABELS[o.status]}
-              </span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {filtered.length > 0 && (
@@ -258,6 +325,27 @@ export default function AdminOrdersPage() {
           </button>
         </div>
       )}
+
+      {detailGroup && (
+        <OrderPhotosModal
+          group={detailGroup}
+          galleryId={detailGalleryId}
+          onZoom={(i) => setZoomIndex(i)}
+          onClose={() => {
+            setDetailGroup(null);
+            setDetailGalleryId(null);
+          }}
+        />
+      )}
+
+      {detailGroup && zoomIndex !== null && (
+        <OrderPhotoZoom
+          photos={detailGroup.photos}
+          index={zoomIndex}
+          onNavigate={setZoomIndex}
+          onClose={() => setZoomIndex(null)}
+        />
+      )}
     </div>
   );
 }
@@ -271,11 +359,166 @@ function StatCard({ label, value, tone }: { label: string; value: string; tone?:
   );
 }
 
+/** Panneau listant les photos d'un groupe produit, cliquables pour zoomer — même composant
+ * que OrdersView (dashboard studio), adapté ici pour fonctionner quel que soit le studio. */
+function OrderPhotosModal({
+  group,
+  galleryId,
+  onZoom,
+  onClose,
+}: {
+  group: ProductGroup;
+  galleryId: string | null;
+  onZoom: (index: number) => void;
+  onClose: () => void;
+}) {
+  const photoIds = [...new Set(group.photos.map((p) => p.id))];
+  const downloadUrl =
+    galleryId && photoIds.length > 0
+      ? `/api/galleries/${galleryId}/download-all?ids=${photoIds.join(",")}&size=hd`
+      : null;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
+      <div
+        className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-sm bg-white shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-gray-800">
+            {group.productName} ({group.photos.length})
+          </h2>
+          <div className="flex items-center gap-4">
+            {downloadUrl && (
+              <a
+                href={downloadUrl}
+                className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-gray-700 hover:text-gray-900"
+              >
+                <IconDownload />
+                Télécharger
+              </a>
+            )}
+            <button
+              onClick={onClose}
+              aria-label="Fermer"
+              className="flex h-6 w-6 items-center justify-center text-gray-500 hover:text-gray-800"
+            >
+              <IconX />
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+            {group.photos.map((p, i) => (
+              <button
+                key={`${p.id}-${i}`}
+                type="button"
+                onClick={() => onZoom(i)}
+                className="aspect-square overflow-hidden rounded bg-gray-50"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p.thumbUrl} alt={p.filename} className="h-full w-full cursor-zoom-in object-cover" />
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Zoom plein écran d'une photo commandée, navigation précédent/suivant. */
+function OrderPhotoZoom({
+  photos,
+  index,
+  onNavigate,
+  onClose,
+}: {
+  photos: OrderPhoto[];
+  index: number;
+  onNavigate: (index: number) => void;
+  onClose: () => void;
+}) {
+  const photo = photos[index];
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight") onNavigate((index + 1) % photos.length);
+      if (e.key === "ArrowLeft") onNavigate((index - 1 + photos.length) % photos.length);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [index, photos.length, onNavigate, onClose]);
+
+  if (!photo) return null;
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 px-4" onClick={onClose}>
+      <button
+        onClick={onClose}
+        aria-label="Fermer"
+        className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+      >
+        <IconX />
+      </button>
+      {photos.length > 1 && (
+        <>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate((index - 1 + photos.length) % photos.length);
+            }}
+            aria-label="Photo précédente"
+            className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 sm:left-5"
+          >
+            ‹
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate((index + 1) % photos.length);
+            }}
+            aria-label="Photo suivante"
+            className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 sm:right-5"
+          >
+            ›
+          </button>
+        </>
+      )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={photo.previewUrl}
+        alt={photo.filename}
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[85vh] max-w-full rounded object-contain shadow-2xl"
+      />
+    </div>
+  );
+}
+
 function IconBag() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M6 8h12l1 12.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20.5L6 8Z" strokeLinejoin="round" />
       <path d="M9 8V6a3 3 0 0 1 6 0v2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconX() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconDownload() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 19h16" strokeLinecap="round" />
     </svg>
   );
 }

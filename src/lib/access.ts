@@ -52,6 +52,15 @@ export async function checkGalleryAccess(
     return { granted: true, asStudio: true };
   }
 
+  // Admin plateforme (01/08/2026, demande d'Adriel : bouton "Plus de détail" sur /admin/orders,
+  // qui doit pouvoir afficher les photos commandées de N'IMPORTE QUEL studio, pas seulement
+  // le sien) — même garde-fou que requirePlatformAdmin (User.isPlatformAdmin), volontairement
+  // en lecture des photos uniquement : ceci ne donne accès à aucune action d'édition/suppression
+  // de galerie, juste à checkGalleryAccess/checkGalleryOrGuestAccess (donc /api/files).
+  if (studioSession && (studioSession.user as any).isPlatformAdmin) {
+    return { granted: true, asStudio: true };
+  }
+
   if (gallery.expiresAt && gallery.expiresAt < new Date()) {
     return { granted: false, asStudio: false };
   }

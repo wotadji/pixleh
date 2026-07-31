@@ -27,8 +27,8 @@ export async function GET(req: Request) {
       where: studioId ? { studioId } : undefined,
       include: {
         studio: { select: { id: true, name: true } },
-        gallery: { select: { title: true } },
-        items: { include: { product: { select: { name: true } } } },
+        gallery: { select: { id: true, title: true } },
+        items: { include: { product: { select: { id: true, name: true } }, photo: true } },
       },
       orderBy: { createdAt: "desc" },
       take: 300,
@@ -40,6 +40,7 @@ export async function GET(req: Request) {
       studioName: o.studio.name,
       customerName: o.customerName,
       customerEmail: o.customerEmail,
+      galleryId: o.galleryId,
       galleryTitle: o.gallery?.title || null,
       createdAt: o.createdAt,
       totalCents: o.totalCents,
@@ -48,7 +49,21 @@ export async function GET(req: Request) {
       items: o.items.map((item) => ({
         id: item.id,
         quantity: item.quantity,
+        productId: item.product.id,
         productName: item.product.name,
+        // Comme /dashboard/orders (voir OrdersView) : sert au bouton "Plus de détail" pour
+        // afficher les photos réellement commandées. checkGalleryOrGuestAccess (via /api/files)
+        // accorde désormais l'accès aux photos de N'IMPORTE QUEL studio à un admin plateforme
+        // (voir src/lib/access.ts, 01/08/2026) — sans ça ces vignettes retourneraient 403.
+        photo:
+          item.photo && o.galleryId
+            ? {
+                id: item.photo.id,
+                filename: item.photo.filename,
+                thumbUrl: `/api/files/studios/${o.studioId}/galleries/${o.galleryId}/${item.photo.id}/thumb.jpg?v=${item.photo.updatedAt.getTime()}`,
+                previewUrl: `/api/files/studios/${o.studioId}/galleries/${o.galleryId}/${item.photo.id}/preview.jpg?v=${item.photo.updatedAt.getTime()}`,
+              }
+            : null,
       })),
     }));
 
