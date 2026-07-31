@@ -76,15 +76,18 @@ export async function PUT(req: Request, { params }: { params: { id: string; phot
 
     // Supprime les anciens fichiers stockés APRÈS que les nouveaux ont été écrits avec
     // succès : si processAndStoreUpload échoue, l'ancienne photo reste intacte plutôt que
-    // perdue. Les clés peuvent différer des nouvelles (extension différente, ex: PNG → JPEG
-    // remplacé par un JPEG natif), donc on les supprime explicitement plutôt que de compter
-    // sur un simple écrasement au même chemin.
+    // perdue. `thumb.jpg`/`preview.jpg` gardent TOUJOURS le même chemin (buildPhotoKey fixe
+    // leur extension à "jpg" quel que soit le format d'origine) — seul `storageKey` (l'original)
+    // peut changer de chemin si l'extension change (ex: PNG → JPEG). Bug corrigé le 31/07/2026
+    // (constaté par Adriel : miniature en 404 juste après un remplacement) : supprimer
+    // aveuglément les 3 anciennes clés effaçait en réalité le thumb/preview flambant neufs,
+    // qui avaient été écrits AU MÊME CHEMIN par storage.put juste au-dessus. On ne supprime
+    // donc que les clés qui ont réellement changé de chemin.
     const storage = getStorage();
-    await Promise.allSettled([
-      storage.delete(photo.storageKey),
-      photo.thumbKey ? storage.delete(photo.thumbKey) : Promise.resolve(),
-      photo.previewKey ? storage.delete(photo.previewKey) : Promise.resolve(),
-    ]);
+    const oldKeys = [photo.storageKey, photo.thumbKey, photo.previewKey];
+    const newKeys = new Set([processed.storageKey, processed.thumbKey, processed.previewKey]);
+    const staleKeys = oldKeys.filter((k): k is string => !!k && !newKeys.has(k));
+    await Promise.allSettled(staleKeys.map((k) => storage.delete(k)));
 
     const updated = await prisma.photo.update({
       where: { id: photo.id },
