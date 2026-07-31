@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 
 interface ClientOption {
   id: string;
@@ -90,18 +91,14 @@ export function NewGalleryForm({ existingTags = [] }: { existingTags?: string[] 
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium">{t("galleryForm.clientLabel")}</label>
-          <select
-            className="input"
+          <SearchableSelect
             value={form.clientId}
-            onChange={(e) => setForm({ ...form, clientId: e.target.value })}
-          >
-            <option value="">{t("common.noClientOption")}</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            onChange={(clientId) => setForm({ ...form, clientId })}
+            placeholder={t("common.noClientOption")}
+            searchPlaceholder={t("common.searchPlaceholder")}
+            emptyOptionLabel={t("common.noClientOption")}
+            options={clients.map((c) => ({ value: c.id, label: c.name }))}
+          />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium">{t("gs.categoryTag")}</label>

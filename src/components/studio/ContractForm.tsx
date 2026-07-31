@@ -6,6 +6,7 @@ import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { RichTextEditor } from "@/components/studio/RichTextEditor";
 import { SignatureField } from "@/components/studio/SignatureField";
 import { CONTRACT_TEMPLATE_IDS, DEFAULT_CONTRACT_TEMPLATE, type ContractTemplateId } from "@/lib/contractTemplates";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 
 interface ClientOption {
   id: string;
@@ -176,18 +177,14 @@ export function ContractForm({
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">{t("contractForm.clientLabel")}</label>
-            <select
-              className="input"
+            <SearchableSelect
               value={form.clientId}
-              onChange={(e) => setForm({ ...form, clientId: e.target.value })}
-            >
-              <option value="">{t("common.noClientOption")}</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              onChange={(clientId) => setForm({ ...form, clientId })}
+              placeholder={t("common.noClientOption")}
+              searchPlaceholder={t("common.searchPlaceholder")}
+              emptyOptionLabel={t("common.noClientOption")}
+              options={clients.map((c) => ({ value: c.id, label: c.name }))}
+            />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">{t("contractForm.placeLabel")}</label>
