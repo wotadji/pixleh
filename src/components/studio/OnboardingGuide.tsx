@@ -5,11 +5,12 @@ import { useLanguage } from "@/lib/i18n/LanguageProvider";
 
 /** `target` = valeur de `data-onboarding-target` posée sur le lien correspondant dans
  * DashboardSidebar — sert à retrouver le bouton réel à pointer du doigt pour cette étape. */
+// Étape "Boutique" (target: "store") retirée temporairement — le lien correspondant est
+// masqué du menu (voir DashboardSidebar), donc plus rien à pointer du doigt pour cette étape.
 const STEPS = [
   { target: "overview", titleKey: "onboarding.step1.title", descKey: "onboarding.step1.desc" },
   { target: "galleries", titleKey: "onboarding.step2.title", descKey: "onboarding.step2.desc" },
   { target: "clients", titleKey: "onboarding.step3.title", descKey: "onboarding.step3.desc" },
-  { target: "store", titleKey: "onboarding.step4.title", descKey: "onboarding.step4.desc" },
   { target: "website", titleKey: "onboarding.step5.title", descKey: "onboarding.step5.desc" },
 ] as const;
 

@@ -40,14 +40,18 @@ export function DashboardSidebar({
     { href: "/dashboard", label: t("nav.overview"), onboarding: "overview" },
     { href: "/dashboard/galleries", label: t("nav.galleries"), onboarding: "galleries" },
     { href: "/dashboard/clients", label: t("nav.clients"), onboarding: "clients" },
-    { href: "/dashboard/store/products", label: t("nav.store"), onboarding: "store" },
+    // "Boutique" et "Blog" masqués temporairement du menu studio (31/07/2026, demande
+    // d'Adriel : "pour un début masquer le bouton boutique et blog dans le panel du studio,
+    // nous le ferons après") — dans le cadre du chantier "impression pixleh/Prodigi" : la
+    // gestion des produits d'impression va basculer vers le panel Admin plateforme, donc
+    // "Boutique" n'a plus vocation à rester une page studio en l'état. Les pages/routes ne
+    // sont PAS supprimées, juste retirées de la nav — à réactiver ou retravailler plus tard.
     { href: "/dashboard/orders", label: t("nav.orders") },
     { href: "/dashboard/bookings", label: t("nav.bookings") },
     { href: "/dashboard/contracts", label: t("nav.contracts") },
     { href: "/dashboard/invoices", label: t("nav.invoices") },
     { href: "/dashboard/billing", label: t("nav.billing") },
     { href: "/dashboard/website", label: t("nav.website"), onboarding: "website" },
-    { href: "/dashboard/blog", label: t("nav.blog") },
     { href: "/dashboard/settings", label: t("nav.settings") },
   ];
 
