@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireStudioSession, AccessError } from "@/lib/access";
 import { renderInvoicePdf } from "@/lib/pdf";
 import { isInvoiceTemplateId } from "@/lib/invoiceTemplates";
+import { resolveStudioVatRate } from "@/lib/studioVat";
 
 export const runtime = "nodejs";
 
@@ -63,7 +64,10 @@ export async function POST(req: Request) {
       (sum: number, item: { quantity: number; unitPriceCents: number }) => sum + item.quantity * item.unitPriceCents,
       0
     );
-    const vatRate = typeof body.vatRate === "number" ? body.vatRate : null;
+    // Taux dérivé de StudioSettings, pas de la valeur envoyée par le formulaire (31/07/2026,
+    // demande d'Adriel : la TVA n'est plus choisie par le studio, voir src/lib/studioVat.ts) —
+    // l'aperçu doit refléter exactement ce que POST /api/invoices produira.
+    const vatRate = await resolveStudioVatRate(session.user.studioId);
     const totalCents = vatRate != null ? Math.round(subtotalCents * (1 + vatRate / 100)) : subtotalCents;
 
     const pdfBuffer = await renderInvoicePdf({

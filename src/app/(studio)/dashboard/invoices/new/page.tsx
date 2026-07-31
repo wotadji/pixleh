@@ -29,13 +29,12 @@ export default function NewInvoicePage() {
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [contracts, setContracts] = useState<ContractOption[]>([]);
   const [studioBrandColor, setStudioBrandColor] = useState<string | null>(null);
-  // Pré-cochage de la TVA sur une nouvelle facture (31/07/2026, demande d'Adriel : "j'ai
-  // appliqué dans paramètre la TVA, sauf que j'ai encore le choix de la TVA dans new facture")
-  // — le studio ne devrait pas avoir à recocher "Appliquer la TVA" à chaque facture s'il a déjà
-  // indiqué dans Réglages > Facturation qu'il y est assujetti (vatExempt décoché). Reste
-  // modifiable par facture (voir InvoiceForm) pour les cas particuliers, seule la valeur par
-  // défaut change.
-  const [defaultApplyVat, setDefaultApplyVat] = useState(false);
+  // TVA du studio (31/07/2026, demande d'Adriel : "je veux que la TVA dans paramètre soit
+  // configurée et que dans la création d'un contrat ou d'une facture cela soit appliqué sans
+  // modification") — verrouillée sur Réglages > Facturation, plus aucun choix côté formulaire
+  // (voir InvoiceForm.tsx et src/lib/studioVat.ts côté serveur, seule source de vérité réelle).
+  const [studioVatExempt, setStudioVatExempt] = useState(true);
+  const [studioVatRate, setStudioVatRate] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
 
@@ -48,7 +47,8 @@ export default function NewInvoicePage() {
       .then(([clientsData, settingsData, contractsData]) => {
         setClients(clientsData.clients || []);
         setStudioBrandColor(settingsData.studio?.brandColor || null);
-        setDefaultApplyVat(settingsData.studio?.settings?.vatExempt === false);
+        setStudioVatExempt(settingsData.studio?.settings?.vatExempt ?? true);
+        setStudioVatRate(settingsData.studio?.settings?.vatRate ?? 20);
         // Seuls les contrats signés (par le studio ET le client) peuvent être liés à une
         // facture — demande d'Adriel, 31/07/2026 : avant signature, les conditions/le montant
         // peuvent encore changer. Même règle appliquée côté serveur (voir invoiceSchema /
@@ -84,7 +84,6 @@ export default function NewInvoicePage() {
         lineItems: values.lineItems,
         notes: values.notes || null,
         template: values.template,
-        vatRate: values.applyVat ? values.vatRate : null,
       }),
     });
     setLoading(false);
@@ -115,6 +114,8 @@ export default function NewInvoicePage() {
         clients={clients}
         contracts={contracts}
         studioBrandColor={studioBrandColor}
+        studioVatExempt={studioVatExempt}
+        studioVatRate={studioVatRate}
         initial={{
           clientId: prefillContract?.clientId || "",
           guestClientName: "",
@@ -123,8 +124,6 @@ export default function NewInvoicePage() {
           lineItems: [{ description: "", quantity: 1, unitPriceCents: 0 }],
           notes: "",
           template: DEFAULT_INVOICE_TEMPLATE,
-          applyVat: defaultApplyVat,
-          vatRate: 20,
         }}
         submitLabel={t("invoiceForm.create")}
         submittingLabel={t("common.creating")}

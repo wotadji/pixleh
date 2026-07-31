@@ -35,11 +35,6 @@ export interface InvoiceFormValues {
   lineItems: InvoiceLineItem[];
   notes: string;
   template: InvoiceTemplateId;
-  // Case à cocher "Appliquer la TVA" (31/07/2026, demande d'Adriel) : applyVat pilote
-  // l'affichage du champ de taux côté UI ; vatRate n'est envoyé à l'API que si applyVat est
-  // coché (voir handleSubmit ci-dessous).
-  applyVat: boolean;
-  vatRate: number;
 }
 
 /** Aperçu miniature (CSS pur) de chaque template — même composant que ContractForm.tsx
@@ -96,6 +91,8 @@ export function InvoiceForm({
   clients,
   contracts,
   studioBrandColor,
+  studioVatExempt,
+  studioVatRate,
   initial,
   submitLabel,
   submittingLabel,
@@ -105,6 +102,15 @@ export function InvoiceForm({
   clients: ClientOption[];
   contracts: ContractOption[];
   studioBrandColor?: string | null;
+  /** TVA du studio (StudioSettings.vatExempt/vatRate, voir Réglages > Facturation) —
+   * 31/07/2026, demande d'Adriel : "je veux que la TVA dans paramètre soit configurée et que
+   * dans la création d'un contrat ou d'une facture cela soit appliqué sans modification". Le
+   * studio n'a plus la main pour l'activer/désactiver ou changer le taux depuis ce formulaire :
+   * ces deux props ne pilotent qu'un récapitulatif en lecture seule, la valeur réelle appliquée
+   * est toujours recalculée côté serveur (voir src/lib/studioVat.ts) au moment de
+   * l'enregistrement, jamais envoyée par le client. */
+  studioVatExempt: boolean;
+  studioVatRate: number | null;
   initial: InvoiceFormValues;
   submitLabel: string;
   submittingLabel: string;
@@ -134,11 +140,13 @@ export function InvoiceForm({
     setForm((f) => ({ ...f, lineItems: [...f.lineItems, { description: "", quantity: 1, unitPriceCents: 0 }] }));
   }
 
-  // Sous-total HT dérivé des lignes ; si la TVA est appliquée, le total affiché devient le TTC
-  // (même logique que côté serveur, voir POST /api/invoices) — la TVA n'est jamais recalculée
-  // à partir d'un total arrondi, toujours dérivée du sous-total pour rester exacte.
+  // Sous-total HT dérivé des lignes ; la TVA appliquée n'est plus un choix du formulaire
+  // (verrouillée sur Réglages > Facturation, voir studioVatExempt/studioVatRate ci-dessus et
+  // src/lib/studioVat.ts côté serveur) — ce récapitulatif est purement informatif, le montant
+  // réel enregistré est toujours recalculé côté serveur au moment de l'enregistrement.
+  const applyVat = !studioVatExempt && studioVatRate != null;
   const subtotal = form.lineItems.reduce((sum, item) => sum + item.quantity * item.unitPriceCents, 0);
-  const vatAmount = form.applyVat ? Math.round(subtotal * (form.vatRate / 100)) : 0;
+  const vatAmount = applyVat ? Math.round(subtotal * (studioVatRate! / 100)) : 0;
   const total = subtotal + vatAmount;
 
   // Filtre les contrats du client sélectionné en tête de liste (les autres restent
@@ -173,7 +181,6 @@ export function InvoiceForm({
       lineItems: cleaned,
       guestClientName: !form.clientId ? form.guestClientName.trim() || null : null,
       contractId: form.clientId ? form.contractId || null : null,
-      vatRate: form.applyVat ? form.vatRate : null,
     };
   }
 
@@ -345,43 +352,31 @@ export function InvoiceForm({
           </button>
 
           <div className="mt-3 border-t border-gray-100 pt-3">
-            <label className="flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-                checked={form.applyVat}
-                onChange={(e) => setForm({ ...form, applyVat: e.target.checked })}
-              />
-              {t("invoiceForm.applyVatLabel")}
-            </label>
-            {form.applyVat && (
-              <div className="mt-2 flex items-center gap-2">
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  step="0.1"
-                  className="input w-24"
-                  value={form.vatRate}
-                  onChange={(e) => setForm({ ...form, vatRate: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })}
-                />
-                <span className="text-sm text-gray-500">% — {t("invoiceForm.vatRateLabel")}</span>
-              </div>
-            )}
+            <p className="flex items-start gap-1.5 text-xs text-gray-400">
+              <IconInfo className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                {applyVat
+                  ? t("invoiceForm.vatAutoAppliedNote").replace("{rate}", String(studioVatRate))
+                  : t("invoiceForm.vatExemptNote")}{" "}
+                <Link href="/dashboard/settings?tab=billing" className="text-brand-600 hover:underline">
+                  {t("invoiceForm.vatSettingsLink")}
+                </Link>
+              </span>
+            </p>
 
             <div className="mt-3 flex flex-col items-end gap-1">
-              {form.applyVat && (
+              {applyVat && (
                 <>
                   <p className="text-sm text-gray-600">
                     {t("invoiceForm.subtotalHt")} : {formatMoney(subtotal)} €
                   </p>
                   <p className="text-sm text-gray-600">
-                    {t("invoiceForm.vatAmount")} ({form.vatRate}%) : {formatMoney(vatAmount)} €
+                    {t("invoiceForm.vatAmount")} ({studioVatRate}%) : {formatMoney(vatAmount)} €
                   </p>
                 </>
               )}
               <p className="text-base font-semibold text-gray-900">
-                {form.applyVat ? t("invoiceForm.totalTtc") : t("invoiceForm.total")} : {formatMoney(total)} €
+                {applyVat ? t("invoiceForm.totalTtc") : t("invoiceForm.total")} : {formatMoney(total)} €
               </p>
             </div>
           </div>
@@ -475,6 +470,16 @@ function IconWarning({ className }: { className?: string }) {
         d="M10.29 3.86 1.82 18a1.5 1.5 0 0 0 1.29 2.25h17.78A1.5 1.5 0 0 0 22.18 18L13.71 3.86a1.5 1.5 0 0 0-2.42 0Z"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+function IconInfo({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5.5" strokeLinecap="round" />
+      <path d="M12 8h.01" strokeLinecap="round" />
     </svg>
   );
 }

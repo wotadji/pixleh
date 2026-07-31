@@ -231,6 +231,13 @@ model StudioSettings {
   /// true par défaut : la plupart des photographes indépendants démarrent en micro-entreprise,
   /// non assujettis à la TVA (mention obligatoire "TVA non applicable, art. 293 B du CGI").
   vatExempt          Boolean @default(true)
+  /// Taux de TVA par défaut du studio, en pourcentage (ex: 20 pour 20%) — 31/07/2026, demande
+  /// d'Adriel : "je veux que la TVA dans paramètre soit configurée et que dans la création d'un
+  /// contrat ou d'une facture cela soit appliqué sans modification". Source de vérité UNIQUE
+  /// désormais : InvoiceForm/ContractForm n'exposent plus de case "Appliquer la TVA" ni de
+  /// saisie de taux, la TVA de chaque facture/contrat est dérivée automatiquement ici
+  /// (vatExempt=true → pas de TVA du tout, sinon ce taux). Non pertinent si vatExempt=true.
+  vatRate            Float?  @default(20)
   iban               String?
   bic                String?
   /// Nom de la banque (31/07/2026, demande d'Adriel) — purement informatif, affiché à côté de

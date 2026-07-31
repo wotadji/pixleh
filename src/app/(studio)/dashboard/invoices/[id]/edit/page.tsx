@@ -37,6 +37,10 @@ export default function EditInvoicePage() {
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [contracts, setContracts] = useState<ContractOption[]>([]);
   const [studioBrandColor, setStudioBrandColor] = useState<string | null>(null);
+  // TVA du studio — verrouillée sur Réglages > Facturation, voir new/page.tsx et
+  // src/lib/studioVat.ts pour la même logique côté serveur (31/07/2026, demande d'Adriel).
+  const [studioVatExempt, setStudioVatExempt] = useState(true);
+  const [studioVatRate, setStudioVatRate] = useState<number | null>(null);
   const [invoice, setInvoice] = useState<InvoiceDTO | null>(null);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
@@ -52,6 +56,8 @@ export default function EditInvoicePage() {
       .then(([clientsData, settingsData, contractsData, invoiceData]) => {
         setClients(clientsData.clients || []);
         setStudioBrandColor(settingsData.studio?.brandColor || null);
+        setStudioVatExempt(settingsData.studio?.settings?.vatExempt ?? true);
+        setStudioVatRate(settingsData.studio?.settings?.vatRate ?? 20);
         // Seuls les contrats signés peuvent être liés à une facture — voir new/page.tsx et
         // POST /api/invoices pour la même règle (demande d'Adriel, 31/07/2026).
         setContracts(
@@ -86,7 +92,6 @@ export default function EditInvoicePage() {
         lineItems: values.lineItems,
         notes: values.notes || null,
         template: values.template,
-        vatRate: values.applyVat ? values.vatRate : null,
       }),
     });
     setLoading(false);
@@ -116,6 +121,8 @@ export default function EditInvoicePage() {
             clients={clients}
             contracts={contracts}
             studioBrandColor={studioBrandColor}
+            studioVatExempt={studioVatExempt}
+            studioVatRate={studioVatRate}
             initial={{
               clientId: invoice.client?.id || "",
               guestClientName: invoice.guestClientName || "",
@@ -124,8 +131,6 @@ export default function EditInvoicePage() {
               lineItems: invoice.lineItems?.length ? invoice.lineItems : [{ description: "", quantity: 1, unitPriceCents: 0 }],
               notes: invoice.notes || "",
               template: isInvoiceTemplateId(invoice.template) ? invoice.template : DEFAULT_INVOICE_TEMPLATE,
-              applyVat: invoice.vatRate != null,
-              vatRate: invoice.vatRate ?? 20,
             }}
             submitLabel={t("invoiceForm.save")}
             submittingLabel={t("invoiceForm.saving")}

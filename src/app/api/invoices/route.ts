@@ -5,6 +5,7 @@ import { invoiceSchema } from "@/lib/validators";
 import { sendInvoiceEmail } from "@/lib/notifications";
 import { isInvoiceTemplateId } from "@/lib/invoiceTemplates";
 import { fetchStudioBankDetails } from "@/lib/studioBankDetails";
+import { resolveStudioVatRate } from "@/lib/studioVat";
 
 /**
  * Liste des factures du studio — refonte du 31/07/2026 (demande d'Adriel : amener la
@@ -115,14 +116,17 @@ export async function POST(req: Request) {
     const number = `${prefix}-${year}-${String(countThisYear + 1).padStart(4, "0")}`;
 
     // Sous-total HT : toujours dérivé des lineItems (source de vérité unique, voir
-    // schema.prisma sur Invoice.totalCents). Si une TVA est appliquée (31/07/2026, demande
-    // d'Adriel), totalCents devient le montant TTC ; sinon il reste égal au sous-total.
+    // schema.prisma sur Invoice.totalCents). Le taux de TVA n'est PLUS choisi par le studio à
+    // la création (case "Appliquer la TVA" supprimée de InvoiceForm, 31/07/2026, demande
+    // d'Adriel : "je veux que la TVA dans paramètre soit configurée et que [...] cela soit
+    // appliqué sans modification") — il est dérivé uniquement de StudioSettings.vatExempt/
+    // vatRate, toute valeur envoyée par le client est ignorée.
+    const vatRate = await resolveStudioVatRate(session.user.studioId);
     const subtotalCents = data.lineItems.reduce(
       (sum, item) => sum + item.quantity * item.unitPriceCents,
       0
     );
-    const totalCents =
-      data.vatRate != null ? Math.round(subtotalCents * (1 + data.vatRate / 100)) : subtotalCents;
+    const totalCents = vatRate != null ? Math.round(subtotalCents * (1 + vatRate / 100)) : subtotalCents;
 
     const invoice = await prisma.invoice.create({
       data: {
@@ -153,8 +157,8 @@ export async function POST(req: Request) {
     if (!data.clientId && data.guestClientName) {
       await prisma.$executeRaw`UPDATE "Invoice" SET "guestClientName" = ${data.guestClientName} WHERE id = ${invoice.id}`;
     }
-    if (data.vatRate != null) {
-      await prisma.$executeRaw`UPDATE "Invoice" SET "vatRate" = ${data.vatRate} WHERE id = ${invoice.id}`;
+    if (vatRate != null) {
+      await prisma.$executeRaw`UPDATE "Invoice" SET "vatRate" = ${vatRate} WHERE id = ${invoice.id}`;
     }
     const sentAt = new Date();
     await prisma.$executeRaw`UPDATE "Invoice" SET "sentAt" = ${sentAt} WHERE id = ${invoice.id}`;
@@ -193,7 +197,7 @@ export async function POST(req: Request) {
           ...invoice,
           sentAt,
           guestClientName: !data.clientId ? data.guestClientName ?? null : null,
-          vatRate: data.vatRate ?? null,
+          vatRate,
         },
         emailSent,
         emailError,

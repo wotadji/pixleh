@@ -132,6 +132,9 @@ export default function SettingsPage() {
   const [siret, setSiret] = useState("");
   const [vatNumber, setVatNumber] = useState("");
   const [vatExempt, setVatExempt] = useState(true);
+  // Taux de TVA par défaut (31/07/2026, demande d'Adriel) — appliqué automatiquement à chaque
+  // facture/contrat sans ressaisie, voir src/lib/studioVat.ts.
+  const [vatRate, setVatRate] = useState(20);
   const [iban, setIban] = useState("");
   const [bic, setBic] = useState("");
   // Nom de la banque (31/07/2026, demande d'Adriel) — renseigné une fois ici, réutilisé
@@ -170,6 +173,7 @@ export default function SettingsPage() {
         setSiret(d.studio?.settings?.siret || "");
         setVatNumber(d.studio?.settings?.vatNumber || "");
         setVatExempt(d.studio?.settings?.vatExempt ?? true);
+        setVatRate(d.studio?.settings?.vatRate ?? 20);
         setIban(d.studio?.settings?.iban || "");
         setBic(d.studio?.settings?.bic || "");
         setBankName(d.studio?.settings?.bankName || "");
@@ -422,6 +426,7 @@ export default function SettingsPage() {
           siret,
           vatNumber,
           vatExempt,
+          vatRate,
           iban,
           bic,
           bankName,
@@ -873,11 +878,28 @@ export default function SettingsPage() {
               {t("settings.vatExemptLabel")}
             </label>
             {!vatExempt && (
-              <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">
-                  {t("settings.vatNumberLabel")}
-                </label>
-                <input className="input w-full" value={vatNumber} onChange={(e) => setVatNumber(e.target.value)} />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">
+                    {t("settings.vatNumberLabel")}
+                  </label>
+                  <input className="input w-full" value={vatNumber} onChange={(e) => setVatNumber(e.target.value)} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">
+                    {t("settings.vatRateLabel")}
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.1"
+                    className="input w-full"
+                    value={vatRate}
+                    onChange={(e) => setVatRate(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                  />
+                  <p className="mt-1 text-xs text-gray-400">{t("settings.vatRateHint")}</p>
+                </div>
               </div>
             )}
 

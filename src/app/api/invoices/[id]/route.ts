@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireStudioSession, AccessError } from "@/lib/access";
 import { invoiceSchema } from "@/lib/validators";
 import { isInvoiceTemplateId } from "@/lib/invoiceTemplates";
+import { resolveStudioVatRate } from "@/lib/studioVat";
 
 /**
  * Consultation authentifiée d'une facture côté studio (pré-remplissage du formulaire
@@ -102,13 +103,17 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
 
     // Sous-total HT dérivé des lineItems, TVA appliquée dessus le cas échéant (même logique
-    // que POST /api/invoices, voir schema.prisma sur Invoice.totalCents).
+    // que POST /api/invoices, voir schema.prisma sur Invoice.totalCents). Le taux vient
+    // toujours de StudioSettings au moment de l'édition (pas de choix du studio, voir
+    // src/lib/studioVat.ts) : si le taux configuré a changé depuis la création, l'édition
+    // recalcule sur la base du taux ACTUEL — cohérent avec "verrouillé sur Réglages, sans
+    // exception" (31/07/2026, demande d'Adriel).
+    const vatRate = await resolveStudioVatRate(session.user.studioId);
     const subtotalCents = data.lineItems.reduce(
       (sum, item) => sum + item.quantity * item.unitPriceCents,
       0
     );
-    const totalCents =
-      data.vatRate != null ? Math.round(subtotalCents * (1 + data.vatRate / 100)) : subtotalCents;
+    const totalCents = vatRate != null ? Math.round(subtotalCents * (1 + vatRate / 100)) : subtotalCents;
 
     const invoice = await prisma.invoice.update({
       where: { id: existing.id },
@@ -138,15 +143,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     await prisma.$executeRaw`UPDATE "Invoice" SET "guestClientName" = ${
       !data.clientId && data.guestClientName ? data.guestClientName : null
     } WHERE id = ${invoice.id}`;
-    if (body.vatRate !== undefined) {
-      await prisma.$executeRaw`UPDATE "Invoice" SET "vatRate" = ${data.vatRate ?? null} WHERE id = ${invoice.id}`;
-    }
+    await prisma.$executeRaw`UPDATE "Invoice" SET "vatRate" = ${vatRate} WHERE id = ${invoice.id}`;
 
     return NextResponse.json({
       invoice: {
         ...invoice,
         guestClientName: !data.clientId && data.guestClientName ? data.guestClientName : null,
-        vatRate: data.vatRate ?? null,
+        vatRate,
       },
     });
   } catch (e) {

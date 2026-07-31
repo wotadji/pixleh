@@ -32,6 +32,8 @@ export default function EditContractPage() {
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [studioName, setStudioName] = useState("");
   const [studioBrandColor, setStudioBrandColor] = useState<string | null>(null);
+  const [studioVatExempt, setStudioVatExempt] = useState(true);
+  const [studioVatRate, setStudioVatRate] = useState<number | null>(null);
   const [contract, setContract] = useState<ContractDTO | null>(null);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
@@ -47,6 +49,8 @@ export default function EditContractPage() {
         setClients(clientsData.clients || []);
         setStudioName(settingsData.studio?.name || "");
         setStudioBrandColor(settingsData.studio?.brandColor || null);
+        setStudioVatExempt(settingsData.studio?.settings?.vatExempt ?? true);
+        setStudioVatRate(settingsData.studio?.settings?.vatRate ?? 20);
         if (contractData.contract) setContract(contractData.contract);
         else setNotFound(true);
       })
@@ -90,6 +94,8 @@ export default function EditContractPage() {
             clients={clients}
             studioName={studioName}
             studioBrandColor={studioBrandColor}
+            studioVatExempt={studioVatExempt}
+            studioVatRate={studioVatRate}
             initial={{
               title: contract.title,
               clientId: contract.client?.id || "",

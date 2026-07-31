@@ -19,21 +19,27 @@ export default function NewContractPage() {
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [studioName, setStudioName] = useState("");
   const [studioBrandColor, setStudioBrandColor] = useState<string | null>(null);
+  // TVA du studio (31/07/2026, demande d'Adriel) — zone info "prix avec TVA" dans ContractForm,
+  // voir src/lib/studioVat.ts pour la même logique côté factures.
+  const [studioVatExempt, setStudioVatExempt] = useState(true);
+  const [studioVatRate, setStudioVatRate] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/clients").then((r) => r.json()),
-      // Sert uniquement à pré-remplir l'onglet "Texte" de SignatureField avec le nom du
-      // studio (modifiable) et à colorer l'aperçu des templates de PDF — même endpoint que
-      // la page Réglages.
+      // Sert à pré-remplir l'onglet "Texte" de SignatureField avec le nom du studio
+      // (modifiable), à colorer l'aperçu des templates de PDF et à afficher la TVA — même
+      // endpoint que la page Réglages.
       fetch("/api/settings").then((r) => r.json()),
     ])
       .then(([clientsData, settingsData]) => {
         setClients(clientsData.clients || []);
         setStudioName(settingsData.studio?.name || "");
         setStudioBrandColor(settingsData.studio?.brandColor || null);
+        setStudioVatExempt(settingsData.studio?.settings?.vatExempt ?? true);
+        setStudioVatRate(settingsData.studio?.settings?.vatRate ?? 20);
       })
       .finally(() => setPageLoading(false));
   }, []);
@@ -78,6 +84,8 @@ export default function NewContractPage() {
         clients={clients}
         studioName={studioName}
         studioBrandColor={studioBrandColor}
+        studioVatExempt={studioVatExempt}
+        studioVatRate={studioVatRate}
         initial={{
           title: "",
           clientId: "",

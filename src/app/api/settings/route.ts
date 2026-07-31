@@ -23,6 +23,7 @@ export async function GET() {
           siret: string | null;
           vatNumber: string | null;
           vatExempt: boolean;
+          vatRate: number | null;
           iban: string | null;
           bic: string | null;
           bankName: string | null;
@@ -30,7 +31,7 @@ export async function GET() {
           invoiceNumberPrefix: string | null;
         }[]
       >`
-        SELECT "legalForm", siret, "vatNumber", "vatExempt", iban, bic, "bankName", "invoiceLegalMentions", "invoiceNumberPrefix"
+        SELECT "legalForm", siret, "vatNumber", "vatExempt", "vatRate", iban, bic, "bankName", "invoiceLegalMentions", "invoiceNumberPrefix"
         FROM "StudioSettings" WHERE "studioId" = ${session.user.studioId}
       `;
       studioWithBilling = {
@@ -41,6 +42,7 @@ export async function GET() {
           siret: billingRow?.siret ?? null,
           vatNumber: billingRow?.vatNumber ?? null,
           vatExempt: billingRow?.vatExempt ?? true,
+          vatRate: billingRow?.vatRate ?? 20,
           iban: billingRow?.iban ?? null,
           bic: billingRow?.bic ?? null,
           bankName: billingRow?.bankName ?? null,
@@ -113,6 +115,10 @@ export async function PATCH(req: Request) {
     }
     if (body.vatExempt !== undefined) {
       await prisma.$executeRaw`UPDATE "StudioSettings" SET "vatExempt" = ${Boolean(body.vatExempt)} WHERE "studioId" = ${session.user.studioId}`;
+    }
+    if (body.vatRate !== undefined) {
+      const vatRate = body.vatRate === null || body.vatRate === "" ? null : Number(body.vatRate);
+      await prisma.$executeRaw`UPDATE "StudioSettings" SET "vatRate" = ${vatRate} WHERE "studioId" = ${session.user.studioId}`;
     }
     if (body.iban !== undefined) {
       await prisma.$executeRaw`UPDATE "StudioSettings" SET iban = ${body.iban} WHERE "studioId" = ${session.user.studioId}`;

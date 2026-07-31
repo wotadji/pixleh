@@ -64,6 +64,10 @@ function TemplatePreview({ id, accent }: { id: ContractTemplateId; accent: strin
   );
 }
 
+function formatMoney(cents: number) {
+  return (cents / 100).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+}
+
 /**
  * Formulaire de contrat partagé entre la création (contracts/new) et la modification
  * (contracts/[id]/edit) — extrait en composant commun pour ne pas dupliquer la mise en page
@@ -73,6 +77,8 @@ export function ContractForm({
   clients,
   studioName,
   studioBrandColor,
+  studioVatExempt,
+  studioVatRate,
   initial,
   submitLabel,
   submittingLabel,
@@ -85,6 +91,13 @@ export function ContractForm({
   /** Couleur de marque du studio (Studio.brandColor) — utilisée uniquement pour colorer les
    * aperçus miniatures des templates ci-dessous, repli sur le violet pixleh si absente. */
   studioBrandColor?: string | null;
+  /** TVA du studio (StudioSettings.vatExempt/vatRate, voir Réglages > Facturation) — 31/07/2026,
+   * demande d'Adriel : "dans contrat ajouter une zone info qui donne la prix avec tva". Purement
+   * informatif : Contract.amountCents reste le montant HT saisi tel quel, cette zone affiche
+   * juste à titre indicatif le TTC équivalent (HT + TVA de Réglages), sans rien changer au
+   * montant stocké ni aux factures liées à ce contrat. */
+  studioVatExempt: boolean;
+  studioVatRate: number | null;
   initial: ContractFormValues;
   submitLabel: string;
   submittingLabel: string;
@@ -96,6 +109,7 @@ export function ContractForm({
 }) {
   const { t } = useLanguage();
   const accent = studioBrandColor || "#7c3aed";
+  const applyVat = !studioVatExempt && studioVatRate != null;
   const [form, setForm] = useState({
     title: initial.title,
     clientId: initial.clientId,
@@ -104,6 +118,10 @@ export function ContractForm({
     template: initial.template || DEFAULT_CONTRACT_TEMPLATE,
     amountCents: initial.amountCents,
   });
+  // Montant TTC équivalent, purement informatif (voir doc de studioVatRate ci-dessus) — jamais
+  // envoyé à l'API, form.amountCents reste le seul montant stocké sur le contrat.
+  const vatInclusiveCents =
+    applyVat && form.amountCents != null ? Math.round(form.amountCents * (1 + studioVatRate! / 100)) : 0;
   const [studioSignatureDataUrl, setStudioSignatureDataUrl] = useState(initial.studioSignatureDataUrl);
   // Tant qu'une signature existe déjà (mode édition) ET n'a pas été explicitement remplacée,
   // on affiche un simple aperçu plutôt que SignatureField : celui-ci régénère automatiquement
@@ -218,6 +236,13 @@ export function ContractForm({
               }
             />
             <p className="mt-1 text-xs text-gray-400">{t("contractForm.amountHelp")}</p>
+            {applyVat && form.amountCents != null && form.amountCents > 0 && (
+              <p className="mt-1.5 rounded-md bg-brand-50 px-2.5 py-1.5 text-xs text-brand-700">
+                {t("contractForm.amountVatInfo")
+                  .replace("{rate}", String(studioVatRate))
+                  .replace("{amount}", formatMoney(vatInclusiveCents))}
+              </p>
+            )}
           </div>
         </div>
 
