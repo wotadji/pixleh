@@ -547,10 +547,26 @@ export async function renderInvoicePdf(params: {
   const tableAccent = tmpl === "classic" ? accent : tmpl === "elegant" ? "#d4d4d8" : "#e5e7eb";
   const grandTotalFontFamily = tmpl === "elegant" ? "Times-Bold" : "Helvetica-Bold";
 
+  // La mention "TVA non applicable" (franchise en base, Réglages > Facturation) est un
+  // réglage global du studio — elle ne doit jamais s'afficher sur une facture où une TVA a
+  // explicitement été appliquée (case "Appliquer la TVA", voir InvoiceForm), sous peine de se
+  // contredire elle-même comme dans le bug remonté par Adriel le 31/07/2026 (facture à 20% de
+  // TVA affichant quand même "TVA non applicable, art. 293 B du CGI" en mentions légales).
+  const vatMention =
+    vatRate != null
+      ? studioVatNumber
+        ? `TVA intracommunautaire : ${studioVatNumber}`
+        : null
+      : studioVatExempt
+        ? "TVA non applicable, art. 293 B du CGI"
+        : studioVatNumber
+          ? `TVA intracommunautaire : ${studioVatNumber}`
+          : null;
+
   const legalMentionsLines = [
     studioLegalForm,
     studioSiret ? `SIRET : ${studioSiret}` : null,
-    studioVatExempt ? "TVA non applicable, art. 293 B du CGI" : studioVatNumber ? `TVA intracommunautaire : ${studioVatNumber}` : null,
+    vatMention,
     studioIban ? `IBAN : ${studioIban}${studioBic ? `  ·  BIC : ${studioBic}` : ""}` : null,
   ].filter(Boolean);
 

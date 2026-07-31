@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
 import { syncSubscriptionFromStripe } from "@/lib/subscriptionSync";
-import { sendStudioOrderPaidEmail, sendStudioInvoicePaidEmail } from "@/lib/notifications";
+import { sendStudioOrderPaidEmail } from "@/lib/notifications";
+import { markInvoicePaidFromStripe } from "@/lib/invoicePayment";
 import type Stripe from "stripe";
 
 export const runtime = "nodejs";
@@ -56,25 +57,9 @@ export async function POST(req: Request) {
 
       const invoiceId = session.metadata?.invoiceId;
       if (invoiceId) {
-        const invoice = await prisma.invoice.update({
-          where: { id: invoiceId },
-          data: { status: "PAID", paidAt: new Date() },
-          include: { client: true },
-        });
-        // amountPaidCents n'existe pas encore dans le Prisma Client généré du sandbox (voir
-        // schema.prisma) — écrit à part via $executeRaw. Un paiement Stripe Checkout est
-        // toujours intégral (pas de paiement partiel en ligne, contrairement au règlement
-        // manuel via /api/invoices/[id]/mark-paid) : on aligne donc amountPaidCents sur le
-        // total, pour que le suivi facturé/payé (voir Contract.amountCents) reste cohérent
-        // entre les deux modes de paiement.
-        await prisma.$executeRaw`UPDATE "Invoice" SET "amountPaidCents" = ${invoice.totalCents} WHERE id = ${invoice.id}`;
-        sendStudioInvoicePaidEmail({
-          studioId: invoice.studioId,
-          invoiceNumber: invoice.number,
-          clientName: invoice.client?.name ?? null,
-          totalCents: invoice.totalCents,
-          currency: invoice.currency,
-        }).catch((e) => console.error("Échec de la notification de facture payée :", e));
+        // Factorisé dans src/lib/invoicePayment.ts (idempotent) — partagé avec le filet de
+        // sécurité /api/invoices/[id]/confirm-payment, voir ce fichier pour le détail.
+        await markInvoicePaidFromStripe(invoiceId);
       }
 
       // Abonnement de plan studio (voir /api/billing/checkout) : on récupère l'objet

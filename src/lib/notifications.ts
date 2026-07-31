@@ -266,6 +266,49 @@ export async function sendInvoiceReminderEmail(params: Parameters<typeof sendInv
   });
 }
 
+/** Confirmation envoyée au client après un paiement en ligne réussi (Stripe Checkout) —
+ * demandé par Adriel, 31/07/2026 : "lui dire paiement effectué et faire un email [...] et
+ * notifier qu'il va recevoir la facture dans son email". Déclenchée uniquement pour le
+ * paiement en ligne (voir markInvoicePaidFromStripe dans src/lib/invoicePayment.ts) — un
+ * règlement enregistré manuellement par le studio (espèces/chèque, voir
+ * /api/invoices/[id]/mark-paid) ne l'envoie pas, le client étant déjà en contact direct avec
+ * le studio dans ce cas. */
+export async function sendClientInvoicePaidEmail(params: {
+  clientEmail: string;
+  clientName: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  totalCents: number;
+  currency: string;
+  studio: { name: string; slug: string; logoUrl: string | null; brandColor: string | null };
+  settings: { contactEmail: string | null; contactPhone: string | null } | null;
+}) {
+  const link = appUrl(`/i/${params.invoiceId}`);
+  const signature = buildEmailSignature(params.studio, params.settings);
+  const amount = formatAmount(params.totalCents, params.currency);
+
+  const html = wrapEmail(`
+    <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Paiement reçu, merci !</h2>
+    <p>Bonjour ${escapeHtml(params.clientName)},</p>
+    <p>Nous confirmons la bonne réception de votre paiement de <strong>${amount}</strong> pour la
+    facture <strong>${escapeHtml(params.invoiceNumber)}</strong> auprès de
+    <strong>${escapeHtml(params.studio.name)}</strong>.</p>
+    <p>Vous pouvez dès à présent consulter et télécharger votre facture acquittée depuis le lien
+    ci-dessous.</p>
+    <a href="${link}" style="${BUTTON_STYLE}">Voir ma facture</a>
+  `);
+
+  return sendMail({
+    to: params.clientEmail,
+    subject: `Paiement reçu — Facture ${params.invoiceNumber} (${amount})`,
+    text: [
+      `Bonjour ${params.clientName}, nous confirmons la bonne réception de votre paiement de ${amount} pour la facture ${params.invoiceNumber} auprès de ${params.studio.name}. Vous pouvez consulter et télécharger votre facture ici : ${link}`,
+      signature.text,
+    ].join("\n\n"),
+    html: `${html}${signature.html}`,
+  });
+}
+
 /** Confirme l'email d'un ClientAccount (espace Client unifié, voir /client/login) avant
  * d'activer le mot de passe qu'il vient de créer — même patron que sendVerificationEmail
  * (compte studio), lien géré par /api/client-portal/verify-email. */

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PixlehLogo } from "@/components/marketing/PixlehLogo";
 import { PayInvoiceButton } from "@/components/site/PayInvoiceButton";
+import { InvoicePaymentConfirm } from "@/components/site/InvoicePaymentConfirm";
 import { ContractInfoBubble } from "@/components/shared/ContractInfoBubble";
 
 export const dynamic = "force-dynamic";
@@ -127,6 +128,8 @@ export default async function InvoicePage({ params }: { params: { id: string } }
 
       <main className="flex-1 px-6 py-12">
         <div className="mx-auto max-w-2xl">
+          <InvoicePaymentConfirm invoiceId={invoice.id} />
+
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               {invoice.studio.logoUrl ? (

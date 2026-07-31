@@ -83,6 +83,24 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
     const data = parsed.data;
+
+    // Un contrat ne peut être lié à une facture que s'il est signé par le studio ET par le
+    // client (demande d'Adriel, 31/07/2026) — même vérification que POST /api/invoices.
+    if (data.contractId) {
+      const contract = await prisma.contract.findFirst({
+        where: { id: data.contractId, studioId: session.user.studioId },
+      });
+      if (!contract) {
+        return NextResponse.json({ error: "Contrat introuvable." }, { status: 400 });
+      }
+      if (contract.status !== "SIGNED") {
+        return NextResponse.json(
+          { error: "Ce contrat doit être signé par le studio et le client avant de pouvoir y lier une facture." },
+          { status: 400 }
+        );
+      }
+    }
+
     // Sous-total HT dérivé des lineItems, TVA appliquée dessus le cas échéant (même logique
     // que POST /api/invoices, voir schema.prisma sur Invoice.totalCents).
     const subtotalCents = data.lineItems.reduce(

@@ -41,13 +41,19 @@ export default function NewInvoicePage() {
       .then(([clientsData, settingsData, contractsData]) => {
         setClients(clientsData.clients || []);
         setStudioBrandColor(settingsData.studio?.brandColor || null);
+        // Seuls les contrats signés (par le studio ET le client) peuvent être liés à une
+        // facture — demande d'Adriel, 31/07/2026 : avant signature, les conditions/le montant
+        // peuvent encore changer. Même règle appliquée côté serveur (voir invoiceSchema /
+        // POST /api/invoices).
         setContracts(
-          (contractsData.contracts || []).map((c: { id: string; title: string; client: { id: string } | null; amountCents: number | null }) => ({
-            id: c.id,
-            title: c.title,
-            clientId: c.client?.id || null,
-            amountCents: c.amountCents,
-          }))
+          (contractsData.contracts || [])
+            .filter((c: { status: string }) => c.status === "SIGNED")
+            .map((c: { id: string; title: string; client: { id: string } | null; amountCents: number | null }) => ({
+              id: c.id,
+              title: c.title,
+              clientId: c.client?.id || null,
+              amountCents: c.amountCents,
+            }))
         );
       })
       .finally(() => setPageLoading(false));

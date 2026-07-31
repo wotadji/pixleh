@@ -52,13 +52,17 @@ export default function EditInvoicePage() {
       .then(([clientsData, settingsData, contractsData, invoiceData]) => {
         setClients(clientsData.clients || []);
         setStudioBrandColor(settingsData.studio?.brandColor || null);
+        // Seuls les contrats signés peuvent être liés à une facture — voir new/page.tsx et
+        // POST /api/invoices pour la même règle (demande d'Adriel, 31/07/2026).
         setContracts(
-          (contractsData.contracts || []).map((c: { id: string; title: string; client: { id: string } | null; amountCents: number | null }) => ({
-            id: c.id,
-            title: c.title,
-            clientId: c.client?.id || null,
-            amountCents: c.amountCents,
-          }))
+          (contractsData.contracts || [])
+            .filter((c: { status: string }) => c.status === "SIGNED")
+            .map((c: { id: string; title: string; client: { id: string } | null; amountCents: number | null }) => ({
+              id: c.id,
+              title: c.title,
+              clientId: c.client?.id || null,
+              amountCents: c.amountCents,
+            }))
         );
         if (invoiceData.invoice) setInvoice(invoiceData.invoice);
         else setNotFound(true);

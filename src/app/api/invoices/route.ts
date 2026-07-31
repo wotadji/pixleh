@@ -73,6 +73,26 @@ export async function POST(req: Request) {
     }
     const data = parsed.data;
 
+    // Un contrat ne peut être lié à une facture que s'il est signé par le studio ET par le
+    // client (demande d'Adriel, 31/07/2026) : avant signature, le montant/les conditions
+    // peuvent encore changer, facturer dessus n'a pas de sens. Déjà appliqué côté UI (le
+    // bouton "Facturer" et le sélecteur de contrat de InvoiceForm ne proposent que les
+    // contrats SIGNED), vérifié ici aussi côté serveur en défense en profondeur.
+    if (data.contractId) {
+      const contract = await prisma.contract.findFirst({
+        where: { id: data.contractId, studioId: session.user.studioId },
+      });
+      if (!contract) {
+        return NextResponse.json({ error: "Contrat introuvable." }, { status: 400 });
+      }
+      if (contract.status !== "SIGNED") {
+        return NextResponse.json(
+          { error: "Ce contrat doit être signé par le studio et le client avant de pouvoir y lier une facture." },
+          { status: 400 }
+        );
+      }
+    }
+
     const studio = await prisma.studio.findUnique({
       where: { id: session.user.studioId },
       include: { settings: true },
