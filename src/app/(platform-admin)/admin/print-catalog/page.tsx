@@ -186,7 +186,7 @@ export default function AdminPrintCatalogPage() {
 
       {prodigiWarning && (
         <div className="mt-4 flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <span>Synchronisation Prodigi : {prodigiWarning} (PRODIGI_API_KEY à configurer dans .env).</span>
+          <span>Synchronisation Prodigi : {prodigiWarning}</span>
           <button onClick={() => setProdigiWarning(null)} className="shrink-0 text-amber-500 hover:text-amber-700">
             ✕
           </button>
