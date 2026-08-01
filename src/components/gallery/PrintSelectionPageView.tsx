@@ -1461,24 +1461,25 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
       role="presentation"
     >
       <div
-        className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={`Produits du groupe ${group.name}`}
       >
         {/* En-tête — redesign "pro" (01/08/2026, demande d'Adriel : "tu es expert en ux, ui et
-            expert en web design, je veux que tu me proposes un design pro de ce modal") :
-            pictogramme dossier (même code visuel que le badge "Groupe" du catalogue), fourchette
-            de prix affichée dès l'en-tête plutôt que noyée dans la liste, bouton fermer circulaire
-            au survol au lieu d'une simple croix flottante. */}
-        <div className="flex items-start gap-3 border-b border-gray-100 px-5 py-4">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+            expert en web design, je veux que tu me proposes un design pro de ce modal" puis
+            "agrandir le modal et le padding [top, right, bottom, left]") : pictogramme dossier
+            (même code visuel que le badge "Groupe" du catalogue), fourchette de prix affichée dès
+            l'en-tête plutôt que noyée dans la liste, bouton fermer circulaire au survol au lieu
+            d'une simple croix flottante, modale et espacements agrandis pour plus de confort. */}
+        <div className="flex items-start gap-4 border-b border-gray-100 px-8 py-6">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
             <IconFolder />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-base font-semibold text-gray-900">{group.name}</h3>
-            <p className="mt-0.5 text-xs text-gray-500">
+            <h3 className="truncate text-lg font-semibold text-gray-900">{group.name}</h3>
+            <p className="mt-1 text-sm text-gray-500">
               {variants.length} produit{variants.length > 1 ? "s" : ""} disponible{variants.length > 1 ? "s" : ""}
               {minPrice != null && maxPrice != null && (
                 <>
@@ -1495,7 +1496,7 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
             type="button"
             onClick={onClose}
             aria-label="Fermer"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
           >
             <IconClose />
           </button>
@@ -1503,14 +1504,14 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {variants.length === 0 ? (
-            <p className="px-5 py-8 text-center text-sm text-gray-400">
+            <p className="px-8 py-10 text-center text-sm text-gray-400">
               Aucun produit disponible dans ce groupe pour le moment.
             </p>
           ) : (
             <ul className="divide-y divide-gray-100">
               {variants.map((variant) => (
-                <li key={variant.id} className="flex items-center gap-3.5 px-5 py-3.5 hover:bg-gray-50/70">
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
+                <li key={variant.id} className="flex items-center gap-4 px-8 py-4 hover:bg-gray-50/70">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
                     {variant.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={variant.imageUrl} alt="" className="h-full w-full object-cover" />
@@ -1526,7 +1527,7 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
                         milieu d'un mot avec "...") — laisse la description respirer sur deux
                         lignes complètes avant de tronquer proprement. */}
                     {variant.description && (
-                      <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-gray-500">
+                      <p className="mt-1 line-clamp-2 text-xs leading-snug text-gray-500">
                         {variant.description}
                       </p>
                     )}
@@ -1543,7 +1544,7 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-gray-100 bg-gray-50/60 px-5 py-3.5">
+        <div className="flex items-center justify-between gap-3 border-t border-gray-100 bg-gray-50/60 px-8 py-5">
           <p className="text-xs text-gray-400">Le format se choisit au moment d&apos;assigner une photo.</p>
           <button type="button" className="btn-secondary shrink-0 text-sm" onClick={onClose}>
             Fermer
