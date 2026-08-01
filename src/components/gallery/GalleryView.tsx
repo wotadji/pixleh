@@ -223,17 +223,14 @@ export function GalleryView({
   // "Retirer" par photo, ou suppression groupée depuis les cases à cocher du panneau).
   // Persistée en base (comme les favoris, voir toggleFavorite) avec `initialPrintSelection`
   // pour l'état initial — sinon elle disparaissait au rechargement de la page.
+  // Le service d'impression par photo (Selection.productId) n'est plus lu ici depuis le
+  // 01/08/2026 : le regroupement par service se fait désormais dans la page dédiée
+  // /g/[gallerySlug]/print-selection (voir PrintSelectionPageView), qui charge sa propre copie
+  // des données plutôt que de partager ce state React — seul le nombre d'éléments du panier
+  // (badge sur l'icône imprimante) reste utile ici.
   const [printSelection, setPrintSelection] = useState<Set<string>>(
     new Set(initialPrintSelection.map((s) => s.photoId))
   );
-  // Service d'impression choisi pour chaque photo du panier (voir Selection.productId) —
-  // permet au panneau de grouper l'affichage par service plutôt qu'en une simple liste de
-  // fichiers. `null` = pas encore assigné (nouvelle photo ajoutée avant tout choix de
-  // service explicite dans le panneau).
-  const [printSelectionProduct, setPrintSelectionProduct] = useState<Record<string, string | null>>(
-    () => Object.fromEntries(initialPrintSelection.map((s) => [s.photoId, s.productId]))
-  );
-  const [printPanelOpen, setPrintPanelOpen] = useState(false);
 
   const design = resolveGalleryDesign(gallery.design);
   const font = getFont(design.font);
@@ -355,10 +352,6 @@ export function GalleryView({
     if (isSelected) {
       next.delete(photoId);
       setPrintSelection(next);
-      setPrintSelectionProduct((prev) => {
-        const { [photoId]: _omit, ...rest } = prev;
-        return rest;
-      });
       await fetch(`/api/selections?galleryId=${gallery.id}&photoId=${photoId}&type=PRINT`, {
         method: "DELETE",
       });
@@ -366,67 +359,15 @@ export function GalleryView({
       next.add(photoId);
       setPrintSelection(next);
       // Assignation par défaut au premier service configuré (s'il n'y en a qu'un, aucune
-      // friction pour le visiteur) — reste modifiable ensuite par groupe dans le panneau.
+      // friction pour le visiteur) — reste modifiable ensuite par groupe dans la page dédiée
+      // (voir /g/[gallerySlug]/print-selection).
       const defaultProductId = printProducts[0]?.id ?? null;
-      setPrintSelectionProduct((prev) => ({ ...prev, [photoId]: defaultProductId }));
       await fetch("/api/selections", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ galleryId: gallery.id, photoId, type: "PRINT", productId: defaultProductId }),
       });
     }
-  }
-
-  async function removeFromPrintSelection(photoId: string) {
-    if (!printSelection.has(photoId)) return;
-    const next = new Set(printSelection);
-    next.delete(photoId);
-    setPrintSelection(next);
-    setPrintSelectionProduct((prev) => {
-      const { [photoId]: _omit, ...rest } = prev;
-      return rest;
-    });
-    await fetch(`/api/selections?galleryId=${gallery.id}&photoId=${photoId}&type=PRINT`, {
-      method: "DELETE",
-    });
-  }
-
-  // Retire plusieurs photos d'un coup (cases cochées + "Supprimer la sélection" dans le
-  // panneau récap).
-  async function removeManyFromPrintSelection(photoIds: string[]) {
-    const next = new Set(printSelection);
-    photoIds.forEach((id) => next.delete(id));
-    setPrintSelection(next);
-    setPrintSelectionProduct((prev) => {
-      const rest = { ...prev };
-      photoIds.forEach((id) => delete rest[id]);
-      return rest;
-    });
-    await Promise.all(
-      photoIds.map((photoId) =>
-        fetch(`/api/selections?galleryId=${gallery.id}&photoId=${photoId}&type=PRINT`, {
-          method: "DELETE",
-        })
-      )
-    );
-  }
-
-  // Réassigne le service d'impression d'un lot de photos déjà dans le panier — utilisé par
-  // le panneau récap pour déplacer une sélection d'un groupe (service) à un autre.
-  async function assignPrintProduct(photoIds: string[], productId: string) {
-    if (photoIds.length === 0) return;
-    setPrintSelectionProduct((prev) => {
-      const next = { ...prev };
-      photoIds.forEach((id) => {
-        next[id] = productId;
-      });
-      return next;
-    });
-    await fetch("/api/selections", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ galleryId: gallery.id, photoIds, productId }),
-    });
   }
 
   return (
@@ -548,8 +489,15 @@ export function GalleryView({
                     Print Store
                   </Link>
                   <span className="hidden h-4 w-px opacity-20 sm:inline" style={{ backgroundColor: palette.text }} />
-                  <button
-                    onClick={() => setPrintPanelOpen(true)}
+                  {/* Demande d'Adriel (01/08/2026) : "quand on clique sur imprimante, il faut un
+                      target avec une page" — ouvre désormais une page dédiée (voir
+                      /g/[gallerySlug]/print-selection/page.tsx) dans un nouvel onglet plutôt que
+                      la modale PrintSelectionPanel (supprimée), qui superposait l'écran de
+                      commande à la galerie. */}
+                  <Link
+                    href={`/g/${gallery.slug}/print-selection`}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     title="Sélection impression"
                     aria-label="Sélection impression"
                     className="relative flex h-8 w-8 items-center justify-center rounded-full opacity-70 transition-colors hover:bg-black/5 hover:opacity-100"
@@ -563,7 +511,7 @@ export function GalleryView({
                         {printSelection.size}
                       </span>
                     )}
-                  </button>
+                  </Link>
                 </>
               )}
               {gallery.allowFavorites && (
@@ -763,26 +711,6 @@ export function GalleryView({
           collections={collections}
           accentColor={palette.accent}
           onClose={() => setDownloadPanelOpen(false)}
-        />
-      )}
-
-      {printPanelOpen && (
-        <PrintSelectionPanel
-          photos={photos
-            .filter((p) => printSelection.has(p.id))
-            .map((p) => ({
-              id: p.id,
-              filename: p.filename,
-              thumbUrl: fileUrl(p.id, "thumb"),
-              previewUrl: fileUrl(p.id, "preview"),
-              productId: printSelectionProduct[p.id] ?? null,
-            }))}
-          printProducts={printProducts}
-          galleryId={gallery.id}
-          onRemove={removeFromPrintSelection}
-          onRemoveMany={removeManyFromPrintSelection}
-          onAssignProduct={assignPrintProduct}
-          onClose={() => setPrintPanelOpen(false)}
         />
       )}
 
@@ -1556,8 +1484,8 @@ function IconHeart({ filled, small }: { filled?: boolean; small?: boolean }) {
  * pour impression sans devoir l'ouvrir en plein écran. Identiques que la grille soit en
  * mode "mosaïque" ou en cases carrées (voir GalleryView) — factorisées ici pour ne pas
  * dupliquer le balisage. L'icône imprimante bascule simplement la photo dans/hors du
- * panier impression (voir togglePrintSelection) ; le récapitulatif et le calcul du prix
- * se font dans PrintSelectionPanel, ouvert depuis la barre du haut.
+ * panier impression (voir togglePrintSelection) ; le récapitulatif et le calcul du prix se
+ * font dans la page dédiée /g/[gallerySlug]/print-selection, ouverte depuis la barre du haut.
  */
 function PhotoOverlay({
   allowFavorites,
@@ -2455,558 +2383,3 @@ function IconMore() {
   );
 }
 
-/**
- * Panneau "Sélection impression" (ouvert depuis l'icône imprimante de la barre du haut) :
- * photos ajoutées au panier impression (icône imprimante sur chaque vignette), regroupées
- * par SERVICE D'IMPRESSION choisi (voir Selection.productId) plutôt qu'affichées en simple
- * liste de noms de fichiers — chaque groupe affiche son propre compteur, en plus du total
- * général dans l'en-tête. Une nouvelle photo est assignée par défaut au premier service
- * configuré ; elle peut être déplacée vers un autre groupe en la sélectionnant puis en
- * utilisant "Assigner à" (bulk, comme la suppression groupée). Vue Liste ou Grille (8
- * colonnes, vignettes carrées) au choix, avec zoom plein écran au clic sur une photo. Le
- * total = somme, par groupe, du prix unitaire du service x nombre de photos qu'il contient.
- * "Commander" réutilise /api/cart/checkout, qui associe déjà chaque OrderItem à une photo
- * ET à un produit précis — chaque photo garde donc son propre service à la commande.
- */
-// Sélection courte de pays (code ISO 3166-1 alpha-2 attendu par Prodigi) — France en premier
-// (marché ciblé en priorité par pixleh), suivie des pays limitrophes/francophones les plus
-// probables pour un studio photo français. Liste volontairement restreinte plutôt qu'exhaustive
-// (Prodigi livre bien plus largement) : peut être étendue plus tard si le besoin se confirme.
-const SHIPPING_COUNTRY_OPTIONS = [
-  { code: "FR", label: "France" },
-  { code: "BE", label: "Belgique" },
-  { code: "CH", label: "Suisse" },
-  { code: "LU", label: "Luxembourg" },
-  { code: "DE", label: "Allemagne" },
-  { code: "ES", label: "Espagne" },
-  { code: "IT", label: "Italie" },
-  { code: "GB", label: "Royaume-Uni" },
-  { code: "US", label: "États-Unis" },
-  { code: "CA", label: "Canada" },
-];
-
-function PrintSelectionPanel({
-  photos,
-  printProducts,
-  galleryId,
-  onRemove,
-  onRemoveMany,
-  onAssignProduct,
-  onClose,
-}: {
-  photos: { id: string; filename: string; thumbUrl: string; previewUrl: string; productId: string | null }[];
-  printProducts: { id: string; name: string; priceCents: number; currency: string }[];
-  galleryId: string;
-  onRemove: (photoId: string) => void;
-  onRemoveMany: (photoIds: string[]) => void;
-  onAssignProduct: (photoIds: string[], productId: string) => void;
-  onClose: () => void;
-}) {
-  const [customer, setCustomer] = useState({ name: "", email: "" });
-  // Adresse de livraison (chantier "impression pixleh Phase 2", 01/08/2026) — collectée ici,
-  // avant paiement, plutôt que via Stripe Checkout (choix d'Adriel) : transmise à
-  // /api/cart/checkout puis à Prodigi une fois la commande payée (voir src/lib/prodigiOrder.ts)
-  // pour l'expédition réelle des tirages.
-  const [shipping, setShipping] = useState({
-    line1: "",
-    line2: "",
-    city: "",
-    postalCode: "",
-    countryCode: "FR",
-    phone: "",
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Sélection locale au panneau (toutes vues confondues), utilisée pour la suppression et
-  // la réassignation de service en groupe — n'a aucun effet sur le total (toute photo
-  // présente dans `photos` compte, quel que soit son état de case à cocher).
-  const [checked, setChecked] = useState<Set<string>>(new Set());
-  const [view, setView] = useState<"list" | "grid">("list");
-  const [assignTarget, setAssignTarget] = useState(printProducts[0]?.id || "");
-  const [zoomIndex, setZoomIndex] = useState<number | null>(null);
-
-  const validChecked = new Set([...checked].filter((id) => photos.some((p) => p.id === id)));
-  const allChecked = photos.length > 0 && validChecked.size === photos.length;
-  const someChecked = validChecked.size > 0;
-
-  // Regroupement par service : un groupe par produit d'impression configuré (dans l'ordre
-  // de Boutique > Produits), suivi d'un groupe "Service non assigné" pour les photos dont
-  // le productId ne correspond à aucun produit actuel (nouvelle photo pas encore assignée,
-  // ou produit supprimé entre-temps côté studio).
-  const assignedIds = new Set<string>();
-  const groups = printProducts
-    .map((product) => {
-      const groupPhotos = photos.filter((p) => p.productId === product.id);
-      groupPhotos.forEach((p) => assignedIds.add(p.id));
-      return { product, photos: groupPhotos };
-    })
-    .filter((g) => g.photos.length > 0);
-  const unassignedPhotos = photos.filter((p) => !assignedIds.has(p.id));
-  if (unassignedPhotos.length > 0) {
-    groups.push({ product: null as unknown as (typeof printProducts)[number], photos: unassignedPhotos });
-  }
-  const flatOrder = groups.flatMap((g) => g.photos);
-  const totalCents = groups.reduce((sum, g) => sum + (g.product ? g.product.priceCents * g.photos.length : 0), 0);
-  const hasUnassigned = unassignedPhotos.length > 0;
-
-  function toggleOne(photoId: string) {
-    setChecked((prev) => {
-      const next = new Set(prev);
-      if (next.has(photoId)) next.delete(photoId);
-      else next.add(photoId);
-      return next;
-    });
-  }
-
-  function toggleAll() {
-    setChecked(allChecked ? new Set() : new Set(photos.map((p) => p.id)));
-  }
-
-  function handleBulkDelete() {
-    onRemoveMany([...validChecked]);
-    setChecked(new Set());
-  }
-
-  function handleBulkAssign() {
-    if (!assignTarget) return;
-    onAssignProduct([...validChecked], assignTarget);
-    setChecked(new Set());
-  }
-
-  async function handleOrder() {
-    setError(null);
-    if (printProducts.length === 0) {
-      setError("Aucun tarif d'impression n'a été configuré par le photographe.");
-      return;
-    }
-    if (photos.length === 0) {
-      setError("Sélectionnez au moins une photo à imprimer.");
-      return;
-    }
-    if (hasUnassigned) {
-      setError("Assignez un service d'impression à chaque photo avant de commander.");
-      return;
-    }
-    if (!customer.name || !customer.email) {
-      setError("Merci de renseigner votre nom et votre email.");
-      return;
-    }
-    if (!shipping.line1 || !shipping.city || !shipping.postalCode || !shipping.countryCode) {
-      setError("Merci de renseigner votre adresse de livraison complète.");
-      return;
-    }
-    const items = photos.map((p) => ({ productId: p.productId as string, quantity: 1, photoId: p.id }));
-    setLoading(true);
-    const res = await fetch("/api/cart/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        galleryId,
-        items,
-        customerName: customer.name,
-        customerEmail: customer.email,
-        shippingAddress: { name: customer.name, ...shipping },
-      }),
-    });
-    const data = await res.json();
-    setLoading(false);
-    if (!res.ok) {
-      setError(data?.error || "Erreur lors de la commande.");
-      return;
-    }
-    window.location.href = data.url;
-  }
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
-      <div
-        className={`flex max-h-[85vh] w-full flex-col rounded-sm bg-white shadow-xl transition-[max-width] ${
-          view === "grid" ? "max-w-4xl" : "max-w-lg"
-        }`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-gray-800">
-            Sélection impression{photos.length > 0 ? ` (${photos.length})` : ""}
-          </h2>
-          <div className="flex items-center gap-3">
-            {photos.length > 0 && (
-              <div className="flex items-center gap-0.5 rounded-md border border-gray-200 p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setView("list")}
-                  aria-label="Vue liste"
-                  className={`flex h-6 w-6 items-center justify-center rounded ${
-                    view === "list" ? "bg-gray-800 text-white" : "text-gray-400 hover:text-gray-700"
-                  }`}
-                >
-                  <IconListView />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView("grid")}
-                  aria-label="Vue grille"
-                  className={`flex h-6 w-6 items-center justify-center rounded ${
-                    view === "grid" ? "bg-gray-800 text-white" : "text-gray-400 hover:text-gray-700"
-                  }`}
-                >
-                  <IconGridView />
-                </button>
-              </div>
-            )}
-            <button
-              onClick={onClose}
-              aria-label="Fermer"
-              className="flex h-6 w-6 items-center justify-center text-gray-500 hover:text-gray-800"
-            >
-              <IconClose />
-            </button>
-          </div>
-        </div>
-
-        {photos.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-6 py-2.5">
-            <label className="flex items-center gap-2 text-xs text-gray-500">
-              <input
-                type="checkbox"
-                checked={allChecked}
-                ref={(el) => {
-                  if (el) el.indeterminate = someChecked && !allChecked;
-                }}
-                onChange={toggleAll}
-                className="h-4 w-4 accent-gray-800"
-              />
-              Tout sélectionner
-            </label>
-            {someChecked && (
-              <div className="flex flex-wrap items-center gap-2">
-                {printProducts.length > 0 && (
-                  <div className="flex items-center gap-1.5">
-                    <select
-                      value={assignTarget}
-                      onChange={(e) => setAssignTarget(e.target.value)}
-                      className="input h-7 rounded border-gray-200 py-0 text-xs"
-                    >
-                      {printProducts.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={handleBulkAssign}
-                      className="text-xs font-medium uppercase tracking-wide text-gray-600 hover:text-gray-900"
-                    >
-                      Assigner ({validChecked.size})
-                    </button>
-                  </div>
-                )}
-                <button
-                  onClick={handleBulkDelete}
-                  className="text-xs font-medium uppercase tracking-wide text-red-600 hover:text-red-800"
-                >
-                  Supprimer ({validChecked.size})
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          {photos.length === 0 ? (
-            <p className="py-8 text-center text-sm text-gray-500">
-              Aucune photo sélectionnée. Cliquez sur l&apos;icône imprimante sur une photo pour l&apos;ajouter ici.
-            </p>
-          ) : (
-            <div className="space-y-6">
-              {groups.map((g) => (
-                <div key={g.product?.id ?? "unassigned"}>
-                  <div className="mb-2 flex items-center justify-between">
-                    <h3
-                      className={`text-xs font-semibold uppercase tracking-wide ${
-                        g.product ? "text-gray-700" : "text-amber-700"
-                      }`}
-                    >
-                      {g.product ? g.product.name : "Service non assigné"}
-                    </h3>
-                    <span className="text-xs text-gray-400">
-                      {g.photos.length} photo{g.photos.length > 1 ? "s" : ""}
-                    </span>
-                  </div>
-
-                  {view === "list" ? (
-                    <ul className="divide-y divide-gray-100">
-                      {g.photos.map((p) => (
-                        <li key={p.id} className="flex items-center gap-3 py-2.5">
-                          <input
-                            type="checkbox"
-                            checked={validChecked.has(p.id)}
-                            onChange={() => toggleOne(p.id)}
-                            className="h-4 w-4 shrink-0 accent-gray-800"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setZoomIndex(flatOrder.findIndex((x) => x.id === p.id))}
-                            className="shrink-0"
-                            aria-label="Agrandir"
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={p.thumbUrl}
-                              alt={p.filename}
-                              className="h-12 w-12 cursor-zoom-in rounded object-cover"
-                            />
-                          </button>
-                          <span className="flex-1" />
-                          <button
-                            onClick={() => onRemove(p.id)}
-                            className="shrink-0 text-xs uppercase tracking-wide text-gray-400 hover:text-gray-700"
-                          >
-                            Retirer
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-8">
-                      {g.photos.map((p) => (
-                        <div key={p.id} className="group relative aspect-square overflow-hidden rounded bg-gray-50">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={p.thumbUrl}
-                            alt={p.filename}
-                            onClick={() => setZoomIndex(flatOrder.findIndex((x) => x.id === p.id))}
-                            className="h-full w-full cursor-zoom-in object-cover"
-                          />
-                          <input
-                            type="checkbox"
-                            checked={validChecked.has(p.id)}
-                            onChange={() => toggleOne(p.id)}
-                            className="absolute left-1 top-1 h-3.5 w-3.5 accent-gray-800"
-                          />
-                          <button
-                            onClick={() => onRemove(p.id)}
-                            aria-label="Retirer"
-                            className="absolute right-1 top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white group-hover:flex"
-                          >
-                            <IconClose />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {photos.length > 0 && (
-          <div className="border-t border-gray-100 px-6 py-4">
-            {printProducts.length === 0 ? (
-              <div className="flex items-start gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-3.5 py-3 text-sm text-amber-800">
-                <IconAlert className="mt-0.5 shrink-0 text-amber-500" />
-                <p>Aucun tarif d&apos;impression n&apos;a été configuré par le photographe pour le moment.</p>
-              </div>
-            ) : (
-              <>
-                {hasUnassigned && (
-                  <div className="mb-3 flex items-start gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-800">
-                    <IconAlert className="mt-0.5 shrink-0 text-amber-500" />
-                    <p>
-                      {unassignedPhotos.length} photo{unassignedPhotos.length > 1 ? "s" : ""} sans service assigné —
-                      sélectionnez-les puis choisissez &laquo;&nbsp;Assigner&nbsp;&raquo; ci-dessus avant de commander.
-                    </p>
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    placeholder="Votre nom"
-                    className="input"
-                    value={customer.name}
-                    onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
-                  />
-                  <input
-                    placeholder="Votre email"
-                    type="email"
-                    className="input"
-                    value={customer.email}
-                    onChange={(e) => setCustomer({ ...customer, email: e.target.value })}
-                  />
-                </div>
-
-                <div className="mt-3 space-y-2">
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                    Adresse de livraison des tirages
-                  </p>
-                  <input
-                    placeholder="Adresse"
-                    className="input"
-                    value={shipping.line1}
-                    onChange={(e) => setShipping({ ...shipping, line1: e.target.value })}
-                  />
-                  <input
-                    placeholder="Complément d'adresse (optionnel)"
-                    className="input"
-                    value={shipping.line2}
-                    onChange={(e) => setShipping({ ...shipping, line2: e.target.value })}
-                  />
-                  <div className="grid grid-cols-2 gap-3">
-                    <input
-                      placeholder="Code postal"
-                      className="input"
-                      value={shipping.postalCode}
-                      onChange={(e) => setShipping({ ...shipping, postalCode: e.target.value })}
-                    />
-                    <input
-                      placeholder="Ville"
-                      className="input"
-                      value={shipping.city}
-                      onChange={(e) => setShipping({ ...shipping, city: e.target.value })}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <select
-                      className="input"
-                      value={shipping.countryCode}
-                      onChange={(e) => setShipping({ ...shipping, countryCode: e.target.value })}
-                    >
-                      {SHIPPING_COUNTRY_OPTIONS.map((c) => (
-                        <option key={c.code} value={c.code}>
-                          {c.label}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      placeholder="Téléphone (optionnel)"
-                      className="input"
-                      value={shipping.phone}
-                      onChange={(e) => setShipping({ ...shipping, phone: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm text-gray-600">
-                    {photos.length} photo{photos.length > 1 ? "s" : ""} ={" "}
-                    <span className="text-base font-semibold text-gray-900">{(totalCents / 100).toFixed(2)} €</span>
-                  </p>
-                  <button onClick={handleOrder} disabled={loading} className="btn-primary">
-                    {loading ? "Redirection..." : "Commander"}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-
-      {zoomIndex !== null && flatOrder[zoomIndex] && (
-        <PrintZoomModal
-          photos={flatOrder}
-          index={zoomIndex}
-          onNavigate={setZoomIndex}
-          onClose={() => setZoomIndex(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-/** Zoom plein écran d'une photo du panier impression, avec navigation précédent/suivant
- * dans l'ordre des groupes affichés (voir `flatOrder` dans PrintSelectionPanel). Volontai-
- * rement séparé du Lightbox principal de la galerie (photos + props différentes). */
-function PrintZoomModal({
-  photos,
-  index,
-  onNavigate,
-  onClose,
-}: {
-  photos: { id: string; filename: string; previewUrl: string }[];
-  index: number;
-  onNavigate: (index: number) => void;
-  onClose: () => void;
-}) {
-  const photo = photos[index];
-
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowRight") onNavigate((index + 1) % photos.length);
-      if (e.key === "ArrowLeft") onNavigate((index - 1 + photos.length) % photos.length);
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [index, photos.length, onNavigate, onClose]);
-
-  if (!photo) return null;
-
-  return (
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 px-4"
-      onClick={onClose}
-    >
-      <button
-        onClick={onClose}
-        aria-label="Fermer"
-        className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
-      >
-        <IconClose />
-      </button>
-      {photos.length > 1 && (
-        <>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onNavigate((index - 1 + photos.length) % photos.length);
-            }}
-            aria-label="Photo précédente"
-            className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 sm:left-5"
-          >
-            ‹
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onNavigate((index + 1) % photos.length);
-            }}
-            aria-label="Photo suivante"
-            className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 sm:right-5"
-          >
-            ›
-          </button>
-        </>
-      )}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={photo.previewUrl}
-        alt={photo.filename}
-        onClick={(e) => e.stopPropagation()}
-        className="max-h-[85vh] max-w-full rounded object-contain shadow-2xl"
-      />
-    </div>
-  );
-}
-
-function IconListView() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M8 6h13M8 12h13M8 18h13" strokeLinecap="round" />
-      <circle cx="3.5" cy="6" r="1.3" fill="currentColor" stroke="none" />
-      <circle cx="3.5" cy="12" r="1.3" fill="currentColor" stroke="none" />
-      <circle cx="3.5" cy="18" r="1.3" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-function IconGridView() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="3" y="3" width="7" height="7" rx="1" />
-      <rect x="14" y="3" width="7" height="7" rx="1" />
-      <rect x="3" y="14" width="7" height="7" rx="1" />
-      <rect x="14" y="14" width="7" height="7" rx="1" />
-    </svg>
-  );
-}

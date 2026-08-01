@@ -12,14 +12,18 @@ export interface ShippingAddress {
   line2?: string | null;
   city: string;
   postalCode: string;
-  /** ISO 3166-1 alpha-2, ex "FR" — voir le sélecteur de pays dans PrintSelectionPanel. */
+  /** ISO 3166-1 alpha-2, ex "FR" — voir le sélecteur de pays dans PrintSelectionPageView. */
   countryCode: string;
-  phone?: string | null;
+  /** Obligatoire depuis le 01/08/2026 (demande d'Adriel : "le telephone est obligatoire pour
+   * aider la livraison") — le transporteur de Prodigi peut en avoir besoin pour organiser la
+   * livraison (colis, code d'accès...), contrairement au nom/email déjà collectés par ailleurs. */
+  phone: string;
 }
 
-/** Les 4 champs sans lesquels Prodigi refuse une commande. */
+/** Les 5 champs sans lesquels Prodigi refuse une commande (le téléphone est requis côté pixleh
+ * pour la livraison, pas seulement recommandé). */
 export function isShippingAddressComplete(addr: Partial<ShippingAddress> | null | undefined): addr is ShippingAddress {
-  return Boolean(addr && addr.line1 && addr.city && addr.postalCode && addr.countryCode);
+  return Boolean(addr && addr.line1 && addr.city && addr.postalCode && addr.countryCode && addr.phone);
 }
 
 export function parseShippingAddress(raw: string | null | undefined): ShippingAddress | null {
