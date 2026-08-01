@@ -32,6 +32,7 @@ export function SearchableSelect({
   emptyOptionLabel,
   disabled,
   className,
+  openUpward,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -43,6 +44,13 @@ export function SearchableSelect({
   emptyOptionLabel?: string;
   disabled?: boolean;
   className?: string;
+  /** Ouvre le panneau vers le HAUT (bottom-full) au lieu du bas (mt-1) — nécessaire quand le
+   * contrôle est collé au bord bas de l'écran (ex. barre d'action fixe en bas de la page
+   * PrintSelectionPageView) : le panneau s'ouvrant vers le bas par défaut se retrouve alors
+   * rendu hors de l'écran, invisible bien que fonctionnellement ouvert (bug remonté par Adriel,
+   * 01/08/2026 : "la barre du bas reste utilisable avec 'Choisir un produit' [mais] n'affiche
+   * pas la liste de produit"). */
+  openUpward?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -125,7 +133,11 @@ export function SearchableSelect({
       </button>
 
       {open && (
-        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+        <div
+          className={`absolute z-20 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg ${
+            openUpward ? "bottom-full mb-1" : "mt-1"
+          }`}
+        >
           <div className="border-b border-gray-100 p-2">
             <input
               ref={searchInputRef}

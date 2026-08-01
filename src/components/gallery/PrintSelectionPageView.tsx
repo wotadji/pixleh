@@ -144,8 +144,11 @@ export function PrintSelectionPageView({
   const [zoomIndex, setZoomIndex] = useState<number | null>(null);
   // Groupes repliés (accordéon par service, demande d'Adriel du 01/08/2026 : "a chaque
   // assignation mettre un accordeon avec les images assigné au produits") — clé = id produit,
-  // ou "unassigned" pour les photos sans service. Ouverts par défaut : un groupe ne se replie
-  // que si le visiteur clique dessus, jamais automatiquement.
+  // ou "unassigned" pour les photos sans service. Ouverts par défaut au premier affichage ; un
+  // groupe se replie automatiquement dès qu'on vient d'y assigner des photos (voir
+  // applyProductToPhotos plus bas — demande d'Adriel : "quand je fini d'assigner les images a un
+  // produit, l'accordeon doit etre fermé [pas] ouvert"), sinon seul un clic du visiteur change
+  // son état.
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   // Filtre + recherche (chantier 01/08/2026, gestion de sélections à 200 photos, demande
@@ -322,11 +325,14 @@ export function PrintSelectionPageView({
       ids.forEach((id) => next.delete(id));
       return next;
     });
-    // Ouvre (ou garde ouvert) l'accordéon du produit choisi, pour que le visiteur voie
-    // immédiatement ses photos rejoindre ce groupe plutôt que de devoir le déplier lui-même.
+    // Referme l'accordéon du produit choisi une fois l'assignation faite (demande d'Adriel,
+    // 01/08/2026 : "quand je fini d'assigner les images a un produit, l'accordeon doit etre
+    // fermé [pas] ouvert") — signale visuellement que ce lot est traité et dégage la place pour
+    // repérer/sélectionner d'autres photos dans les groupes encore ouverts. Comportement inverse
+    // de la version précédente qui rouvrait le groupe automatiquement.
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
-      next.delete(productId);
+      next.add(productId);
       return next;
     });
     await fetch("/api/selections", {
@@ -897,13 +903,20 @@ export function PrintSelectionPageView({
                         photos si "Tout sélectionner" avait entre-temps été coché. Comme les
                         sélecteurs "Réassigner à" des en-têtes de groupe, c'est désormais une
                         action ponctuelle sans valeur mémorisée : le bouton affiche toujours le
-                        placeholder, jamais un produit "déjà choisi". */}
+                        placeholder, jamais un produit "déjà choisi".
+
+                        openUpward : ce contrôle est collé au bord bas de l'écran (barre fixe),
+                        donc le panneau qui s'ouvre par défaut vers le BAS se retrouvait rendu
+                        hors de l'écran — invisible bien qu'ouvert (bug remonté par Adriel,
+                        01/08/2026 : "la barre du bas reste utilisable avec 'Choisir un produit'
+                        [mais] n'affiche pas la liste de produit"). Voir SearchableSelect.tsx. */}
                     <SearchableSelect
                       value=""
                       onChange={(value) => assignToProduct(value)}
                       options={printProducts.map((p) => ({ value: p.id, label: p.name }))}
                       placeholder="Choisir un produit"
                       searchPlaceholder="Rechercher un produit..."
+                      openUpward
                     />
                   </div>
                 </div>
