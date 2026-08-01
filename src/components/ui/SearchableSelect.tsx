@@ -134,7 +134,14 @@ export function SearchableSelect({
 
       {open && (
         <div
-          className={`absolute z-20 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg ${
+          // Élargi (02/08/2026, demande d'Adriel : "agrandir ce checklist pour qu'on puisse voir
+          // toutes les phrases") — le panneau calquait jusqu'ici exactement la largeur du bouton
+          // déclencheur (souvent étroit, ex: les sélecteurs "Assigner à" de PrintSelectionPageView
+          // en w-40/w-44), ce qui coupait les noms de produits longs. `w-[max(100%,20rem)]`
+          // garantit désormais au moins 20rem (320px) même si le bouton est plus étroit, tout en
+          // restant au moins aussi large que lui (100%) s'il est déjà plus large que ça ;
+          // `max-w-[24rem]` évite qu'il ne devienne excessif sur un très grand bouton.
+          className={`absolute z-20 w-[max(100%,20rem)] max-w-[24rem] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg ${
             openUpward ? "bottom-full mb-1" : "mt-1"
           }`}
         >
@@ -152,7 +159,7 @@ export function SearchableSelect({
               className="w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             />
           </div>
-          <ul className="max-h-56 overflow-y-auto py-1" role="listbox">
+          <ul className="max-h-64 overflow-y-auto py-1" role="listbox">
             {selectableList.length === 0 && (
               <li className="px-3 py-2 text-sm text-gray-400">Aucun résultat</li>
             )}
@@ -166,9 +173,14 @@ export function SearchableSelect({
                     i === highlighted ? "bg-brand-50 text-brand-700" : "text-gray-700"
                   } ${opt.value === value ? "font-medium" : ""}`}
                 >
-                  <span className="truncate">{opt.label}</span>
+                  {/* whitespace-normal/break-words plutôt que "truncate" (1 ligne, coupait les
+                      noms longs avec "...") — le panneau étant désormais plus large, le texte
+                      complet tient en général sur une ou deux lignes plutôt que d'être tronqué. */}
+                  <span className="whitespace-normal break-words leading-snug">{opt.label}</span>
                   {"hint" in opt && (opt as SearchableSelectOption).hint && (
-                    <span className="text-xs text-gray-400">{(opt as SearchableSelectOption).hint}</span>
+                    <span className="whitespace-normal break-words text-xs leading-snug text-gray-400">
+                      {(opt as SearchableSelectOption).hint}
+                    </span>
                   )}
                 </button>
               </li>
