@@ -246,6 +246,30 @@ export function PrintSelectionPageView({
   const abortRef = useRef<AbortController | null>(null);
   const addressBoxRef = useRef<HTMLDivElement | null>(null);
 
+  // Flèches de défilement du bandeau produits (demande d'Adriel, 02/08/2026 : "peux tu mettre
+  // les fleches aux extrémité") — masquées dès qu'il n'y a plus rien à faire défiler de ce
+  // côté (début/fin de liste), plutôt que toujours visibles même quand inutiles.
+  const productStripRef = useRef<HTMLDivElement | null>(null);
+  const [canScrollProductsLeft, setCanScrollProductsLeft] = useState(false);
+  const [canScrollProductsRight, setCanScrollProductsRight] = useState(false);
+
+  function updateProductStripArrows() {
+    const el = productStripRef.current;
+    if (!el) return;
+    setCanScrollProductsLeft(el.scrollLeft > 4);
+    setCanScrollProductsRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }
+
+  useEffect(() => {
+    updateProductStripArrows();
+  }, [printProducts]);
+
+  function scrollProductStrip(direction: -1 | 1) {
+    const el = productStripRef.current;
+    if (!el) return;
+    el.scrollBy({ left: direction * el.clientWidth * 0.8, behavior: "smooth" });
+  }
+
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
       if (addressBoxRef.current && !addressBoxRef.current.contains(e.target as Node)) {
@@ -578,8 +602,23 @@ export function PrintSelectionPageView({
             d'assigner les photos, plutôt que de découvrir les produits un par un dans chaque
             sélecteur "Assigner à". */}
         {printProducts.length > 0 && (
-          <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
-            {printProducts.map((p) => (
+          <div className="relative mt-4">
+            {canScrollProductsLeft && (
+              <button
+                type="button"
+                onClick={() => scrollProductStrip(-1)}
+                aria-label="Produits précédents"
+                className="absolute -left-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-md hover:bg-gray-50"
+              >
+                <IconChevronLeft />
+              </button>
+            )}
+            <div
+              ref={productStripRef}
+              onScroll={updateProductStripArrows}
+              className="flex gap-3 overflow-x-auto scroll-smooth pb-1"
+            >
+              {printProducts.map((p) => (
               <div
                 key={p.id}
                 className="flex w-48 shrink-0 flex-col gap-2 rounded-lg border border-gray-200 bg-white p-3"
@@ -618,7 +657,18 @@ export function PrintSelectionPageView({
                   <span className="ml-1 text-xs font-normal text-gray-400">/ photo</span>
                 </p>
               </div>
-            ))}
+              ))}
+            </div>
+            {canScrollProductsRight && (
+              <button
+                type="button"
+                onClick={() => scrollProductStrip(1)}
+                aria-label="Produits suivants"
+                className="absolute -right-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-md hover:bg-gray-50"
+              >
+                <IconChevronRight />
+              </button>
+            )}
           </div>
         )}
 
@@ -1451,6 +1501,24 @@ function IconChevronDown({ className = "" }: { className?: string }) {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
       <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Flèches du bandeau produits (demande d'Adriel, 02/08/2026 : "peux tu mettre les fleches aux
+ * extrémité"). */
+function IconChevronLeft() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="m15 6-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconChevronRight() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="m9 6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
