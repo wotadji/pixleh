@@ -86,6 +86,15 @@ export const printCatalogItemSchema = z.object({
   imageUrl: z.string().optional().nullable(),
   active: z.boolean().optional(),
   wholesaleCostCents: z.number().int().nonnegative().optional().nullable(),
+  /** Chantier "groupe de produits" (02/08/2026, demande d'Adriel : "peux tu ajouter la
+   * possibilité de creer un groupe de produit et a l'intérieur ajouter les SKU adéquat ?") —
+   * true = ce produit EST un groupe (conteneur de tailles/SKU), voir isProductGroup dans
+   * schema.prisma. Mutuellement exclusif avec groupId (validé dans la route, pas ici : zod ne
+   * connaît pas facilement cette règle croisée sur un schema partiel côté PATCH). */
+  isProductGroup: z.boolean().optional(),
+  /** Id du groupe parent si ce produit est une VARIANTE créée à l'intérieur d'un groupe
+   * existant — null/absent pour un produit autonome ou un groupe. */
+  groupId: z.string().optional().nullable(),
 });
 
 export const bookingRequestSchema = z.object({

@@ -22,7 +22,8 @@ export interface PrintCatalogItem {
   description: string | null;
   priceCents: number;
   currency: string;
-  /** SKU Prodigi (champ `sku` générique du modèle Product, réutilisé ici). */
+  /** SKU Prodigi (champ `sku` générique du modèle Product, réutilisé ici). null sur un GROUPE
+   * (voir isProductGroup) : le groupe lui-même n'a pas de SKU, seules ses variantes en ont un. */
   sku: string | null;
   imageUrl: string | null;
   active: boolean;
@@ -30,11 +31,17 @@ export interface PrintCatalogItem {
   /** Attributs sélectionnables du SKU (JSON string, ex: {"wrap":["Black","White"]}) — voir
    * getProdigiProductDetails. null = aucun attribut sélectionnable connu pour ce SKU. */
   prodigiAttributeOptions: string | null;
+  /** true = ce produit est un GROUPE (conteneur de variantes de taille/format) — voir
+   * schema.prisma. Chantier "groupe de produits" (02/08/2026, demande d'Adriel). */
+  isProductGroup: boolean;
+  /** Non-null uniquement sur une variante : id du Product groupe parent. */
+  groupId: string | null;
   createdAt: Date;
 }
 
 const SELECT_COLUMNS = `"id", "name", "description", "priceCents", "currency", "sku", "imageUrl",
-       "active", "wholesaleCostCents", "prodigiAttributeOptions", "createdAt"`;
+       "active", "wholesaleCostCents", "prodigiAttributeOptions", "isProductGroup", "groupId",
+       "createdAt"`;
 
 export async function listPrintCatalog(): Promise<PrintCatalogItem[]> {
   return prisma.$queryRaw<PrintCatalogItem[]>`
@@ -45,12 +52,29 @@ export async function listPrintCatalog(): Promise<PrintCatalogItem[]> {
   `;
 }
 
-/** Uniquement les lignes actives — utilisé par le parcours d'achat client (galerie publique). */
+/** Uniquement les lignes actives — utilisé par le parcours d'achat client (galerie publique).
+ * Exclut les VARIANTES (groupId non-null, voir isProductGroup dans schema.prisma) : elles ne
+ * sont jamais proposées seules, uniquement via le choix de taille sous leur groupe parent (voir
+ * getPrintCatalogVariants, appelé séparément par la page qui sait afficher ce choix). */
 export async function getActivePrintCatalog(): Promise<PrintCatalogItem[]> {
   return prisma.$queryRaw<PrintCatalogItem[]>`
     SELECT ${Prisma.raw(SELECT_COLUMNS)}
     FROM "Product"
-    WHERE "platformManaged" = true AND "active" = true
+    WHERE "platformManaged" = true AND "active" = true AND "groupId" IS NULL
+  `;
+}
+
+/** Variantes actives d'un ou plusieurs groupes (Product.groupId) — chantier "groupe de
+ * produits" (02/08/2026, demande d'Adriel). Utilisé par la page /print-selection pour proposer
+ * le choix de taille/SKU sous chaque produit-groupe, sans jamais lister les variantes comme des
+ * produits autonomes (voir getActivePrintCatalog ci-dessus). */
+export async function getPrintCatalogVariants(groupIds: string[]): Promise<PrintCatalogItem[]> {
+  if (groupIds.length === 0) return [];
+  return prisma.$queryRaw<PrintCatalogItem[]>`
+    SELECT ${Prisma.raw(SELECT_COLUMNS)}
+    FROM "Product"
+    WHERE "platformManaged" = true AND "active" = true AND "groupId" IN (${Prisma.join(groupIds)})
+    ORDER BY "priceCents" ASC
   `;
 }
 
@@ -89,16 +113,23 @@ export async function createPrintCatalogItem(data: {
   imageUrl: string | null;
   active: boolean;
   wholesaleCostCents: number | null;
+  /** true = crée un GROUPE (conteneur) plutôt qu'un produit vendable — voir isProductGroup
+   * dans schema.prisma. Chantier "groupe de produits" (02/08/2026, demande d'Adriel). */
+  isProductGroup?: boolean;
+  /** Id du groupe parent si ce produit est une VARIANTE (taille/SKU) à l'intérieur d'un groupe
+   * existant — mutuellement exclusif avec isProductGroup (validé côté route API). */
+  groupId?: string | null;
 }): Promise<PrintCatalogItem> {
   const id = data.id || randomUUID();
   await prisma.$executeRaw`
     INSERT INTO "Product"
       ("id", "studioId", "type", "name", "description", "priceCents", "currency", "sku",
-       "imageUrl", "active", "platformManaged", "wholesaleCostCents", "createdAt")
+       "imageUrl", "active", "platformManaged", "wholesaleCostCents", "isProductGroup", "groupId",
+       "createdAt")
     VALUES
       (${id}, NULL, 'PRINT', ${data.name}, ${data.description}, ${data.priceCents},
        ${data.currency}, ${data.sku}, ${data.imageUrl}, ${data.active}, true,
-       ${data.wholesaleCostCents}, NOW())
+       ${data.wholesaleCostCents}, ${data.isProductGroup ?? false}, ${data.groupId ?? null}, NOW())
   `;
   const created = await getPrintCatalogItem(id);
   if (!created) throw new Error("Échec de la création du produit catalogue.");
@@ -117,6 +148,8 @@ export async function updatePrintCatalogItem(
     active: boolean;
     wholesaleCostCents: number | null;
     prodigiAttributeOptions: string | null;
+    isProductGroup: boolean;
+    groupId: string | null;
   }>
 ): Promise<PrintCatalogItem | null> {
   const existing = await getPrintCatalogItem(id);
@@ -133,10 +166,23 @@ export async function updatePrintCatalogItem(
         "imageUrl" = ${merged.imageUrl},
         "active" = ${merged.active},
         "wholesaleCostCents" = ${merged.wholesaleCostCents},
-        "prodigiAttributeOptions" = ${merged.prodigiAttributeOptions}
+        "prodigiAttributeOptions" = ${merged.prodigiAttributeOptions},
+        "isProductGroup" = ${merged.isProductGroup},
+        "groupId" = ${merged.groupId}
     WHERE "id" = ${id} AND "platformManaged" = true
   `;
   return getPrintCatalogItem(id);
+}
+
+/** Nombre de variantes (SKU) encore rattachées à ce groupe — chantier "groupe de produits"
+ * (02/08/2026, demande d'Adriel). Bloque la suppression d'un groupe qui contient encore des
+ * variantes plutôt que de les supprimer en cascade silencieusement (ON DELETE CASCADE existe
+ * au niveau base, mais l'admin doit les retirer/déplacer explicitement en premier). */
+export async function countGroupVariants(groupId: string): Promise<number> {
+  const [row] = await prisma.$queryRaw<Array<{ count: bigint }>>`
+    SELECT COUNT(*) as count FROM "Product" WHERE "groupId" = ${groupId}
+  `;
+  return row ? Number(row.count) : 0;
 }
 
 /**

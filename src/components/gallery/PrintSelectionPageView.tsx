@@ -28,6 +28,14 @@ interface PrintProductDTO {
    * côté admin via "Resynchroniser" (voir getProdigiProductDetails). Objet vide = aucun
    * attribut : le produit s'assigne directement, sans étape de choix intermédiaire. */
   attributeOptions: Record<string, string[]>;
+  /** Chantier "groupe de produits" (02/08/2026, demande d'Adriel : "peux tu ajouter la
+   * possibilité de creer un groupe de produit et a l'intérieur ajouter les SKU adéquat ?") —
+   * non-vide UNIQUEMENT sur un produit-GROUPE (ex: "Toile photo") : ses tailles/SKU réels
+   * (12x16, 20x30...), chacun un vrai produit achetable avec son propre prix/attributs. Un
+   * groupe n'est JAMAIS assigné tel quel à une photo — choisir un groupe dans un sélecteur
+   * ouvre VariantSelectionModal pour d'abord choisir la taille ; c'est l'id de la VARIANTE
+   * choisie qui finit dans Selection.productId, pas celui du groupe. */
+  variants?: PrintProductDTO[];
 }
 
 /** Libellés FR des noms d'attributs Prodigi les plus courants (voir doc Product Details) —
@@ -169,6 +177,14 @@ export function PrintSelectionPageView({
   printProducts: PrintProductDTO[];
 }) {
   const [photos, setPhotos] = useState(initialPhotos);
+  // Liste "à plat" incluant les variantes de chaque groupe (chantier "groupe de produits",
+  // 02/08/2026) — utilisée partout où on doit RETROUVER le produit réellement assigné à une
+  // photo (Selection.productId pointe toujours vers une variante ou un produit autonome, jamais
+  // vers un groupe) : groupByProduct, calcul du total, etc. `printProducts` (la liste top-level
+  // reçue en prop) reste, elle, la liste proposée dans les sélecteurs "Assigner à".
+  const flatProducts: PrintProductDTO[] = printProducts.flatMap((p) =>
+    p.variants && p.variants.length > 0 ? p.variants : [p]
+  );
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [view, setView] = useState<"list" | "grid">("list");
   const [zoomIndex, setZoomIndex] = useState<number | null>(null);
@@ -182,7 +198,8 @@ export function PrintSelectionPageView({
   // demande d'Adriel : "quand je fini d'assigner les images a un produit, l'accordeon doit etre
   // fermé [pas] ouvert"), sinon seul un clic du visiteur change son état.
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
-    const initialGroups = groupByProduct(initialPhotos, printProducts);
+    const initialFlatProducts = printProducts.flatMap((p) => (p.variants && p.variants.length > 0 ? p.variants : [p]));
+    const initialGroups = groupByProduct(initialPhotos, initialFlatProducts);
     return new Set(initialGroups.map((g) => g.product?.id ?? "unassigned"));
   });
 
@@ -274,7 +291,7 @@ export function PrintSelectionPageView({
   // Groupes calculés sur la sélection COMPLÈTE (jamais filtrée) : le récapitulatif de prix, le
   // total et le contrôle avant commande doivent toujours porter sur toutes les photos, même si le
   // visiteur a filtré/recherché pour naviguer plus facilement dans une grosse sélection.
-  const groups = groupByProduct(photos, printProducts);
+  const groups = groupByProduct(photos, flatProducts);
   const unassignedPhotos = groups.find((g) => g.product === null)?.photos ?? [];
   const hasUnassigned = unassignedPhotos.length > 0;
   const flatOrder = groups.flatMap((g) => g.photos);
@@ -288,7 +305,7 @@ export function PrintSelectionPageView({
     if (filterMode === "unassigned" && p.productId) return false;
     return matchesSearch(p, searchQuery);
   });
-  const displayGroups = groupByProduct(filteredPhotos, printProducts);
+  const displayGroups = groupByProduct(filteredPhotos, flatProducts);
   const filteredIds = filteredPhotos.map((p) => p.id);
   const filteredCheckedCount = filteredIds.filter((id) => validChecked.has(id)).length;
   const allFilteredChecked = filteredIds.length > 0 && filteredCheckedCount === filteredIds.length;
@@ -400,12 +417,36 @@ export function PrintSelectionPageView({
     initial?: Record<string, string>;
   } | null>(null);
 
+  // Choix de taille/SKU (chantier "groupe de produits", 02/08/2026, demande d'Adriel : "peux tu
+  // ajouter la possibilité de creer un groupe de produit et a l'intérieur ajouter les SKU
+  // adéquat ?") — s'ouvre AVANT le choix d'attribut quand le produit sélectionné est un groupe :
+  // Prodigi encode la taille dans le SKU, pas dans un attribut choisissable (voir schema.prisma,
+  // doc de Product.isProductGroup), donc ce choix ne peut pas passer par AttributeSelectionModal.
+  const [variantPrompt, setVariantPrompt] = useState<{ ids: string[]; group: PrintProductDTO } | null>(null);
+
+  // Une fois la variante (taille/SKU réel) choisie, on enchaîne sur le choix d'attribut si cette
+  // variante en a (ex: une toile 12x16 qui propose aussi la couleur de bordure), sinon on assigne
+  // directement — c'est TOUJOURS l'id de la variante, jamais celui du groupe, qui finit dans
+  // Selection.productId (voir applyProductToPhotos).
+  function chooseVariant(ids: string[], variant: PrintProductDTO, initial?: Record<string, string>) {
+    setVariantPrompt(null);
+    if (Object.keys(variant.attributeOptions).length > 0) {
+      setAttributePrompt({ ids, product: variant, initial });
+      return;
+    }
+    applyProductToPhotos(ids, variant.id, null);
+  }
+
   function promptOrApply(ids: string[], value: string, initial?: Record<string, string>) {
     if (value === "") {
       applyProductToPhotos(ids, null, null);
       return;
     }
     const product = printProducts.find((p) => p.id === value);
+    if (product?.variants && product.variants.length > 0) {
+      setVariantPrompt({ ids, group: product });
+      return;
+    }
     if (product && Object.keys(product.attributeOptions).length > 0) {
       setAttributePrompt({ ids, product, initial });
       return;
@@ -553,12 +594,27 @@ export function PrintSelectionPageView({
                     </span>
                   )}
                 </div>
-                <p className="truncate text-sm font-semibold text-gray-900">{p.name}</p>
+                <p className="truncate text-sm font-semibold text-gray-900">
+                  {p.name}
+                  {/* "Groupe" = plusieurs tailles/SKU au choix (chantier "groupe de produits",
+                      02/08/2026) — le prix affiché est celui de la variante la moins chère. */}
+                  {p.variants && p.variants.length > 0 && (
+                    <span className="ml-1.5 align-middle text-[10px] font-normal uppercase tracking-wide text-brand-600">
+                      {p.variants.length} tailles
+                    </span>
+                  )}
+                </p>
                 {p.description && (
                   <p className="line-clamp-2 text-xs text-gray-500">{p.description}</p>
                 )}
                 <p className="mt-auto text-sm font-medium text-gray-800">
-                  {formatMoney(p.priceCents, p.currency)}
+                  {p.variants && p.variants.length > 0 ? (
+                    <>
+                      dès {formatMoney(Math.min(...p.variants.map((v) => v.priceCents)), p.currency)}
+                    </>
+                  ) : (
+                    formatMoney(p.priceCents, p.currency)
+                  )}
                   <span className="ml-1 text-xs font-normal text-gray-400">/ photo</span>
                 </p>
               </div>
@@ -1135,6 +1191,19 @@ export function PrintSelectionPageView({
           }}
         />
       )}
+
+      {/* Choix de taille/SKU (chantier "groupe de produits", 02/08/2026, demande d'Adriel : "peux
+          tu ajouter la possibilité de creer un groupe de produit et a l'intérieur ajouter les
+          SKU adéquat ?") — s'ouvre avant toute autre étape quand le produit choisi est un
+          groupe : la taille encode un SKU Prodigi différent, ce n'est pas un simple attribut. */}
+      {variantPrompt && (
+        <VariantSelectionModal
+          group={variantPrompt.group}
+          count={variantPrompt.ids.length}
+          onCancel={() => setVariantPrompt(null)}
+          onConfirm={(variant) => chooseVariant(variantPrompt.ids, variant)}
+        />
+      )}
     </div>
   );
 }
@@ -1212,6 +1281,78 @@ function AttributeSelectionModal({
           </button>
           <button type="button" className="btn-primary text-sm" onClick={() => onConfirm(values)}>
             Valider
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Modale de choix de taille/SKU sous un produit-GROUPE (ex: "Toile photo" → 12x16, 20x30...) —
+ * chantier "groupe de produits" (02/08/2026, demande d'Adriel : "peux tu ajouter la possibilité
+ * de creer un groupe de produit et a l'intérieur ajouter les SKU adéquat ?"). Contrairement à
+ * AttributeSelectionModal (des `<select>` pour des attributs Prodigi), ici chaque taille EST un
+ * produit distinct avec son propre prix — rendu en cartes cliquables façon "choix de forfait"
+ * plutôt qu'un menu déroulant, le prix étant l'information la plus importante à comparer.
+ */
+function VariantSelectionModal({
+  group,
+  count,
+  onCancel,
+  onConfirm,
+}: {
+  group: PrintProductDTO;
+  count: number;
+  onCancel: () => void;
+  onConfirm: (variant: PrintProductDTO) => void;
+}) {
+  const variants = group.variants ?? [];
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 px-4"
+      onClick={onCancel}
+      role="presentation"
+    >
+      <div
+        className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Choisir une taille pour ${group.name}`}
+      >
+        <h3 className="text-sm font-semibold text-gray-900">Choisir une taille — {group.name}</h3>
+        <p className="mt-1 text-xs text-gray-500">
+          Sélectionnez le format avant d&apos;assigner {count > 1 ? `ces ${count} photos` : "cette photo"}.
+        </p>
+
+        <div className="mt-4 space-y-2">
+          {variants.map((variant) => (
+            <button
+              key={variant.id}
+              type="button"
+              onClick={() => onConfirm(variant)}
+              className="flex w-full items-center justify-between gap-3 rounded-lg border border-gray-200 px-3.5 py-2.5 text-left hover:border-brand-400 hover:bg-brand-50/40"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium text-gray-900">{variant.name}</span>
+                {variant.description && (
+                  <span className="block truncate text-xs text-gray-500">{variant.description}</span>
+                )}
+              </span>
+              <span className="shrink-0 text-sm font-semibold text-gray-800">
+                {formatMoney(variant.priceCents, variant.currency)}
+              </span>
+            </button>
+          ))}
+          {variants.length === 0 && (
+            <p className="text-sm text-gray-400">Aucune taille disponible pour ce groupe pour le moment.</p>
+          )}
+        </div>
+
+        <div className="mt-5 flex justify-end">
+          <button type="button" className="btn-secondary text-sm" onClick={onCancel}>
+            Annuler
           </button>
         </div>
       </div>

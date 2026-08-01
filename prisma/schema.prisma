@@ -796,12 +796,30 @@ model Product {
   /// en même temps que le coût de revient (bouton "Resynchroniser" de /admin/print-catalog).
   /// null/absent = SKU sans attribut sélectionnable connu (le client ne voit aucun choix).
   prodigiAttributeOptions String? @db.Text
+  /// Chantier "groupe de produits" (02/08/2026, demande d'Adriel : "peux tu ajouter la
+  /// possibilité de creer un groupe de produit et a l'intérieur ajouter les SKU adéquat ?") —
+  /// répond au constat que la taille/dimension d'un tirage Prodigi n'est PAS un attribut
+  /// sélectionnable comme la couleur (voir prodigiAttributeOptions) : chaque taille est un SKU
+  /// Prodigi distinct (ex: GLOBAL-CAN-12X16 vs GLOBAL-CAN-20X30). true = ce Product est un
+  /// GROUPE (conteneur) : pas de SKU/prix propre utilisé à l'achat, juste un nom/image/
+  /// description ; ses variantes (voir `variants` ci-dessous) sont les vrais produits
+  /// achetables. false (défaut) = produit normal, vendu tel quel (comportement historique).
+  isProductGroup Boolean @default(false)
+  /// Non-null UNIQUEMENT sur une VARIANTE (un SKU précis) appartenant à un groupe : pointe vers
+  /// le Product parent (isProductGroup=true). Une variante reste un Product complet et
+  /// achetable comme n'importe quel autre (son propre sku/priceCents/prodigiAttributes...) —
+  /// seule différence : elle n'apparaît pas seule dans le sélecteur client, uniquement via le
+  /// choix de taille proposé sous son groupe (voir PrintSelectionPageView.tsx).
+  groupId     String?
+  group       Product?    @relation("ProductGroupVariants", fields: [groupId], references: [id], onDelete: Cascade)
+  variants    Product[]   @relation("ProductGroupVariants")
   galleries   Gallery[]   @relation("GalleryProducts")
   orderItems  OrderItem[]
   selections  Selection[]
   createdAt   DateTime    @default(now())
 
   @@index([studioId])
+  @@index([groupId])
 }
 
 enum OrderStatus {

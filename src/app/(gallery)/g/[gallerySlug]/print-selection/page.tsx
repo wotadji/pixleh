@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getStudioSession } from "@/lib/access";
 import { getGallerySession } from "@/lib/gallery-session";
-import { getActivePrintCatalog } from "@/lib/printCatalog";
+import { getActivePrintCatalog, getPrintCatalogVariants } from "@/lib/printCatalog";
 import { PrintSelectionPageView } from "@/components/gallery/PrintSelectionPageView";
 
 export const dynamic = "force-dynamic";
@@ -91,6 +91,21 @@ export default async function PrintSelectionPage({ params }: { params: { gallery
 
   const printProducts = await getActivePrintCatalog();
 
+  // Variantes (taille/SKU) des produits-GROUPES du catalogue — chantier "groupe de produits"
+  // (02/08/2026, demande d'Adriel : "peux tu ajouter la possibilité de creer un groupe de
+  // produit et a l'intérieur ajouter les SKU adéquat ?"). Chargées séparément (voir
+  // getPrintCatalogVariants) et attachées à leur groupe parent ci-dessous : le client choisit
+  // sa taille dans VariantSelectionModal (PrintSelectionPageView.tsx) avant assignation.
+  const groupIds = printProducts.filter((p) => p.isProductGroup).map((p) => p.id);
+  const variants = await getPrintCatalogVariants(groupIds);
+  const variantsByGroupId = new Map<string, typeof variants>();
+  for (const v of variants) {
+    if (!v.groupId) continue;
+    const list = variantsByGroupId.get(v.groupId) ?? [];
+    list.push(v);
+    variantsByGroupId.set(v.groupId, list);
+  }
+
   return (
     <PrintSelectionPageView
       gallerySlug={gallery.slug}
@@ -114,6 +129,17 @@ export default async function PrintSelectionPage({ params }: { params: { gallery
         currency: p.currency,
         imageUrl: p.imageUrl,
         attributeOptions: parseJsonRecord<Record<string, string[]>>(p.prodigiAttributeOptions, {}),
+        variants: p.isProductGroup
+          ? (variantsByGroupId.get(p.id) ?? []).map((v) => ({
+              id: v.id,
+              name: v.name,
+              description: v.description,
+              priceCents: v.priceCents,
+              currency: v.currency,
+              imageUrl: v.imageUrl,
+              attributeOptions: parseJsonRecord<Record<string, string[]>>(v.prodigiAttributeOptions, {}),
+            }))
+          : undefined,
       }))}
     />
   );

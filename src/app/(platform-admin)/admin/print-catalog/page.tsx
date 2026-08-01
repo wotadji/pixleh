@@ -19,6 +19,12 @@ interface PrintCatalogItemDTO {
    * informatif : c'est ce qui active le sélecteur d'attribut côté client
    * (PrintSelectionPageView) pour ce produit. */
   prodigiAttributeOptions: string | null;
+  /** Chantier "groupe de produits" (02/08/2026, demande d'Adriel : "peux tu ajouter la
+   * possibilité de creer un groupe de produit et a l'intérieur ajouter les SKU adéquat ?") —
+   * true = ce produit est un GROUPE (conteneur de tailles/SKU), pas vendable tel quel. */
+  isProductGroup: boolean;
+  /** Non-null uniquement sur une variante : id du groupe parent. */
+  groupId: string | null;
 }
 
 /** Parse prodigiAttributeOptions en toute sécurité — utilisé aussi bien dans la liste que dans
@@ -49,6 +55,12 @@ interface FormState {
   imageUrl: string;
   active: boolean;
   wholesaleCost: string;
+  /** true = le formulaire crée/édite un GROUPE (conteneur), pas un produit vendable — masque
+   * SKU/coût/resync dans la modale. Chantier "groupe de produits" (02/08/2026). */
+  isProductGroup: boolean;
+  /** Id du groupe parent si ce formulaire crée/édite une VARIANTE à l'intérieur d'un groupe
+   * (ouvert via le bouton "+ Ajouter un SKU" d'un groupe) — null sinon. */
+  groupId: string | null;
 }
 
 /** Génère un id côté client pour un nouveau produit (même patron que makeSlideId dans
@@ -67,6 +79,8 @@ const EMPTY_FORM_FIELDS = {
   imageUrl: "",
   active: true,
   wholesaleCost: "",
+  isProductGroup: false,
+  groupId: null as string | null,
 };
 
 type StatusFilter = "ALL" | "ACTIVE" | "INACTIVE" | "NO_SKU";
@@ -94,6 +108,8 @@ function itemToForm(item: PrintCatalogItemDTO): FormState {
     imageUrl: item.imageUrl || "",
     active: item.active,
     wholesaleCost: item.wholesaleCostCents != null ? fromCents(item.wholesaleCostCents) : "",
+    isProductGroup: item.isProductGroup,
+    groupId: item.groupId,
   };
 }
 
@@ -150,6 +166,22 @@ export default function AdminPrintCatalogPage() {
     setModalOpen(true);
   }
 
+  /** "Nouveau groupe" — chantier "groupe de produits" (02/08/2026, demande d'Adriel) : ouvre
+   * la même modale mais en mode groupe (SKU/coût/resync masqués, voir ProductModal). */
+  function openCreateGroup() {
+    setForm({ ...EMPTY_FORM_FIELDS, id: makeId(), persisted: false, isProductGroup: true });
+    setError(null);
+    setModalOpen(true);
+  }
+
+  /** "+ Ajouter un SKU" depuis un groupe — pré-remplit groupId pour que ce nouveau produit
+   * devienne une variante de ce groupe dès l'enregistrement. */
+  function openAddVariant(group: PrintCatalogItemDTO) {
+    setForm({ ...EMPTY_FORM_FIELDS, id: makeId(), persisted: false, groupId: group.id });
+    setError(null);
+    setModalOpen(true);
+  }
+
   function openEdit(item: PrintCatalogItemDTO) {
     setForm(itemToForm(item));
     setError(null);
@@ -173,6 +205,8 @@ export default function AdminPrintCatalogPage() {
       imageUrl: form.imageUrl.trim() || null,
       active: form.active,
       wholesaleCostCents: form.wholesaleCost.trim() ? toCents(form.wholesaleCost) : null,
+      isProductGroup: form.isProductGroup,
+      groupId: form.groupId,
     };
 
     try {
@@ -296,7 +330,9 @@ export default function AdminPrintCatalogPage() {
           ) / withMargin.length
         : null;
     const avgPrice = items.length > 0 ? items.reduce((sum, i) => sum + i.priceCents, 0) / items.length : 0;
-    const noSku = items.filter((i) => !i.sku).length;
+    // Un groupe n'a jamais de SKU propre par construction (voir isProductGroup) — l'exclure du
+    // décompte "Sans SKU Prodigi", qui ne doit signaler que de vrais oublis.
+    const noSku = items.filter((i) => !i.sku && !i.isProductGroup).length;
     return {
       total: items.length,
       active: active.length,
@@ -306,19 +342,46 @@ export default function AdminPrintCatalogPage() {
     };
   }, [items]);
 
+  /** Chantier "groupe de produits" (02/08/2026, demande d'Adriel) — la liste est désormais
+   * hiérarchique : chaque groupe (isProductGroup=true) affiche ses variantes (groupId=son id)
+   * imbriquées dessous, jamais comme des lignes autonomes au niveau racine. */
+  function matchesItem(i: PrintCatalogItemDTO, q: string) {
+    return !q || i.name.toLowerCase().includes(q) || (i.sku || "").toLowerCase().includes(q);
+  }
+  function matchesStatusFilter(i: PrintCatalogItemDTO) {
+    return (
+      statusFilter === "ALL" ||
+      (statusFilter === "ACTIVE" && i.active) ||
+      (statusFilter === "INACTIVE" && !i.active) ||
+      (statusFilter === "NO_SKU" && !i.sku && !i.isProductGroup)
+    );
+  }
+
+  const variantsByGroup = useMemo(() => {
+    const map = new Map<string, PrintCatalogItemDTO[]>();
+    for (const i of items ?? []) {
+      if (!i.groupId) continue;
+      const list = map.get(i.groupId) ?? [];
+      list.push(i);
+      map.set(i.groupId, list);
+    }
+    return map;
+  }, [items]);
+
   const filtered = useMemo(() => {
     if (!items) return [];
     const q = search.trim().toLowerCase();
-    return items.filter((i) => {
-      const matchesSearch = !q || i.name.toLowerCase().includes(q) || (i.sku || "").toLowerCase().includes(q);
-      const matchesStatus =
-        statusFilter === "ALL" ||
-        (statusFilter === "ACTIVE" && i.active) ||
-        (statusFilter === "INACTIVE" && !i.active) ||
-        (statusFilter === "NO_SKU" && !i.sku);
-      return matchesSearch && matchesStatus;
-    });
-  }, [items, search, statusFilter]);
+    return items
+      .filter((i) => !i.groupId) // uniquement les lignes racine (autonomes ou groupes)
+      .filter((i) => {
+        if (!matchesStatusFilter(i)) return false;
+        if (matchesItem(i, q)) return true;
+        // Un groupe reste affiché si l'une de ses variantes correspond à la recherche (ex:
+        // rechercher un SKU précis doit quand même montrer son groupe parent).
+        return i.isProductGroup && (variantsByGroup.get(i.id) ?? []).some((v) => matchesItem(v, q));
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, search, statusFilter, variantsByGroup]);
 
   if (!items || !stats) return <PageSpinner />;
 
@@ -333,9 +396,19 @@ export default function AdminPrintCatalogPage() {
             plus le prix.
           </p>
         </div>
-        <button type="button" className="btn-primary shrink-0" onClick={openCreate}>
-          + Nouveau produit
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {/* "Nouveau groupe" — chantier "groupe de produits" (02/08/2026, demande d'Adriel :
+              "peux tu ajouter la possibilité de creer un groupe de produit et a l'intérieur
+              ajouter les SKU adéquat ?") : un groupe sert à proposer plusieurs tailles/SKU
+              Prodigi (ex: 12x16 et 20x30, deux SKU distincts chez Prodigi) sous un même produit
+              côté client, qui choisit sa taille au moment de l'achat. */}
+          <button type="button" className="btn-secondary" onClick={openCreateGroup}>
+            + Nouveau groupe
+          </button>
+          <button type="button" className="btn-primary" onClick={openCreate}>
+            + Nouveau produit
+          </button>
+        </div>
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -407,124 +480,56 @@ export default function AdminPrintCatalogPage() {
             </p>
           </div>
         )}
-        {filtered.map((item) => {
-          const marginCents = item.wholesaleCostCents != null ? item.priceCents - item.wholesaleCostCents : null;
-          const tone = marginCents != null ? marginTone(marginCents, item.priceCents) : null;
-          return (
-            <div
-              key={item.id}
-              className={`flex flex-wrap items-center justify-between gap-3 p-4 ${!item.active ? "bg-gray-50/60" : ""}`}
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                {item.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={item.imageUrl}
-                    alt=""
-                    className="h-11 w-11 shrink-0 rounded-lg border border-gray-200 object-cover"
-                  />
-                ) : (
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
-                    <IconPrinter small />
-                  </div>
+        {filtered.map((item) => (
+          <div key={item.id}>
+            <CatalogRow
+              item={item}
+              groupDisplayPriceCents={
+                item.isProductGroup
+                  ? (() => {
+                      const variants = (variantsByGroup.get(item.id) ?? []).filter((v) => v.active);
+                      return variants.length > 0 ? Math.min(...variants.map((v) => v.priceCents)) : null;
+                    })()
+                  : undefined
+              }
+              resyncing={resyncing}
+              toggling={toggling}
+              onToggleActive={toggleActive}
+              onResync={resync}
+              onEdit={openEdit}
+              onRemove={remove}
+            />
+            {item.isProductGroup && (
+              <div className="divide-y divide-gray-100 border-t border-gray-100 bg-gray-50/60 pl-6">
+                {(variantsByGroup.get(item.id) ?? []).length === 0 && (
+                  <p className="p-4 text-sm text-gray-400">Aucun SKU dans ce groupe pour le moment.</p>
                 )}
-                <div className="min-w-0">
-                  <p className="flex flex-wrap items-center gap-1.5 truncate font-medium text-gray-900">
-                    {item.name}
-                    {!item.active && (
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
-                        Désactivé
-                      </span>
-                    )}
-                    {!item.sku && (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                        Sans SKU Prodigi
-                      </span>
-                    )}
-                    {/* Badge attributs sélectionnables (demande d'Adriel, 02/08/2026 : "je veux
-                        construire une vraie UI de sélection d'attribut au moment de l'achat")
-                        — visible dès que "Resynchroniser" a chargé au moins un attribut (ex:
-                        couleur de cadre) : c'est ce qui active le sélecteur côté client. */}
-                    {Object.keys(parseAttributeOptions(item.prodigiAttributeOptions)).length > 0 && (
-                      <span
-                        className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700"
-                        title={Object.entries(parseAttributeOptions(item.prodigiAttributeOptions))
-                          .map(([name, values]) => `${name}: ${values.join(", ")}`)
-                          .join(" · ")}
-                      >
-                        {Object.keys(parseAttributeOptions(item.prodigiAttributeOptions)).length} attribut
-                        {Object.keys(parseAttributeOptions(item.prodigiAttributeOptions)).length > 1 ? "s" : ""}
-                      </span>
-                    )}
-                  </p>
-                  <p className="truncate text-sm text-gray-500">
-                    {item.sku ? <code className="text-gray-600">{item.sku}</code> : item.description || "—"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                <div className="text-right">
-                  <p className="font-medium text-gray-900">{formatMoney(item.priceCents)}</p>
-                  <p className="text-xs text-gray-400">
-                    {item.wholesaleCostCents != null ? `coût ${formatMoney(item.wholesaleCostCents)}` : "coût inconnu"}
-                  </p>
-                </div>
-
-                {marginCents != null && tone && (
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${tone.bg} ${tone.text}`}>
-                    {marginCents >= 0 ? "+" : ""}
-                    {formatMoney(marginCents)}
-                  </span>
-                )}
-
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={item.active}
-                  disabled={toggling === item.id}
-                  onClick={() => toggleActive(item)}
-                  title={item.active ? "Désactiver (masquer des galeries)" : "Activer (afficher dans les galeries)"}
-                  className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:opacity-50 ${
-                    item.active ? "bg-green-600" : "bg-gray-300"
-                  }`}
-                >
-                  <span
-                    className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                      item.active ? "translate-x-4" : "translate-x-0"
-                    }`}
+                {(variantsByGroup.get(item.id) ?? []).map((variant) => (
+                  <CatalogRow
+                    key={variant.id}
+                    item={variant}
+                    isVariant
+                    resyncing={resyncing}
+                    toggling={toggling}
+                    onToggleActive={toggleActive}
+                    onResync={resync}
+                    onEdit={openEdit}
+                    onRemove={remove}
                   />
-                </button>
-
-                {item.sku && (
+                ))}
+                <div className="p-3">
                   <button
                     type="button"
-                    disabled={resyncing === item.id}
-                    onClick={() => resync(item)}
-                    className="flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                    className="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-brand-700 shadow-sm ring-1 ring-brand-200 hover:bg-brand-50"
+                    onClick={() => openAddVariant(item)}
                   >
-                    {resyncing === item.id ? <IconSpinner /> : <IconRefresh />}
-                    {resyncing === item.id ? "Synchronisation..." : "Resynchroniser"}
+                    + Ajouter un SKU dans ce groupe
                   </button>
-                )}
-                <button
-                  type="button"
-                  className="rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
-                  onClick={() => openEdit(item)}
-                >
-                  Modifier
-                </button>
-                <button
-                  type="button"
-                  className="rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-100"
-                  onClick={() => remove(item)}
-                >
-                  Supprimer
-                </button>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            )}
+          </div>
+        ))}
       </div>
 
       <ProductModal
@@ -566,6 +571,177 @@ function StatCard({
   );
 }
 
+/**
+ * Une ligne du catalogue — factorisée pour être réutilisée aussi bien au niveau racine
+ * (produits autonomes et groupes) que pour les variantes imbriquées sous un groupe (chantier
+ * "groupe de produits", 02/08/2026, demande d'Adriel). `isVariant` ajuste juste le style
+ * (légèrement en retrait, fond neutre) — le comportement des boutons reste identique.
+ */
+function CatalogRow({
+  item,
+  isVariant,
+  /** Prix affiché pour un GROUPE (min. de ses variantes actives) — calculé côté parent qui
+   * connaît variantsByGroup ; le priceCents brut du groupe en base n'est qu'un placeholder
+   * jamais montré au client (voir isProductGroup). */
+  groupDisplayPriceCents,
+  resyncing,
+  toggling,
+  onToggleActive,
+  onResync,
+  onEdit,
+  onRemove,
+}: {
+  item: PrintCatalogItemDTO;
+  isVariant?: boolean;
+  groupDisplayPriceCents?: number | null;
+  resyncing: string | null;
+  toggling: string | null;
+  onToggleActive: (item: PrintCatalogItemDTO) => void;
+  onResync: (item: PrintCatalogItemDTO) => void;
+  onEdit: (item: PrintCatalogItemDTO) => void;
+  onRemove: (item: PrintCatalogItemDTO) => void;
+}) {
+  const marginCents = item.wholesaleCostCents != null ? item.priceCents - item.wholesaleCostCents : null;
+  const tone = marginCents != null ? marginTone(marginCents, item.priceCents) : null;
+  const attributeOptions = parseAttributeOptions(item.prodigiAttributeOptions);
+
+  return (
+    <div
+      className={`flex flex-wrap items-center justify-between gap-3 p-4 ${!item.active ? "bg-gray-50/60" : ""}`}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        {item.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={item.imageUrl}
+            alt=""
+            className="h-11 w-11 shrink-0 rounded-lg border border-gray-200 object-cover"
+          />
+        ) : (
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+            {item.isProductGroup ? <IconFolder small /> : <IconPrinter small />}
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="flex flex-wrap items-center gap-1.5 truncate font-medium text-gray-900">
+            {isVariant && <span className="text-gray-300">↳</span>}
+            {item.name}
+            {item.isProductGroup && (
+              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                Groupe
+              </span>
+            )}
+            {!item.active && (
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+                Désactivé
+              </span>
+            )}
+            {!item.sku && !item.isProductGroup && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                Sans SKU Prodigi
+              </span>
+            )}
+            {/* Badge attributs sélectionnables (demande d'Adriel, 02/08/2026 : "je veux
+                construire une vraie UI de sélection d'attribut au moment de l'achat")
+                — visible dès que "Resynchroniser" a chargé au moins un attribut (ex:
+                couleur de cadre) : c'est ce qui active le sélecteur côté client. */}
+            {Object.keys(attributeOptions).length > 0 && (
+              <span
+                className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700"
+                title={Object.entries(attributeOptions)
+                  .map(([name, values]) => `${name}: ${values.join(", ")}`)
+                  .join(" · ")}
+              >
+                {Object.keys(attributeOptions).length} attribut
+                {Object.keys(attributeOptions).length > 1 ? "s" : ""}
+              </span>
+            )}
+          </p>
+          <p className="truncate text-sm text-gray-500">
+            {item.sku ? (
+              <code className="text-gray-600">{item.sku}</code>
+            ) : item.isProductGroup ? (
+              "Conteneur de tailles/SKU — le client choisit à l'achat"
+            ) : (
+              item.description || "—"
+            )}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <div className="text-right">
+          <p className="font-medium text-gray-900">
+            {item.isProductGroup
+              ? groupDisplayPriceCents != null
+                ? `dès ${formatMoney(groupDisplayPriceCents)}`
+                : "—"
+              : formatMoney(item.priceCents)}
+          </p>
+          <p className="text-xs text-gray-400">
+            {item.isProductGroup
+              ? "prix le plus bas de ses variantes"
+              : item.wholesaleCostCents != null
+                ? `coût ${formatMoney(item.wholesaleCostCents)}`
+                : "coût inconnu"}
+          </p>
+        </div>
+
+        {marginCents != null && tone && (
+          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${tone.bg} ${tone.text}`}>
+            {marginCents >= 0 ? "+" : ""}
+            {formatMoney(marginCents)}
+          </span>
+        )}
+
+        <button
+          type="button"
+          role="switch"
+          aria-checked={item.active}
+          disabled={toggling === item.id}
+          onClick={() => onToggleActive(item)}
+          title={item.active ? "Désactiver (masquer des galeries)" : "Activer (afficher dans les galeries)"}
+          className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:opacity-50 ${
+            item.active ? "bg-green-600" : "bg-gray-300"
+          }`}
+        >
+          <span
+            className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${
+              item.active ? "translate-x-4" : "translate-x-0"
+            }`}
+          />
+        </button>
+
+        {item.sku && (
+          <button
+            type="button"
+            disabled={resyncing === item.id}
+            onClick={() => onResync(item)}
+            className="flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+          >
+            {resyncing === item.id ? <IconSpinner /> : <IconRefresh />}
+            {resyncing === item.id ? "Synchronisation..." : "Resynchroniser"}
+          </button>
+        )}
+        <button
+          type="button"
+          className="rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+          onClick={() => onEdit(item)}
+        >
+          Modifier
+        </button>
+        <button
+          type="button"
+          className="rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-100"
+          onClick={() => onRemove(item)}
+        >
+          Supprimer
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ProductModal({
   open,
   form,
@@ -594,11 +770,23 @@ function ProductModal({
   const marginCents = costCents != null ? priceCents - costCents : null;
   const marginPct = marginCents != null && priceCents > 0 ? Math.round((marginCents / priceCents) * 100) : null;
 
+  const modalTitle = form.isProductGroup
+    ? form.persisted
+      ? "Modifier le groupe"
+      : "Nouveau groupe"
+    : form.groupId
+      ? form.persisted
+        ? "Modifier le SKU"
+        : "Nouveau SKU dans le groupe"
+      : form.persisted
+        ? "Modifier le produit"
+        : "Nouveau produit";
+
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={form.persisted ? "Modifier le produit" : "Nouveau produit"}
+      title={modalTitle}
       widthClassName="max-w-2xl"
       footer={
         <>
@@ -612,6 +800,22 @@ function ProductModal({
       }
     >
       <div className="space-y-5">
+        {/* Bandeau contextuel — chantier "groupe de produits" (02/08/2026, demande d'Adriel) :
+            rappelle dans quel mode la modale est ouverte, pour éviter toute confusion entre
+            créer un groupe, ajouter un SKU dans un groupe, ou créer un produit autonome. */}
+        {form.isProductGroup && (
+          <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
+            Ce produit est un <strong>groupe</strong> : pas de SKU/prix propre, c&apos;est un conteneur.
+            Ajoute ensuite ses tailles/SKU depuis la liste (bouton &laquo;&nbsp;+ Ajouter un SKU&nbsp;&raquo;).
+          </div>
+        )}
+        {form.groupId && (
+          <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+            Ce SKU appartient à un groupe — il ne sera jamais proposé seul, uniquement via le choix de
+            taille sous son groupe.
+          </div>
+        )}
+
         <div className="flex items-center gap-3">
           {form.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -622,14 +826,14 @@ function ProductModal({
             />
           ) : (
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
-              <IconPrinter />
+              {form.isProductGroup ? <IconFolder /> : <IconPrinter />}
             </div>
           )}
           <div className="min-w-0 flex-1">
             <label className="mb-1 block text-sm font-medium">Nom</label>
             <input
               className="input"
-              placeholder="Impression 10x15"
+              placeholder={form.isProductGroup ? "Toile photo" : "Impression 10x15"}
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
@@ -645,62 +849,66 @@ function ProductModal({
           />
         </div>
 
-        <div className="rounded-lg border border-gray-200 p-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium">Prix de vente (€)</label>
-              <input
-                type="number"
-                step="0.01"
-                className="input"
-                value={form.price}
-                onChange={(e) => setForm({ ...form, price: e.target.value })}
-              />
+        {!form.isProductGroup && (
+          <div className="rounded-lg border border-gray-200 p-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Prix de vente (€)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="input"
+                  value={form.price}
+                  onChange={(e) => setForm({ ...form, price: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Coût de revient Prodigi (€)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="input"
+                  placeholder="auto si SKU renseigné"
+                  value={form.wholesaleCost}
+                  onChange={(e) => setForm({ ...form, wholesaleCost: e.target.value })}
+                />
+              </div>
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Coût de revient Prodigi (€)</label>
-              <input
-                type="number"
-                step="0.01"
-                className="input"
-                placeholder="auto si SKU renseigné"
-                value={form.wholesaleCost}
-                onChange={(e) => setForm({ ...form, wholesaleCost: e.target.value })}
-              />
-            </div>
+            {/* Marge calculée en direct pendant la saisie — évite d'avoir à enregistrer pour
+                découvrir qu'un prix fixé à la va-vite laisse une marge nulle voire négative. */}
+            <p className="mt-2 text-sm">
+              Marge :{" "}
+              {marginCents != null ? (
+                <span
+                  className={`font-medium ${
+                    marginCents < 0
+                      ? "text-red-600"
+                      : marginPct != null && marginPct < 20
+                        ? "text-amber-600"
+                        : "text-green-600"
+                  }`}
+                >
+                  {marginCents >= 0 ? "+" : ""}
+                  {formatMoney(marginCents)} {marginPct != null && `(${marginPct} %)`}
+                </span>
+              ) : (
+                <span className="text-gray-400">renseigne un coût de revient pour la voir</span>
+              )}
+            </p>
           </div>
-          {/* Marge calculée en direct pendant la saisie — évite d'avoir à enregistrer pour
-              découvrir qu'un prix fixé à la va-vite laisse une marge nulle voire négative. */}
-          <p className="mt-2 text-sm">
-            Marge :{" "}
-            {marginCents != null ? (
-              <span
-                className={`font-medium ${
-                  marginCents < 0
-                    ? "text-red-600"
-                    : marginPct != null && marginPct < 20
-                      ? "text-amber-600"
-                      : "text-green-600"
-                }`}
-              >
-                {marginCents >= 0 ? "+" : ""}
-                {formatMoney(marginCents)} {marginPct != null && `(${marginPct} %)`}
-              </span>
-            ) : (
-              <span className="text-gray-400">renseigne un coût de revient pour la voir</span>
-            )}
-          </p>
-        </div>
+        )}
 
-        <div>
-          <label className="mb-1 block text-sm font-medium">SKU Prodigi</label>
-          <input
-            className="input"
-            placeholder="GLOBAL-CAN-10x10"
-            value={form.sku}
-            onChange={(e) => setForm({ ...form, sku: e.target.value })}
-          />
-        </div>
+        {!form.isProductGroup && (
+          <div>
+            <label className="mb-1 block text-sm font-medium">SKU Prodigi</label>
+            <input
+              className="input"
+              placeholder="GLOBAL-CAN-10x10"
+              value={form.sku}
+              onChange={(e) => setForm({ ...form, sku: e.target.value })}
+            />
+          </div>
+        )}
 
         {/* Zone de dépôt (demande d'Adriel, 01/08/2026 : "je veux une meilleur presentation plus
             pro la zone choissir un fichier") — remplace l'input file brut par un vrai
@@ -850,6 +1058,21 @@ function IconPrinter({ small }: { small?: boolean }) {
       <rect x="4" y="9" width="16" height="8" rx="1.5" />
       <path d="M6 13h12v8H6z" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M8 16h8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Icône dossier — représente un GROUPE de produits (conteneur de tailles/SKU), distinct de
+ * l'imprimante utilisée pour un produit vendable. Chantier "groupe de produits" (02/08/2026). */
+function IconFolder({ small }: { small?: boolean }) {
+  const size = small ? 18 : 22;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path
+        d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

@@ -35,7 +35,11 @@ export default async function GalleryStorePage({ params }: { params: { gallerySl
     gallery.products.length > 0
       ? gallery.products
       : await prisma.product.findMany({ where: { studioId: gallery.studioId, active: true } });
-  const printCatalog = await getActivePrintCatalog();
+  // Les GROUPES de produits (chantier "groupe de produits", 02/08/2026 — voir isProductGroup
+  // dans schema.prisma) sont exclus ici : cette boutique simple (StoreCart) ajoute directement
+  // le produit cliqué au panier, sans étape de choix de taille/SKU. Seule la page dédiée
+  // /print-selection sait proposer ce choix (voir PrintSelectionPageView.tsx).
+  const printCatalog = (await getActivePrintCatalog()).filter((p) => !p.isProductGroup);
   const products = [...studioProducts, ...printCatalog];
 
   return (
