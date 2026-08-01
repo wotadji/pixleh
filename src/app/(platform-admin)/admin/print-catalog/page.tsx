@@ -97,6 +97,7 @@ export default function AdminPrintCatalogPage() {
   const [prodigiWarning, setProdigiWarning] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   async function loadItems() {
     const res = await fetch("/api/admin/print-catalog");
@@ -157,6 +158,37 @@ export default function AdminPrintCatalogPage() {
       setError("Erreur réseau.");
     }
     setSaving(false);
+  }
+
+  /**
+   * Upload de l'image du produit en cours d'édition (demande d'Adriel, 01/08/2026 : "dans
+   * Image (URL) est il possible de passer par l'upload ?") — n'est possible qu'une fois le
+   * produit déjà enregistré une première fois (form.id présent), même garde-fou que l'upload
+   * d'image des blocs marketing (voir /admin/site) : la clé de stockage est indexée par l'id
+   * du produit. L'API met à jour `imageUrl` en base immédiatement (voir route), donc on
+   * rafraîchit aussi la liste en plus du formulaire pour rester cohérent si la modale est
+   * fermée sans re-cliquer "Enregistrer".
+   */
+  async function uploadImage(file: File) {
+    if (!form.id) return;
+    setUploadingImage(true);
+    setError(null);
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const res = await fetch(`/api/admin/print-catalog/${form.id}/image`, { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.error || "Échec de l'upload de l'image.");
+        setUploadingImage(false);
+        return;
+      }
+      setForm((f) => ({ ...f, imageUrl: data.imageUrl }));
+      await loadItems();
+    } catch {
+      setError("Erreur réseau lors de l'upload.");
+    }
+    setUploadingImage(false);
   }
 
   async function resync(item: PrintCatalogItemDTO) {
@@ -432,6 +464,8 @@ export default function AdminPrintCatalogPage() {
         error={error}
         onClose={() => setModalOpen(false)}
         onSave={save}
+        onUploadImage={uploadImage}
+        uploadingImage={uploadingImage}
       />
     </div>
   );
@@ -468,6 +502,8 @@ function ProductModal({
   error,
   onClose,
   onSave,
+  onUploadImage,
+  uploadingImage,
 }: {
   open: boolean;
   form: FormState;
@@ -476,6 +512,8 @@ function ProductModal({
   error: string | null;
   onClose: () => void;
   onSave: () => void;
+  onUploadImage: (file: File) => void;
+  uploadingImage: boolean;
 }) {
   const priceCents = toCents(form.price);
   const costCents = form.wholesaleCost.trim() ? toCents(form.wholesaleCost) : null;
@@ -590,14 +628,42 @@ function ProductModal({
           />
         </div>
 
+        {/* Upload de fichier (demande d'Adriel, 01/08/2026 : "dans Image (URL) est il possible
+            de passer par l'upload ?") — remplace l'ancien champ texte "Image (URL)". Même
+            garde-fou que l'upload d'image des blocs marketing (voir /admin/site) : impossible
+            tant que le produit n'a pas été enregistré une première fois, la clé de stockage
+            étant indexée par son id. */}
         <div>
-          <label className="mb-1 block text-sm font-medium">Image (URL)</label>
-          <input
-            className="input"
-            placeholder="https://..."
-            value={form.imageUrl}
-            onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
-          />
+          <label className="mb-1 block text-sm font-medium">Image</label>
+          {!form.id ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              Enregistre d&apos;abord ce produit pour pouvoir y ajouter une image.
+            </div>
+          ) : (
+            <>
+              {form.imageUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={form.imageUrl}
+                  alt=""
+                  className="mb-2 h-24 w-24 rounded-lg border border-gray-200 object-cover"
+                />
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                disabled={uploadingImage}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onUploadImage(file);
+                }}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                {form.imageUrl ? "Choisis un fichier pour remplacer l'image. " : ""}
+                {uploadingImage ? "Envoi en cours..." : "JPG, PNG ou WEBP — recadrée automatiquement en carré."}
+              </p>
+            </>
+          )}
         </div>
 
         <label className="flex items-center gap-2 text-sm">

@@ -220,6 +220,18 @@ export function buildMarketingBlockImageKey(blockId: string, slot: string = "mai
 }
 
 /**
+ * Clé de stockage de l'image d'un produit du catalogue impression plateforme (voir modèle
+ * Product, platformManaged=true) — demande d'Adriel (01/08/2026) : "dans Image (URL) est il
+ * possible de passer par l'upload ?". Même logique que buildMarketingBlockImageKey : hors de
+ * l'arborescence `studios/...` puisque ce n'est pas le contenu d'un studio mais du catalogue
+ * plateforme. Voir /api/admin/print-catalog/[id]/image (écriture) et
+ * /api/print-catalog/[id]/image (lecture publique, affichée dans toutes les galeries).
+ */
+export function buildPrintCatalogImageKey(productId: string) {
+  return `platform/print-catalog/${productId}/image.jpg`;
+}
+
+/**
  * Clé de stockage d'une pièce jointe attachée à un ClientMessage (réponse depuis le panel
  * Clients, voir POST /api/clients/[id]/messages) — `attachmentId` est généré côté serveur au
  * moment de l'upload (pas par le client), `ext` conserve l'extension d'origine du fichier
