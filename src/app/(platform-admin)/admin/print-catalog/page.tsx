@@ -147,6 +147,9 @@ export default function AdminPrintCatalogPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [uploadingImage, setUploadingImage] = useState(false);
+  // Bascule liste/grille (demande d'Adriel, 02/08/2026 : "peux tu mettres un filtre d'affichage
+  // en ligne et en grid") — même vocabulaire visuel que la page /print-selection côté client.
+  const [view, setView] = useState<"list" | "grid">("list");
 
   async function loadItems() {
     const res = await fetch("/api/admin/print-catalog");
@@ -465,11 +468,49 @@ export default function AdminPrintCatalogPage() {
             <option value="NO_SKU">Sans SKU Prodigi</option>
           </select>
         </div>
+        {/* Bascule liste/grille (demande d'Adriel, 02/08/2026 : "peux tu mettres un filtre
+            d'affichage en ligne et en grid") — la vue grille regroupe chaque produit (et, pour
+            un groupe, ses variantes) dans une carte indépendante, pratique pour comparer
+            visuellement plusieurs produits ; la vue liste reste le format compact d'origine. */}
+        <div className="ml-auto flex items-center gap-0.5 rounded-md border border-gray-200 p-0.5">
+          <button
+            type="button"
+            onClick={() => setView("list")}
+            aria-label="Vue liste"
+            title="Vue liste"
+            className={`flex h-7 w-7 items-center justify-center rounded ${
+              view === "list" ? "bg-gray-800 text-white" : "text-gray-400 hover:text-gray-700"
+            }`}
+          >
+            <IconListView />
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("grid")}
+            aria-label="Vue grille"
+            title="Vue grille"
+            className={`flex h-7 w-7 items-center justify-center rounded ${
+              view === "grid" ? "bg-gray-800 text-white" : "text-gray-400 hover:text-gray-700"
+            }`}
+          >
+            <IconGridView />
+          </button>
+        </div>
       </div>
 
-      <div className="mt-4 divide-y divide-gray-100 rounded-xl border border-gray-200">
+      <div
+        className={
+          view === "grid"
+            ? "mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
+            : "mt-4 divide-y divide-gray-100 rounded-xl border border-gray-200"
+        }
+      >
         {filtered.length === 0 && (
-          <div className="flex flex-col items-center gap-3 p-12 text-center">
+          <div
+            className={`flex flex-col items-center gap-3 p-12 text-center ${
+              view === "grid" ? "md:col-span-2 xl:col-span-3" : ""
+            }`}
+          >
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-50 text-gray-300">
               <IconPrinter />
             </div>
@@ -481,7 +522,10 @@ export default function AdminPrintCatalogPage() {
           </div>
         )}
         {filtered.map((item) => (
-          <div key={item.id}>
+          <div
+            key={item.id}
+            className={view === "grid" ? "overflow-hidden rounded-xl border border-gray-200 bg-white" : undefined}
+          >
             <CatalogRow
               item={item}
               groupDisplayPriceCents={
@@ -1150,4 +1194,28 @@ function IconRefresh() {
 
 function IconSpinner() {
   return <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />;
+}
+
+/** Icônes de la bascule liste/grille (demande d'Adriel, 02/08/2026 : "peux tu mettres un filtre
+ * d'affichage en ligne et en grid") — mêmes tracés que sur /print-selection côté client. */
+function IconListView() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M8 6h13M8 12h13M8 18h13" strokeLinecap="round" />
+      <circle cx="3.5" cy="6" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="3.5" cy="12" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="3.5" cy="18" r="1.3" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function IconGridView() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  );
 }
