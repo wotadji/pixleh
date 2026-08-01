@@ -184,3 +184,53 @@ export async function getProdigiQuote(params: {
     return { synced: false, error: e instanceof Error ? e.message : "Erreur inconnue" };
   }
 }
+
+export interface ProdigiProductDetailsResult {
+  synced: boolean;
+  /** Attributs sélectionnables du SKU, ex: {"wrap": ["Black","ImageWrap","MirrorWrap","White"]}
+   * — vide si le SKU n'en a aucun. Persisté sur Product.prodigiAttributeOptions. */
+  attributes?: Record<string, string[]>;
+  error?: string;
+}
+
+/**
+ * Interroge l'endpoint "Product Details" de Prodigi (GET /v4.0/products/{sku}) — chantier
+ * "sélection d'attribut au moment de l'achat" (02/08/2026, demande d'Adriel : "je veux
+ * construire une vraie UI de sélection d'attribut au moment de l'achat"). Contrairement à
+ * getProdigiQuote (qui ne DÉCOUVRE les attributs requis qu'en réponse à un devis raté, et n'en
+ * retient qu'UNE valeur par défaut), cet endpoint renvoie directement la liste COMPLÈTE des
+ * valeurs possibles par attribut — c'est cette liste qui alimente le sélecteur proposé au
+ * client (voir PrintSelectionPageView). Même patron de dégradation propre que getProdigiQuote :
+ * ne lève jamais, `synced: false` + `error` si la clé API manque ou si Prodigi répond en erreur.
+ */
+export async function getProdigiProductDetails(sku: string): Promise<ProdigiProductDetailsResult> {
+  const apiKey = process.env.PRODIGI_API_KEY;
+  if (!apiKey) {
+    return { synced: false, error: "PRODIGI_API_KEY non configuré" };
+  }
+
+  const baseUrl = process.env.PRODIGI_API_BASE_URL || DEFAULT_BASE_URL;
+
+  try {
+    const res = await fetch(`${baseUrl}/products/${encodeURIComponent(sku)}`, {
+      method: "GET",
+      headers: { "X-API-Key": apiKey },
+    });
+    const data = await res.json().catch(() => null);
+
+    if (res.ok && data?.outcome === "Ok" && data.product) {
+      const attributes: Record<string, string[]> =
+        data.product.attributes && typeof data.product.attributes === "object" ? data.product.attributes : {};
+      return { synced: true, attributes };
+    }
+
+    const detail = data?.error?.message || data?.message || (data?.outcome ? `outcome: ${data.outcome}` : null);
+    return {
+      synced: false,
+      error: `Prodigi a répondu ${res.status}${detail ? ` — ${detail}` : ""}`,
+    };
+  } catch (e) {
+    console.error("Échec de récupération des attributs Prodigi pour le SKU", sku, e);
+    return { synced: false, error: e instanceof Error ? e.message : "Erreur inconnue" };
+  }
+}

@@ -14,6 +14,23 @@ interface PrintCatalogItemDTO {
   imageUrl: string | null;
   active: boolean;
   wholesaleCostCents: number | null;
+  /** Attributs sélectionnables du SKU (JSON string, ex: {"wrap":["Black","White"]}) — chargés
+   * par le bouton "Resynchroniser" (voir getProdigiProductDetails). Affichés en badge
+   * informatif : c'est ce qui active le sélecteur d'attribut côté client
+   * (PrintSelectionPageView) pour ce produit. */
+  prodigiAttributeOptions: string | null;
+}
+
+/** Parse prodigiAttributeOptions en toute sécurité — utilisé aussi bien dans la liste que dans
+ * la modale d'édition. Retourne {} si absent/invalide plutôt que de faire planter le rendu. */
+function parseAttributeOptions(json: string | null): Record<string, string[]> {
+  if (!json) return {};
+  try {
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 interface FormState {
@@ -422,6 +439,21 @@ export default function AdminPrintCatalogPage() {
                     {!item.sku && (
                       <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
                         Sans SKU Prodigi
+                      </span>
+                    )}
+                    {/* Badge attributs sélectionnables (demande d'Adriel, 02/08/2026 : "je veux
+                        construire une vraie UI de sélection d'attribut au moment de l'achat")
+                        — visible dès que "Resynchroniser" a chargé au moins un attribut (ex:
+                        couleur de cadre) : c'est ce qui active le sélecteur côté client. */}
+                    {Object.keys(parseAttributeOptions(item.prodigiAttributeOptions)).length > 0 && (
+                      <span
+                        className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700"
+                        title={Object.entries(parseAttributeOptions(item.prodigiAttributeOptions))
+                          .map(([name, values]) => `${name}: ${values.join(", ")}`)
+                          .join(" · ")}
+                      >
+                        {Object.keys(parseAttributeOptions(item.prodigiAttributeOptions)).length} attribut
+                        {Object.keys(parseAttributeOptions(item.prodigiAttributeOptions)).length > 1 ? "s" : ""}
                       </span>
                     )}
                   </p>

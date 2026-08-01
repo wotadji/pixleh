@@ -714,6 +714,13 @@ model Selection {
   // qu'un service ne lui soit assigné reste dans un groupe "Non assigné" côté panneau.
   productId String?
   product   Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+  /// Choix du client parmi les prodigiAttributeOptions du produit assigné (JSON, ex:
+  /// {"wrap":"White"}) — chantier "sélection d'attribut au moment de l'achat" (02/08/2026,
+  /// demande d'Adriel). Toujours null pour un favori ou un produit sans attribut sélectionnable.
+  /// Copié tel quel sur OrderItem.attributes à la commande (voir /api/cart/checkout), qui reste
+  /// la source de vérité une fois la commande passée (cette colonne peut continuer à changer
+  /// tant que le panier n'est pas commandé).
+  selectedAttributes String? @db.Text
   createdAt DateTime      @default(now())
 
   @@unique([photoId, clientRef, type])
@@ -779,6 +786,16 @@ model Product {
   /// (src/lib/prodigiOrder.ts) pour éviter de redécouvrir/deviner ces attributs à chaque
   /// commande cliente — jamais éditable à la main, uniquement écrit par la resynchro.
   prodigiAttributes String? @db.Text
+  /// Attributs SÉLECTIONNABLES par le SKU (JSON, ex: {"wrap":["Black","ImageWrap","MirrorWrap",
+  /// "White"]}) — chantier "sélection d'attribut au moment de l'achat" (02/08/2026, demande
+  /// d'Adriel : "je veux construire une vraie UI de sélection d'attribut au moment de
+  /// l'achat"). Distinct de `prodigiAttributes` (la valeur PAR DÉFAUT, utilisée en fallback
+  /// pour toute clé que le client n'a pas explicitement choisie) : ceci est la LISTE des
+  /// valeurs possibles par attribut, renvoyée par l'endpoint Product Details de Prodigi
+  /// (GET /v4.0/products/{sku}) — voir getProdigiProductDetails dans prodigiSync.ts, rafraîchie
+  /// en même temps que le coût de revient (bouton "Resynchroniser" de /admin/print-catalog).
+  /// null/absent = SKU sans attribut sélectionnable connu (le client ne voit aucun choix).
+  prodigiAttributeOptions String? @db.Text
   galleries   Gallery[]   @relation("GalleryProducts")
   orderItems  OrderItem[]
   selections  Selection[]
@@ -849,6 +866,13 @@ model OrderItem {
   photo      Photo?  @relation(fields: [photoId], references: [id])
   quantity   Int     @default(1)
   unitPriceCents Int
+  /// Copie figée de Selection.selectedAttributes au moment de la commande (JSON, ex:
+  /// {"wrap":"White"}) — chantier "sélection d'attribut au moment de l'achat" (02/08/2026,
+  /// demande d'Adriel : "je veux construire une vraie UI de sélection d'attribut au moment de
+  /// l'achat"). Figée volontairement (pas une lecture live de Selection, qui peut ne plus
+  /// exister ou avoir changé) : c'est la valeur envoyée à Prodigi par submitProdigiOrder, en
+  /// priorité sur Product.prodigiAttributes (fallback pour toute clé absente ici).
+  attributes String? @db.Text
 
   @@index([orderId])
 }

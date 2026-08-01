@@ -27,13 +27,18 @@ export interface PrintCatalogItem {
   imageUrl: string | null;
   active: boolean;
   wholesaleCostCents: number | null;
+  /** Attributs sélectionnables du SKU (JSON string, ex: {"wrap":["Black","White"]}) — voir
+   * getProdigiProductDetails. null = aucun attribut sélectionnable connu pour ce SKU. */
+  prodigiAttributeOptions: string | null;
   createdAt: Date;
 }
 
+const SELECT_COLUMNS = `"id", "name", "description", "priceCents", "currency", "sku", "imageUrl",
+       "active", "wholesaleCostCents", "prodigiAttributeOptions", "createdAt"`;
+
 export async function listPrintCatalog(): Promise<PrintCatalogItem[]> {
   return prisma.$queryRaw<PrintCatalogItem[]>`
-    SELECT "id", "name", "description", "priceCents", "currency", "sku", "imageUrl", "active",
-           "wholesaleCostCents", "createdAt"
+    SELECT ${Prisma.raw(SELECT_COLUMNS)}
     FROM "Product"
     WHERE "platformManaged" = true
     ORDER BY "createdAt" DESC
@@ -43,8 +48,7 @@ export async function listPrintCatalog(): Promise<PrintCatalogItem[]> {
 /** Uniquement les lignes actives — utilisé par le parcours d'achat client (galerie publique). */
 export async function getActivePrintCatalog(): Promise<PrintCatalogItem[]> {
   return prisma.$queryRaw<PrintCatalogItem[]>`
-    SELECT "id", "name", "description", "priceCents", "currency", "sku", "imageUrl", "active",
-           "wholesaleCostCents", "createdAt"
+    SELECT ${Prisma.raw(SELECT_COLUMNS)}
     FROM "Product"
     WHERE "platformManaged" = true AND "active" = true
   `;
@@ -55,8 +59,7 @@ export async function getActivePrintCatalog(): Promise<PrintCatalogItem[]> {
 export async function getActivePrintCatalogItemsByIds(ids: string[]): Promise<PrintCatalogItem[]> {
   if (ids.length === 0) return [];
   return prisma.$queryRaw<PrintCatalogItem[]>`
-    SELECT "id", "name", "description", "priceCents", "currency", "sku", "imageUrl", "active",
-           "wholesaleCostCents", "createdAt"
+    SELECT ${Prisma.raw(SELECT_COLUMNS)}
     FROM "Product"
     WHERE "platformManaged" = true AND "active" = true AND "id" IN (${Prisma.join(ids)})
   `;
@@ -64,8 +67,7 @@ export async function getActivePrintCatalogItemsByIds(ids: string[]): Promise<Pr
 
 export async function getPrintCatalogItem(id: string): Promise<PrintCatalogItem | null> {
   const [row] = await prisma.$queryRaw<PrintCatalogItem[]>`
-    SELECT "id", "name", "description", "priceCents", "currency", "sku", "imageUrl", "active",
-           "wholesaleCostCents", "createdAt"
+    SELECT ${Prisma.raw(SELECT_COLUMNS)}
     FROM "Product"
     WHERE "id" = ${id} AND "platformManaged" = true
   `;
@@ -114,6 +116,7 @@ export async function updatePrintCatalogItem(
     imageUrl: string | null;
     active: boolean;
     wholesaleCostCents: number | null;
+    prodigiAttributeOptions: string | null;
   }>
 ): Promise<PrintCatalogItem | null> {
   const existing = await getPrintCatalogItem(id);
@@ -129,7 +132,8 @@ export async function updatePrintCatalogItem(
         "sku" = ${merged.sku},
         "imageUrl" = ${merged.imageUrl},
         "active" = ${merged.active},
-        "wholesaleCostCents" = ${merged.wholesaleCostCents}
+        "wholesaleCostCents" = ${merged.wholesaleCostCents},
+        "prodigiAttributeOptions" = ${merged.prodigiAttributeOptions}
     WHERE "id" = ${id} AND "platformManaged" = true
   `;
   return getPrintCatalogItem(id);
