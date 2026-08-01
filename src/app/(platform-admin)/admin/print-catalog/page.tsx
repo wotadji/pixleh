@@ -543,6 +543,7 @@ export default function AdminPrintCatalogPage() {
         onUploadImage={uploadImage}
         onRemoveImage={removeImage}
         uploadingImage={uploadingImage}
+        groups={items.filter((i) => i.isProductGroup)}
       />
     </div>
   );
@@ -753,6 +754,7 @@ function ProductModal({
   onUploadImage,
   onRemoveImage,
   uploadingImage,
+  groups,
 }: {
   open: boolean;
   form: FormState;
@@ -764,6 +766,11 @@ function ProductModal({
   onUploadImage: (file: File) => void;
   onRemoveImage: () => void;
   uploadingImage: boolean;
+  /** Groupes existants (isProductGroup=true) proposables pour rattacher ce produit comme
+   * variante — chantier "groupe de produits" (02/08/2026, demande d'Adriel : "dans l'ajout d'un
+   * produit depuis le navbar [...] je veux que tu ajoutes un champs choisir un groupe de
+   * produit"). */
+  groups: PrintCatalogItemDTO[];
 }) {
   const priceCents = toCents(form.price);
   const costCents = form.wholesaleCost.trim() ? toCents(form.wholesaleCost) : null;
@@ -907,6 +914,32 @@ function ProductModal({
               value={form.sku}
               onChange={(e) => setForm({ ...form, sku: e.target.value })}
             />
+          </div>
+        )}
+
+        {/* Rattachement à un groupe (demande d'Adriel, 02/08/2026 : "dans l'ajout d'un produit
+            depuis le navbar [...] je veux que tu ajoutes un champs choisir un groupe de
+            produit") — un groupe ne peut pas être rattaché à un autre groupe (masqué si
+            form.isProductGroup), et n'a de sens que s'il existe déjà au moins un groupe créé. */}
+        {!form.isProductGroup && groups.length > 0 && (
+          <div>
+            <label className="mb-1 block text-sm font-medium">Groupe de produit</label>
+            <select
+              className="input"
+              value={form.groupId ?? ""}
+              onChange={(e) => setForm({ ...form, groupId: e.target.value || null })}
+            >
+              <option value="">Aucun — produit autonome</option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-xs text-gray-500">
+              Rattache ce produit à un groupe existant pour le proposer comme une taille/variante
+              au moment de l&apos;achat, plutôt que comme un produit indépendant dans le sélecteur.
+            </p>
           </div>
         )}
 
