@@ -323,8 +323,16 @@ export default function AdminPrintCatalogPage() {
 
   const stats = useMemo(() => {
     if (!items) return null;
-    const active = items.filter((i) => i.active);
-    const withMargin = items.filter((i) => i.wholesaleCostCents != null);
+    // Un GROUPE (isProductGroup=true) n'est pas un produit vendable — c'est un conteneur (voir
+    // schema.prisma). Les compter dans "Produits actifs" est trompeur (demande d'Adriel,
+    // 02/08/2026 : "je pense que c'est 9/9 groupe de produit(s) [...] il faut creer un bloc pour
+    // produit") : on distingue désormais les GROUPES des vrais PRODUITS vendables (autonomes +
+    // variantes de groupe), avec une pastille dédiée pour chacun.
+    const groups = items.filter((i) => i.isProductGroup);
+    const products = items.filter((i) => !i.isProductGroup);
+    const activeGroups = groups.filter((i) => i.active);
+    const activeProducts = products.filter((i) => i.active);
+    const withMargin = products.filter((i) => i.wholesaleCostCents != null);
     const avgMarginPct =
       withMargin.length > 0
         ? withMargin.reduce(
@@ -332,13 +340,16 @@ export default function AdminPrintCatalogPage() {
             0
           ) / withMargin.length
         : null;
-    const avgPrice = items.length > 0 ? items.reduce((sum, i) => sum + i.priceCents, 0) / items.length : 0;
-    // Un groupe n'a jamais de SKU propre par construction (voir isProductGroup) — l'exclure du
-    // décompte "Sans SKU Prodigi", qui ne doit signaler que de vrais oublis.
-    const noSku = items.filter((i) => !i.sku && !i.isProductGroup).length;
+    // Moyenne calculée uniquement sur les vrais produits vendables : le priceCents d'un groupe
+    // n'est qu'un placeholder (toujours 0, jamais affiché au client, voir isProductGroup) qui
+    // fausserait la moyenne s'il était inclus.
+    const avgPrice = products.length > 0 ? products.reduce((sum, i) => sum + i.priceCents, 0) / products.length : 0;
+    const noSku = products.filter((i) => !i.sku).length;
     return {
-      total: items.length,
-      active: active.length,
+      groupsTotal: groups.length,
+      groupsActive: activeGroups.length,
+      productsTotal: products.length,
+      productsActive: activeProducts.length,
       avgPrice,
       avgMarginPct,
       noSku,
@@ -414,8 +425,9 @@ export default function AdminPrintCatalogPage() {
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Produits actifs" value={`${stats.active} / ${stats.total}`} />
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <StatCard label="Groupes actifs" value={`${stats.groupsActive} / ${stats.groupsTotal}`} />
+        <StatCard label="Produits actifs" value={`${stats.productsActive} / ${stats.productsTotal}`} />
         <StatCard label="Prix de vente moyen" value={formatMoney(stats.avgPrice)} />
         <StatCard
           label="Marge moyenne"
