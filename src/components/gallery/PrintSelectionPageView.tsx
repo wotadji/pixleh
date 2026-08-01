@@ -448,6 +448,14 @@ export function PrintSelectionPageView({
   // doc de Product.isProductGroup), donc ce choix ne peut pas passer par AttributeSelectionModal.
   const [variantPrompt, setVariantPrompt] = useState<{ ids: string[]; group: PrintProductDTO } | null>(null);
 
+  // Aperçu en lecture seule des tailles/SKU d'un groupe (demande d'Adriel, 01/08/2026 : "j'ai
+  // ajouté les produits dans un groupe, sauf que j'ai pas la possibilité de voir les produits.
+  // peux tu mettre un bouton et avec un modal on peux lister les produits du groupe ?") —
+  // distinct de variantPrompt : celui-ci s'ouvre depuis le catalogue en haut de page, AVANT
+  // toute sélection de photo, juste pour consulter ce que propose un groupe (image, nom,
+  // description, prix de chaque taille), sans assigner quoi que ce soit.
+  const [previewGroup, setPreviewGroup] = useState<PrintProductDTO | null>(null);
+
   // Une fois la variante (taille/SKU réel) choisie, on enchaîne sur le choix d'attribut si cette
   // variante en a (ex: une toile 12x16 qui propose aussi la couleur de bordure), sinon on assigne
   // directement — c'est TOUJOURS l'id de la variante, jamais celui du groupe, qui finit dans
@@ -656,6 +664,21 @@ export function PrintSelectionPageView({
                   )}
                   <span className="ml-1 text-xs font-normal text-gray-400">/ photo</span>
                 </p>
+                {/* Bouton "voir les produits du groupe" (demande d'Adriel, 01/08/2026 : "j'ai
+                    ajouté les produits dans un groupe, sauf que j'ai pas la possibilité de voir
+                    les produits [...] mettre un bouton et avec un modal on peux lister les
+                    produits du groupe") — aperçu en lecture seule, indépendant de l'assignation
+                    d'une photo (voir previewGroup/GroupProductsPreviewModal plus bas). */}
+                {p.variants && p.variants.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewGroup(p)}
+                    className="mt-1 flex items-center justify-center gap-1 rounded-md border border-gray-200 py-1 text-xs font-medium text-gray-600 hover:border-brand-300 hover:bg-brand-50/50 hover:text-brand-700"
+                  >
+                    <IconEye />
+                    Voir les {p.variants.length} produit{p.variants.length > 1 ? "s" : ""}
+                  </button>
+                )}
               </div>
               ))}
             </div>
@@ -1254,6 +1277,12 @@ export function PrintSelectionPageView({
           onConfirm={(variant) => chooseVariant(variantPrompt.ids, variant)}
         />
       )}
+
+      {/* Aperçu en lecture seule des tailles/SKU d'un groupe, ouvert depuis le catalogue en haut
+          de page (voir bouton "Voir les X produits" ci-dessus) — demande d'Adriel, 01/08/2026. */}
+      {previewGroup && (
+        <GroupProductsPreviewModal group={previewGroup} onClose={() => setPreviewGroup(null)} />
+      )}
     </div>
   );
 }
@@ -1403,6 +1432,90 @@ function VariantSelectionModal({
         <div className="mt-5 flex justify-end">
           <button type="button" className="btn-secondary text-sm" onClick={onCancel}>
             Annuler
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Aperçu en LECTURE SEULE des tailles/SKU d'un groupe — demande d'Adriel (01/08/2026) : "j'ai
+ * ajouté les produits dans un groupe, sauf que j'ai pas la possibilité de voir les produits.
+ * peux tu mettre un bouton et avec un modal on peux lister les produits du groupe ?". Ouvert
+ * depuis le bouton "Voir les X produits" du catalogue en haut de page (voir previewGroup),
+ * AVANT toute sélection de photo — contrairement à VariantSelectionModal (ci-dessus), qui sert à
+ * CHOISIR une taille pour l'assigner, celui-ci se contente de lister image/nom/description/prix
+ * de chaque variante, sans action d'assignation.
+ */
+function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO; onClose: () => void }) {
+  const variants = group.variants ?? [];
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 px-4"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-xl bg-white p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Produits du groupe ${group.name}`}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">{group.name}</h3>
+            <p className="mt-0.5 text-xs text-gray-500">
+              {variants.length} produit{variants.length > 1 ? "s" : ""} disponible{variants.length > 1 ? "s" : ""} dans ce
+              groupe.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fermer"
+            className="shrink-0 text-gray-400 hover:text-gray-700"
+          >
+            <IconClose />
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-2.5">
+          {variants.map((variant) => (
+            <div
+              key={variant.id}
+              className="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-2.5"
+            >
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-gray-50">
+                {variant.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={variant.imageUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-gray-300">
+                    <IconPrinterEmpty />
+                  </span>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-gray-900">{variant.name}</p>
+                {variant.description && (
+                  <p className="truncate text-xs text-gray-500">{variant.description}</p>
+                )}
+              </div>
+              <span className="shrink-0 text-sm font-semibold text-gray-800">
+                {formatMoney(variant.priceCents, variant.currency)}
+              </span>
+            </div>
+          ))}
+          {variants.length === 0 && (
+            <p className="text-sm text-gray-400">Aucun produit disponible dans ce groupe pour le moment.</p>
+          )}
+        </div>
+
+        <div className="mt-5 flex justify-end">
+          <button type="button" className="btn-secondary text-sm" onClick={onClose}>
+            Fermer
           </button>
         </div>
       </div>
@@ -1578,6 +1691,16 @@ function IconPrinterEmpty() {
       <path d="M6 9V4h12v5" strokeLinecap="round" strokeLinejoin="round" />
       <rect x="4" y="9" width="16" height="8" rx="1.5" />
       <path d="M6 14h12v6H6z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Icône "œil" — bouton "Voir les produits du groupe" (demande d'Adriel, 01/08/2026). */
+function IconEye() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12Z" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="3" />
     </svg>
   );
 }
