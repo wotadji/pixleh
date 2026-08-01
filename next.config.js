@@ -18,7 +18,12 @@ const CSP = [
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
-  "connect-src 'self' https://api.stripe.com",
+  // api-adresse.data.gouv.fr : autocomplétion d'adresse (Base Adresse Nationale, voir
+  // PrintSelectionPageView.tsx) appelée directement depuis le navigateur — sans cette entrée,
+  // le CSP bloque silencieusement le fetch() (aucune erreur visible hors console), ce qui
+  // rendait l'autocomplétion inopérante malgré un code correct (bug remonté par Adriel le
+  // 01/08/2026 : "l'autocompletion ne fonctionne pas").
+  "connect-src 'self' https://api.stripe.com https://api-adresse.data.gouv.fr",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 
 interface PhotoDTO {
   id: string;
@@ -129,6 +130,20 @@ export function PrintSelectionPageView({
   const [view, setView] = useState<"list" | "grid">("list");
   const [assignTarget, setAssignTarget] = useState(printProducts[0]?.id || "");
   const [zoomIndex, setZoomIndex] = useState<number | null>(null);
+  // Groupes repliés (accordéon par service, demande d'Adriel du 01/08/2026 : "a chaque
+  // assignation mettre un accordeon avec les images assigné au produits") — clé = id produit,
+  // ou "unassigned" pour les photos sans service. Ouverts par défaut : un groupe ne se replie
+  // que si le visiteur clique dessus, jamais automatiquement.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  function toggleGroup(key: string) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   const [customer, setCustomer] = useState({ name: "", email: "" });
   const [shipping, setShipping] = useState({
@@ -359,20 +374,23 @@ export function PrintSelectionPageView({
                     <div className="flex flex-wrap items-center gap-2">
                       {printProducts.length > 0 && (
                         <div className="flex items-center gap-1.5">
-                          <select
-                            value={assignTarget}
-                            onChange={(e) => setAssignTarget(e.target.value)}
-                            className="input h-7 rounded border-gray-200 py-0 text-xs"
-                          >
-                            {printProducts.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name}
-                              </option>
-                            ))}
-                          </select>
+                          {/* Ancien <select> natif remplacé par SearchableSelect (déjà utilisé
+                              ailleurs dans l'app) — demande d'Adriel (01/08/2026) : "la liste des
+                              produits ne sont pas bien dans la liste (mettre une bare de
+                              recherche au dessus de <li>)", le <select> natif s'affichait mal
+                              avec le style compact précédent. */}
+                          <div className="w-44">
+                            <SearchableSelect
+                              value={assignTarget}
+                              onChange={setAssignTarget}
+                              options={printProducts.map((p) => ({ value: p.id, label: p.name }))}
+                              placeholder="Choisir un produit"
+                              searchPlaceholder="Rechercher un produit..."
+                            />
+                          </div>
                           <button
                             onClick={handleBulkAssign}
-                            className="text-xs font-medium uppercase tracking-wide text-gray-600 hover:text-gray-900"
+                            className="shrink-0 text-xs font-medium uppercase tracking-wide text-gray-600 hover:text-gray-900"
                           >
                             Assigner ({validChecked.size})
                           </button>
@@ -411,86 +429,101 @@ export function PrintSelectionPageView({
                 </div>
               </div>
 
-              <div className="space-y-6 px-5 py-4">
-                {groups.map((g) => (
-                  <div key={g.product?.id ?? "unassigned"}>
-                    <div className="mb-2 flex items-center justify-between">
-                      <h3
-                        className={`text-xs font-semibold uppercase tracking-wide ${
-                          g.product ? "text-gray-700" : "text-amber-700"
-                        }`}
+              <div className="divide-y divide-gray-100 px-2 py-2">
+                {groups.map((g) => {
+                  const key = g.product?.id ?? "unassigned";
+                  const isOpen = !collapsedGroups.has(key);
+                  return (
+                    <div key={key} className="py-2">
+                      {/* Accordéon par service (demande d'Adriel, 01/08/2026 : "a chaque
+                          assignation mettre un accordeon avec les images assigné au produits")
+                          — replié/déplié indépendamment des autres groupes, ouvert par défaut. */}
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(key)}
+                        className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left hover:bg-gray-50"
                       >
-                        {g.product ? g.product.name : "Service non assigné"}
-                      </h3>
-                      <span className="text-xs text-gray-400">
-                        {g.photos.length} photo{g.photos.length > 1 ? "s" : ""}
-                        {g.product ? ` · ${formatMoney(g.product.priceCents * g.photos.length, g.product.currency)}` : ""}
-                      </span>
-                    </div>
+                        <span className="flex items-center gap-2">
+                          <IconChevronDown className={`shrink-0 text-gray-400 transition-transform ${isOpen ? "" : "-rotate-90"}`} />
+                          <h3
+                            className={`text-xs font-semibold uppercase tracking-wide ${
+                              g.product ? "text-gray-700" : "text-amber-700"
+                            }`}
+                          >
+                            {g.product ? g.product.name : "Service non assigné"}
+                          </h3>
+                        </span>
+                        <span className="shrink-0 text-xs text-gray-400">
+                          {g.photos.length} photo{g.photos.length > 1 ? "s" : ""}
+                          {g.product ? ` · ${formatMoney(g.product.priceCents * g.photos.length, g.product.currency)}` : ""}
+                        </span>
+                      </button>
 
-                    {view === "list" ? (
-                      <ul className="divide-y divide-gray-100">
-                        {g.photos.map((p) => (
-                          <li key={p.id} className="flex items-center gap-3 py-2.5">
-                            <input
-                              type="checkbox"
-                              checked={validChecked.has(p.id)}
-                              onChange={() => toggleOne(p.id)}
-                              className="h-4 w-4 shrink-0 accent-gray-800"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setZoomIndex(flatOrder.findIndex((x) => x.id === p.id))}
-                              className="shrink-0"
-                              aria-label="Agrandir"
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={p.thumbUrl}
-                                alt={p.filename}
-                                className="h-12 w-12 cursor-zoom-in rounded object-cover"
-                              />
-                            </button>
-                            <span className="flex-1" />
-                            <button
-                              onClick={() => removeOne(p.id)}
-                              className="shrink-0 text-xs uppercase tracking-wide text-gray-400 hover:text-gray-700"
-                            >
-                              Retirer
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
-                        {g.photos.map((p) => (
-                          <div key={p.id} className="group relative aspect-square overflow-hidden rounded bg-gray-50">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={p.thumbUrl}
-                              alt={p.filename}
-                              onClick={() => setZoomIndex(flatOrder.findIndex((x) => x.id === p.id))}
-                              className="h-full w-full cursor-zoom-in object-cover"
-                            />
-                            <input
-                              type="checkbox"
-                              checked={validChecked.has(p.id)}
-                              onChange={() => toggleOne(p.id)}
-                              className="absolute left-1 top-1 h-3.5 w-3.5 accent-gray-800"
-                            />
-                            <button
-                              onClick={() => removeOne(p.id)}
-                              aria-label="Retirer"
-                              className="absolute right-1 top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white group-hover:flex"
-                            >
-                              <IconClose />
-                            </button>
+                      {isOpen &&
+                        (view === "list" ? (
+                          <ul className="divide-y divide-gray-100 px-3">
+                            {g.photos.map((p) => (
+                              <li key={p.id} className="flex items-center gap-3 py-2.5">
+                                <input
+                                  type="checkbox"
+                                  checked={validChecked.has(p.id)}
+                                  onChange={() => toggleOne(p.id)}
+                                  className="h-4 w-4 shrink-0 accent-gray-800"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setZoomIndex(flatOrder.findIndex((x) => x.id === p.id))}
+                                  className="shrink-0"
+                                  aria-label="Agrandir"
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={p.thumbUrl}
+                                    alt={p.filename}
+                                    className="h-12 w-12 cursor-zoom-in rounded object-cover"
+                                  />
+                                </button>
+                                <span className="flex-1" />
+                                <button
+                                  onClick={() => removeOne(p.id)}
+                                  className="shrink-0 text-xs uppercase tracking-wide text-gray-400 hover:text-gray-700"
+                                >
+                                  Retirer
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="grid grid-cols-4 gap-1.5 px-3 pt-2 sm:grid-cols-6">
+                            {g.photos.map((p) => (
+                              <div key={p.id} className="group relative aspect-square overflow-hidden rounded bg-gray-50">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={p.thumbUrl}
+                                  alt={p.filename}
+                                  onClick={() => setZoomIndex(flatOrder.findIndex((x) => x.id === p.id))}
+                                  className="h-full w-full cursor-zoom-in object-cover"
+                                />
+                                <input
+                                  type="checkbox"
+                                  checked={validChecked.has(p.id)}
+                                  onChange={() => toggleOne(p.id)}
+                                  className="absolute left-1 top-1 h-3.5 w-3.5 accent-gray-800"
+                                />
+                                <button
+                                  onClick={() => removeOne(p.id)}
+                                  aria-label="Retirer"
+                                  className="absolute right-1 top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white group-hover:flex"
+                                >
+                                  <IconClose />
+                                </button>
+                              </div>
+                            ))}
                           </div>
                         ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -733,6 +766,14 @@ function IconArrowLeft() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M19 12H5M11 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconChevronDown({ className = "" }: { className?: string }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+      <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
