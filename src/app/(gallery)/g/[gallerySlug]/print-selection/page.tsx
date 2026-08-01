@@ -1,4 +1,5 @@
 import { redirect, notFound } from "next/navigation";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getStudioSession } from "@/lib/access";
 import { getGallerySession } from "@/lib/gallery-session";
@@ -6,6 +7,30 @@ import { getActivePrintCatalog } from "@/lib/printCatalog";
 import { PrintSelectionPageView } from "@/components/gallery/PrintSelectionPageView";
 
 export const dynamic = "force-dynamic";
+
+/** Parse un champ JSON stocké en texte, sans jamais planter le rendu de la page sur une valeur
+ * absente/invalide (null, chaîne vide, JSON malformé...). */
+function parseJsonRecord<T extends object>(json: string | null | undefined, fallback: T): T {
+  if (!json) return fallback;
+  try {
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === "object" ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Comme parseJsonRecord, mais retourne null (pas {}) sur absence/erreur — pour
+ * Selection.selectedAttributes, où "aucune valeur" doit rester distinct de "objet vide". */
+function parseSelectedAttributes(json: string | null | undefined): Record<string, string> | null {
+  if (!json) return null;
+  try {
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Page dédiée "Sélection impression" — chantier du 01/08/2026, demande d'Adriel : "quand on
@@ -52,6 +77,18 @@ export default async function PrintSelectionPage({ params }: { params: { gallery
     : [];
   const productByPhotoId = new Map(printSelections.map((s) => [s.photoId, s.productId]));
 
+  // Selection.selectedAttributes n'existe pas encore dans le Prisma Client généré du sandbox
+  // (tâche #254) — chantier "sélection d'attribut au moment de l'achat" (02/08/2026, demande
+  // d'Adriel : "je veux construire une vraie UI de sélection d'attribut au moment de l'achat"),
+  // lu séparément via $queryRaw, même workaround que le reste du catalogue impression.
+  const attributeRows = printSelections.length
+    ? await prisma.$queryRaw<Array<{ photoId: string; selectedAttributes: string | null }>>`
+        SELECT "photoId", "selectedAttributes" FROM "Selection"
+        WHERE "id" IN (${Prisma.join(printSelections.map((s) => s.id))})
+      `
+    : [];
+  const attributesByPhotoId = new Map(attributeRows.map((r) => [r.photoId, r.selectedAttributes]));
+
   const printProducts = await getActivePrintCatalog();
 
   return (
@@ -67,6 +104,7 @@ export default async function PrintSelectionPage({ params }: { params: { gallery
         thumbUrl: `/api/files/studios/${gallery.studioId}/galleries/${gallery.id}/${p.id}/thumb.jpg?v=${p.updatedAt.getTime()}`,
         previewUrl: `/api/files/studios/${gallery.studioId}/galleries/${gallery.id}/${p.id}/preview.jpg?v=${p.updatedAt.getTime()}`,
         productId: productByPhotoId.get(p.id) ?? null,
+        selectedAttributes: parseSelectedAttributes(attributesByPhotoId.get(p.id)),
       }))}
       printProducts={printProducts.map((p) => ({
         id: p.id,
@@ -75,6 +113,7 @@ export default async function PrintSelectionPage({ params }: { params: { gallery
         priceCents: p.priceCents,
         currency: p.currency,
         imageUrl: p.imageUrl,
+        attributeOptions: parseJsonRecord<Record<string, string[]>>(p.prodigiAttributeOptions, {}),
       }))}
     />
   );

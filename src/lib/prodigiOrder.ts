@@ -80,6 +80,21 @@ export async function submitProdigiOrder(orderId: string): Promise<SubmitProdigi
   >`SELECT "id", "sku", "platformManaged", "prodigiAttributes" FROM "Product" WHERE "id" IN (${Prisma.join(productIds)})`;
   const productMap = new Map(products.map((p) => [p.id, p]));
 
+  // OrderItem.attributes (choix du client au moment de l'achat) n'existe pas encore dans le
+  // Prisma Client généré du sandbox (tâche #254) — chantier "sélection d'attribut au moment de
+  // l'achat" (02/08/2026, demande d'Adriel : "je veux construire une vraie UI de sélection
+  // d'attribut au moment de l'achat"), lu séparément via $queryRaw, même workaround que le reste
+  // du catalogue impression. Prioritaire sur Product.prodigiAttributes (valeur par défaut fixe)
+  // pour toute clé choisie par le client ; les attributs non proposés au choix restent sur leur
+  // valeur par défaut du produit.
+  const orderItemIds = order.items.map((i) => i.id);
+  const itemAttributeRows = orderItemIds.length
+    ? await prisma.$queryRaw<Array<{ id: string; attributes: string | null }>>`
+        SELECT "id", "attributes" FROM "OrderItem" WHERE "id" IN (${Prisma.join(orderItemIds)})
+      `
+    : [];
+  const itemAttributesMap = new Map(itemAttributeRows.map((r) => [r.id, r.attributes]));
+
   // Seuls les articles du catalogue plateforme (platformManaged=true) sont un service pixleh
   // via Prodigi — un téléchargement numérique/album/package du studio n'a rien à faire ici.
   const prodigiItems: ProdigiLineItem[] = [];
@@ -98,6 +113,20 @@ export async function submitProdigiOrder(orderId: string): Promise<SubmitProdigi
         attributes = JSON.parse(product.prodigiAttributes);
       } catch {
         attributes = {};
+      }
+    }
+    // Le choix du client (OrderItem.attributes) écrase la valeur par défaut du produit pour
+    // toute clé qu'il a effectivement choisie — les clés absentes du choix client gardent leur
+    // valeur par défaut ci-dessus (ex: un SKU à 2 attributs dont un seul proposé au choix).
+    const chosenJson = itemAttributesMap.get(item.id);
+    if (chosenJson) {
+      try {
+        const chosen = JSON.parse(chosenJson);
+        if (chosen && typeof chosen === "object") {
+          attributes = { ...attributes, ...chosen };
+        }
+      } catch {
+        // JSON invalide : on garde la valeur par défaut du produit, pas d'échec de la commande.
       }
     }
     prodigiItems.push({

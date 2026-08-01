@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { checkGalleryOrGuestAccess } from "@/lib/access";
 
@@ -49,11 +50,20 @@ export async function POST(req: Request) {
  * `productId: null` désassigne les photos (demande d'Adriel, 01/08/2026 : "je veux la
  * possibilité pour une image assigné de le rendre non-assigné") — remet le lot dans le groupe
  * "Service non assigné" plutôt que de forcer un choix parmi les produits existants.
+ *
+ * `attributes` (objet ou null) — chantier "sélection d'attribut au moment de l'achat"
+ * (02/08/2026, demande d'Adriel : "je veux construire une vraie UI de sélection d'attribut au
+ * moment de l'achat") : le choix du client (ex: {"wrap":"White"}) pour le produit assigné,
+ * recueilli par AttributeSelectionModal avant d'appeler cette route. Écrit via $executeRaw
+ * (colonne Selection.selectedAttributes pas encore dans le Prisma Client généré du sandbox,
+ * tâche #254, même workaround que le reste du catalogue impression) au lieu de
+ * prisma.selection.updateMany, qui ne connaît pas cette colonne.
  */
 export async function PATCH(req: Request) {
-  const { galleryId, photoIds, productId } = await req.json();
+  const { galleryId, photoIds, productId, attributes } = await req.json();
   const validProductId = productId === null || typeof productId === "string";
-  if (!galleryId || !Array.isArray(photoIds) || photoIds.length === 0 || !validProductId) {
+  const validAttributes = attributes === undefined || attributes === null || typeof attributes === "object";
+  if (!galleryId || !Array.isArray(photoIds) || photoIds.length === 0 || !validProductId || !validAttributes) {
     return NextResponse.json({ error: "Paramètres manquants" }, { status: 400 });
   }
 
@@ -64,10 +74,13 @@ export async function PATCH(req: Request) {
   if (!access.granted) return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
 
   const clientRef = access.clientRef || "anonymous";
-  await prisma.selection.updateMany({
-    where: { galleryId, clientRef, type: "PRINT", photoId: { in: photoIds } },
-    data: { productId },
-  });
+  const attributesJson = attributes && Object.keys(attributes).length > 0 ? JSON.stringify(attributes) : null;
+  await prisma.$executeRaw`
+    UPDATE "Selection"
+    SET "productId" = ${productId}, "selectedAttributes" = ${attributesJson}
+    WHERE "galleryId" = ${galleryId} AND "clientRef" = ${clientRef} AND "type" = 'PRINT'
+      AND "photoId" IN (${Prisma.join(photoIds)})
+  `;
 
   return NextResponse.json({ ok: true });
 }

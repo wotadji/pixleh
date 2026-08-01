@@ -9,6 +9,11 @@ interface CartItem {
   productId: string;
   quantity: number;
   photoId?: string | null;
+  /** Attributs Prodigi choisis par le client pour cet article (ex: {"wrap":"White"}) — chantier
+   * "sélection d'attribut au moment de l'achat" (02/08/2026, demande d'Adriel : "je veux
+   * construire une vraie UI de sélection d'attribut au moment de l'achat"). Optionnel : absent
+   * ou vide pour un article dont le produit n'a aucun attribut sélectionnable. */
+  attributes?: Record<string, string> | null;
 }
 
 /**
@@ -90,6 +95,25 @@ export async function POST(req: Request) {
       },
     },
   });
+
+  // Persiste les attributs Prodigi choisis par le client (ex: {"wrap":"White"}) — chantier
+  // "sélection d'attribut au moment de l'achat" (02/08/2026, demande d'Adriel). OrderItem.
+  // attributes n'existe pas encore dans le Prisma Client généré du sandbox (tâche #254), donc
+  // pas incluse dans le `create` typé ci-dessus — on retrouve les OrderItem tout juste créés
+  // (un par article du panier, matché par photoId+productId) et on les met à jour via
+  // $executeRaw, même workaround que le reste du catalogue impression.
+  const itemsWithAttributes = items.filter((item) => item.attributes && Object.keys(item.attributes).length > 0);
+  if (itemsWithAttributes.length > 0) {
+    const createdItems = await prisma.orderItem.findMany({
+      where: { orderId: order.id },
+      select: { id: true, photoId: true, productId: true },
+    });
+    for (const item of itemsWithAttributes) {
+      const match = createdItems.find((ci) => ci.photoId === item.photoId && ci.productId === item.productId);
+      if (!match) continue;
+      await prisma.$executeRaw`UPDATE "OrderItem" SET "attributes" = ${JSON.stringify(item.attributes)} WHERE "id" = ${match.id}`;
+    }
+  }
 
   try {
     const stripe = getStripe();

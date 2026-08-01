@@ -10,6 +10,11 @@ interface PhotoDTO {
   thumbUrl: string;
   previewUrl: string;
   productId: string | null;
+  /** Options Prodigi choisies par le client pour CETTE photo (ex: {"wrap":"White"}) — chantier
+   * "sélection d'attribut au moment de l'achat" (02/08/2026, demande d'Adriel : "je veux
+   * construire une vraie UI de sélection d'attribut au moment de l'achat"). null si le produit
+   * assigné n'a aucun attribut sélectionnable, ou si aucun choix n'a encore été fait. */
+  selectedAttributes: Record<string, string> | null;
 }
 
 interface PrintProductDTO {
@@ -19,6 +24,29 @@ interface PrintProductDTO {
   priceCents: number;
   currency: string;
   imageUrl: string | null;
+  /** Attributs sélectionnables pour ce produit (ex: {"wrap": ["Black","White",...]}) — chargés
+   * côté admin via "Resynchroniser" (voir getProdigiProductDetails). Objet vide = aucun
+   * attribut : le produit s'assigne directement, sans étape de choix intermédiaire. */
+  attributeOptions: Record<string, string[]>;
+}
+
+/** Libellés FR des noms d'attributs Prodigi les plus courants (voir doc Product Details) —
+ * dégrade proprement sur le nom brut (mis en forme) pour tout attribut moins fréquent. */
+const ATTRIBUTE_LABELS: Record<string, string> = {
+  wrap: "Bordure de la toile",
+  colour: "Couleur",
+  color: "Couleur",
+  frame: "Cadre",
+  mount: "Passe-partout",
+  mountColour: "Couleur du passe-partout",
+  finish: "Finition",
+  glaze: "Verre",
+  paperType: "Type de papier",
+  substrateWeight: "Grammage",
+};
+
+function attributeLabel(name: string) {
+  return ATTRIBUTE_LABELS[name] || name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, " $1");
 }
 
 interface ProductGroup {
@@ -329,9 +357,15 @@ export function PrintSelectionPageView({
   // possibilité pour une image assigné de le rendre non-assigné") — les deux sélecteurs
   // proposent une option "Non assigné" en tête de liste (voir emptyOptionLabel) qui appelle
   // cette fonction avec null plutôt que de forcer un choix parmi les produits existants.
-  async function applyProductToPhotos(ids: string[], productId: string | null) {
+  async function applyProductToPhotos(
+    ids: string[],
+    productId: string | null,
+    attributes?: Record<string, string> | null
+  ) {
     if (ids.length === 0) return;
-    setPhotos((prev) => prev.map((p) => (ids.includes(p.id) ? { ...p, productId } : p)));
+    setPhotos((prev) =>
+      prev.map((p) => (ids.includes(p.id) ? { ...p, productId, selectedAttributes: attributes ?? null } : p))
+    );
     setChecked((prev) => {
       const next = new Set(prev);
       ids.forEach((id) => next.delete(id));
@@ -350,16 +384,42 @@ export function PrintSelectionPageView({
     await fetch("/api/selections", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ galleryId, photoIds: ids, productId }),
+      body: JSON.stringify({ galleryId, photoIds: ids, productId, attributes: attributes ?? null }),
     });
+  }
+
+  // Sélection d'attribut Prodigi au moment de l'achat (chantier 02/08/2026, demande d'Adriel :
+  // "je veux construire une vraie UI de sélection d'attribut au moment de l'achat") — quand le
+  // produit choisi a des options (ex: couleur de cadre), on n'assigne PAS tout de suite : on
+  // ouvre d'abord AttributeSelectionModal pour recueillir le choix, qui appelle lui-même
+  // applyProductToPhotos une fois validé. Un produit sans attribut (attributeOptions vide)
+  // s'assigne toujours immédiatement, comme avant.
+  const [attributePrompt, setAttributePrompt] = useState<{
+    ids: string[];
+    product: PrintProductDTO;
+    initial?: Record<string, string>;
+  } | null>(null);
+
+  function promptOrApply(ids: string[], value: string, initial?: Record<string, string>) {
+    if (value === "") {
+      applyProductToPhotos(ids, null, null);
+      return;
+    }
+    const product = printProducts.find((p) => p.id === value);
+    if (product && Object.keys(product.attributeOptions).length > 0) {
+      setAttributePrompt({ ids, product, initial });
+      return;
+    }
+    applyProductToPhotos(ids, value, null);
   }
 
   // Choisir un produit dans le sélecteur de la barre d'action assigne IMMÉDIATEMENT les photos
   // cochées à ce produit (demande d'Adriel, 01/08/2026 : "quand je choisis un produit et quand on
   // selectionne une ou plusieurs photo, je veux que le choix d'un produit cree un accordeon et
-  // assigne les photos au produit"). `value === ""` correspond à l'option "Non assigné".
+  // assigne les photos au produit") — SAUF si ce produit a des attributs sélectionnables, auquel
+  // cas promptOrApply ouvre d'abord le sélecteur d'options. `value === ""` = "Non assigné".
   async function assignToProduct(value: string) {
-    await applyProductToPhotos([...validChecked], value === "" ? null : value);
+    promptOrApply([...validChecked], value);
   }
 
   // Réassigne TOUTES les photos d'un groupe (pas seulement celles cochées) — sélecteur intégré
@@ -367,7 +427,7 @@ export function PrintSelectionPageView({
   // groupe de 90 photos déjà assignées vers un autre produit ne doit pas obliger à toutes les
   // décocher/recocher une par une). `value === ""` correspond à l'option "Non assigné".
   async function reassignGroup(ids: string[], value: string) {
-    await applyProductToPhotos(ids, value === "" ? null : value);
+    promptOrApply(ids, value);
   }
 
   async function handleOrder() {
@@ -392,7 +452,15 @@ export function PrintSelectionPageView({
       setError("Merci de renseigner votre adresse de livraison complète, téléphone inclus.");
       return;
     }
-    const items = photos.map((p) => ({ productId: p.productId as string, quantity: 1, photoId: p.id }));
+    // attributes transmis au panier — chantier "sélection d'attribut au moment de l'achat"
+    // (02/08/2026, demande d'Adriel), propagé jusqu'à OrderItem.attributes par /api/cart/checkout
+    // puis lu en priorité par submitProdigiOrder (voir src/lib/prodigiOrder.ts).
+    const items = photos.map((p) => ({
+      productId: p.productId as string,
+      quantity: 1,
+      photoId: p.id,
+      attributes: p.selectedAttributes,
+    }));
     setLoading(true);
     const res = await fetch("/api/cart/checkout", {
       method: "POST",
@@ -607,6 +675,21 @@ export function PrintSelectionPageView({
                   const revealedCount = revealedGroups[key] ?? GROUP_PAGE_SIZE;
                   const visiblePhotos = g.photos.slice(0, revealedCount);
                   const hasMore = g.photos.length > visiblePhotos.length;
+                  // Sélection d'attribut Prodigi (chantier 02/08/2026, demande d'Adriel : "je
+                  // veux construire une vraie UI de sélection d'attribut au moment de l'achat")
+                  // — un groupe dont le produit a des options affiche un bouton pour les
+                  // (re)choisir pour TOUT le groupe. "Uniforme" = toutes les photos du groupe
+                  // partagent le même choix (cas normal, un groupe = un lot assigné ensemble) ;
+                  // sinon (mélange possible via des ajustements photo par photo futurs) on
+                  // n'affiche pas de résumé trompeur, juste "Options".
+                  const groupAttributeOptions = g.product?.attributeOptions ?? {};
+                  const hasAttributeOptions = Object.keys(groupAttributeOptions).length > 0;
+                  const groupAttributesSample = g.photos[0]?.selectedAttributes ?? null;
+                  const groupAttributesUniform =
+                    hasAttributeOptions &&
+                    g.photos.every(
+                      (p) => JSON.stringify(p.selectedAttributes) === JSON.stringify(groupAttributesSample)
+                    );
                   return (
                     <div key={key} className="py-2">
                       {/* Accordéon par service (demande d'Adriel, 01/08/2026 : "a chaque
@@ -700,6 +783,28 @@ export function PrintSelectionPageView({
                               />
                             </div>
                           </div>
+                        )}
+                        {/* Choisir/modifier les attributs Prodigi du groupe (couleur de cadre,
+                            bordure de toile...) — visible dès que le produit assigné a des
+                            options (voir attributeOptions), même après assignation initiale, le
+                            client peut revenir changer son choix. */}
+                        {hasAttributeOptions && g.product && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setAttributePrompt({
+                                ids: groupIds,
+                                product: g.product!,
+                                initial: groupAttributesUniform ? (groupAttributesSample ?? undefined) : undefined,
+                              })
+                            }
+                            title="Choisir les options (couleur, cadre...) de ce groupe"
+                            className="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200"
+                          >
+                            {groupAttributesUniform && groupAttributesSample
+                              ? Object.values(groupAttributesSample).join(" · ")
+                              : "Choisir les options"}
+                          </button>
                         )}
                       </div>
 
@@ -1013,6 +1118,103 @@ export function PrintSelectionPageView({
           onClose={() => setZoomIndex(null)}
         />
       )}
+
+      {/* Sélection d'attribut Prodigi au moment de l'achat (chantier 02/08/2026, demande
+          d'Adriel : "je veux construire une vraie UI de sélection d'attribut au moment de
+          l'achat") — s'ouvre avant d'assigner un produit qui a des options (couleur de cadre,
+          bordure de toile...), ou pour modifier le choix d'un groupe déjà assigné. */}
+      {attributePrompt && (
+        <AttributeSelectionModal
+          product={attributePrompt.product}
+          count={attributePrompt.ids.length}
+          initial={attributePrompt.initial}
+          onCancel={() => setAttributePrompt(null)}
+          onConfirm={(values) => {
+            applyProductToPhotos(attributePrompt.ids, attributePrompt.product.id, values);
+            setAttributePrompt(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Modale de sélection d'attribut(s) Prodigi (couleur de cadre, bordure de toile, finition...) —
+ * chantier 02/08/2026, demande d'Adriel : "je veux construire une vraie UI de sélection
+ * d'attribut au moment de l'achat". Un menu déroulant par attribut du produit (product.
+ * attributeOptions), pré-rempli avec le choix déjà fait pour ce groupe (`initial`) si disponible
+ * et toujours valide, sinon la première valeur proposée par Prodigi.
+ */
+function AttributeSelectionModal({
+  product,
+  count,
+  initial,
+  onCancel,
+  onConfirm,
+}: {
+  product: PrintProductDTO;
+  count: number;
+  initial?: Record<string, string>;
+  onCancel: () => void;
+  onConfirm: (values: Record<string, string>) => void;
+}) {
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const v: Record<string, string> = {};
+    for (const [name, options] of Object.entries(product.attributeOptions)) {
+      v[name] = initial?.[name] && options.includes(initial[name]) ? initial[name] : options[0];
+    }
+    return v;
+  });
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 px-4"
+      onClick={onCancel}
+      role="presentation"
+    >
+      <div
+        className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Options pour ${product.name}`}
+      >
+        <h3 className="text-sm font-semibold text-gray-900">Options — {product.name}</h3>
+        <p className="mt-1 text-xs text-gray-500">
+          Choisissez les options avant d&apos;assigner {count > 1 ? `ces ${count} photos` : "cette photo"}.
+        </p>
+
+        <div className="mt-4 space-y-3">
+          {Object.entries(product.attributeOptions).map(([name, options]) => (
+            <div key={name}>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+                {attributeLabel(name)}
+              </label>
+              <select
+                className="input"
+                value={values[name]}
+                onChange={(e) => setValues((v) => ({ ...v, [name]: e.target.value }))}
+              >
+                {options.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" className="btn-secondary text-sm" onClick={onCancel}>
+            Annuler
+          </button>
+          <button type="button" className="btn-primary text-sm" onClick={() => onConfirm(values)}>
+            Valider
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
