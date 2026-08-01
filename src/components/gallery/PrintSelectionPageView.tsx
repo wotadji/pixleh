@@ -247,15 +247,29 @@ export function PrintSelectionPageView({
     );
   }
 
-  async function handleBulkAssign() {
-    if (!assignTarget) return;
+  // Choisir un produit dans le sélecteur assigne IMMÉDIATEMENT les photos cochées à ce
+  // produit (demande d'Adriel, 01/08/2026 : "quand je choisis un produit et quand on
+  // selectionne une ou plusieurs photo, je veux que le choix d'un produit cree un accordeon et
+  // assigne les photos au produit, comme ca le client peux choissir plusieurs produit a partie
+  // des photos selectionné") — plus besoin d'un clic "Assigner" séparé après avoir choisi le
+  // produit. Reçoit `productId` en paramètre (plutôt que de relire `assignTarget`) pour éviter
+  // tout décalage avec le state React pas encore mis à jour au moment de l'appel.
+  async function assignToProduct(productId: string) {
+    if (!productId || validChecked.size === 0) return;
     const ids = [...validChecked];
-    setPhotos((prev) => prev.map((p) => (ids.includes(p.id) ? { ...p, productId: assignTarget } : p)));
+    setPhotos((prev) => prev.map((p) => (ids.includes(p.id) ? { ...p, productId } : p)));
     setChecked(new Set());
+    // Ouvre (ou garde ouvert) l'accordéon du produit choisi, pour que le visiteur voie
+    // immédiatement ses photos rejoindre ce groupe plutôt que de devoir le déplier lui-même.
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      next.delete(productId);
+      return next;
+    });
     await fetch("/api/selections", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ galleryId, photoIds: ids, productId: assignTarget }),
+      body: JSON.stringify({ galleryId, photoIds: ids, productId }),
     });
   }
 
@@ -377,23 +391,23 @@ export function PrintSelectionPageView({
                           {/* Ancien <select> natif remplacé par SearchableSelect (déjà utilisé
                               ailleurs dans l'app) — demande d'Adriel (01/08/2026) : "la liste des
                               produits ne sont pas bien dans la liste (mettre une bare de
-                              recherche au dessus de <li>)", le <select> natif s'affichait mal
-                              avec le style compact précédent. */}
+                              recherche au dessus de <li>)". Choisir un produit ici assigne
+                              IMMÉDIATEMENT les photos cochées (voir assignToProduct) — plus de
+                              bouton "Assigner" séparé, demande du même jour : "le choix d'un
+                              produit cree un accordeon et assigne les photos au produit". */}
+                          <span className="shrink-0 text-xs text-gray-500">Assigner à :</span>
                           <div className="w-44">
                             <SearchableSelect
                               value={assignTarget}
-                              onChange={setAssignTarget}
+                              onChange={(value) => {
+                                setAssignTarget(value);
+                                assignToProduct(value);
+                              }}
                               options={printProducts.map((p) => ({ value: p.id, label: p.name }))}
                               placeholder="Choisir un produit"
                               searchPlaceholder="Rechercher un produit..."
                             />
                           </div>
-                          <button
-                            onClick={handleBulkAssign}
-                            className="shrink-0 text-xs font-medium uppercase tracking-wide text-gray-600 hover:text-gray-900"
-                          >
-                            Assigner ({validChecked.size})
-                          </button>
                         </div>
                       )}
                       <button
