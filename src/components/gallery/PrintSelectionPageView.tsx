@@ -101,6 +101,19 @@ function formatMoney(cents: number, currency: string) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency }).format(cents / 100);
 }
 
+// Nombre de photos affichées par groupe avant le bouton "Afficher plus" (chantier 01/08/2026,
+// demande d'Adriel : sélections à 200 photos, il faut éviter de tout charger d'un coup —
+// "avec le design que nous avons cela ne sera pas pratique a utiliser"). Un groupe de 90 photos
+// n'affiche donc que les 24 premières au départ, ce qui garde la page rapide à parcourir tout en
+// laissant le total exact visible dans l'en-tête du groupe.
+const GROUP_PAGE_SIZE = 24;
+
+function matchesSearch(photo: PhotoDTO, query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return photo.filename.toLowerCase().includes(q);
+}
+
 /**
  * Page dédiée "Sélection impression" (chantier 01/08/2026, demande d'Adriel — voir la page
  * serveur pour le contexte complet). Remplace l'ancienne modale PrintSelectionPanel par une
@@ -136,6 +149,18 @@ export function PrintSelectionPageView({
   // que si le visiteur clique dessus, jamais automatiquement.
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
+  // Filtre + recherche (chantier 01/08/2026, gestion de sélections à 200 photos, demande
+  // d'Adriel : "le design ne sera pas pratique a utiliser") — permettent de sauter directement
+  // aux photos qui restent à traiter plutôt que de parcourir toute la liste. N'affectent que
+  // l'affichage (displayGroups) : le récapitulatif de prix et le contrôle avant commande restent
+  // basés sur la sélection complète (groups, plus bas).
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterMode, setFilterMode] = useState<"all" | "unassigned">("all");
+  // Nombre de photos révélées par groupe (pagination, voir GROUP_PAGE_SIZE) — clé = id produit ou
+  // "unassigned", valeur = combien de photos du groupe sont affichées. Absent de la map tant que
+  // le visiteur n'a pas cliqué "Afficher plus" : on retombe alors sur GROUP_PAGE_SIZE.
+  const [revealedGroups, setRevealedGroups] = useState<Record<string, number>>({});
+
   function toggleGroup(key: string) {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
@@ -143,6 +168,10 @@ export function PrintSelectionPageView({
       else next.add(key);
       return next;
     });
+  }
+
+  function revealGroup(key: string, total: number) {
+    setRevealedGroups((prev) => ({ ...prev, [key]: total }));
   }
 
   const [customer, setCustomer] = useState({ name: "", email: "" });
@@ -203,15 +232,30 @@ export function PrintSelectionPageView({
   }
 
   const validChecked = new Set([...checked].filter((id) => photos.some((p) => p.id === id)));
-  const allChecked = photos.length > 0 && validChecked.size === photos.length;
   const someChecked = validChecked.size > 0;
 
+  // Groupes calculés sur la sélection COMPLÈTE (jamais filtrée) : le récapitulatif de prix, le
+  // total et le contrôle avant commande doivent toujours porter sur toutes les photos, même si le
+  // visiteur a filtré/recherché pour naviguer plus facilement dans une grosse sélection.
   const groups = groupByProduct(photos, printProducts);
   const unassignedPhotos = groups.find((g) => g.product === null)?.photos ?? [];
   const hasUnassigned = unassignedPhotos.length > 0;
   const flatOrder = groups.flatMap((g) => g.photos);
   const totalCents = groups.reduce((sum, g) => sum + (g.product ? g.product.priceCents * g.photos.length : 0), 0);
   const currency = printProducts[0]?.currency || "EUR";
+  const assignedCount = photos.filter((p) => p.productId).length;
+
+  // Filtre + recherche (voir state plus haut) : n'affectent que ce qui est affiché/sélectionnable
+  // via "Tout sélectionner", jamais le récapitulatif ni la commande.
+  const filteredPhotos = photos.filter((p) => {
+    if (filterMode === "unassigned" && p.productId) return false;
+    return matchesSearch(p, searchQuery);
+  });
+  const displayGroups = groupByProduct(filteredPhotos, printProducts);
+  const filteredIds = filteredPhotos.map((p) => p.id);
+  const filteredCheckedCount = filteredIds.filter((id) => validChecked.has(id)).length;
+  const allFilteredChecked = filteredIds.length > 0 && filteredCheckedCount === filteredIds.length;
+  const someFilteredChecked = filteredCheckedCount > 0;
 
   function toggleOne(photoId: string) {
     setChecked((prev) => {
@@ -222,8 +266,28 @@ export function PrintSelectionPageView({
     });
   }
 
+  // "Tout sélectionner" ne porte que sur les photos actuellement affichées (filtre/recherche
+  // appliqués) — merge avec le reste de la sélection au lieu de l'écraser, pour ne pas perdre des
+  // photos cochées en dehors du filtre courant.
   function toggleAll() {
-    setChecked(allChecked ? new Set() : new Set(photos.map((p) => p.id)));
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (allFilteredChecked) filteredIds.forEach((id) => next.delete(id));
+      else filteredIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+
+  // Sélectionne/désélectionne toutes les photos d'un groupe en un clic (chantier 01/08/2026,
+  // sélections à 200 photos : cocher une par une un groupe de 90 photos n'est pas praticable).
+  function toggleGroupCheck(ids: string[]) {
+    const allOn = ids.every((id) => validChecked.has(id));
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (allOn) ids.forEach((id) => next.delete(id));
+      else ids.forEach((id) => next.add(id));
+      return next;
+    });
   }
 
   async function removeOne(photoId: string) {
@@ -247,18 +311,18 @@ export function PrintSelectionPageView({
     );
   }
 
-  // Choisir un produit dans le sélecteur assigne IMMÉDIATEMENT les photos cochées à ce
-  // produit (demande d'Adriel, 01/08/2026 : "quand je choisis un produit et quand on
-  // selectionne une ou plusieurs photo, je veux que le choix d'un produit cree un accordeon et
-  // assigne les photos au produit, comme ca le client peux choissir plusieurs produit a partie
-  // des photos selectionné") — plus besoin d'un clic "Assigner" séparé après avoir choisi le
-  // produit. Reçoit `productId` en paramètre (plutôt que de relire `assignTarget`) pour éviter
-  // tout décalage avec le state React pas encore mis à jour au moment de l'appel.
-  async function assignToProduct(productId: string) {
-    if (!productId || validChecked.size === 0) return;
-    const ids = [...validChecked];
+  // Logique d'assignation partagée entre "Assigner à" (photos cochées, barre d'action) et
+  // "Réassigner à" (toutes les photos d'un groupe en un clic, en-tête d'accordéon) — voir
+  // assignToProduct et reassignGroup ci-dessous. Reçoit `ids` en paramètre plutôt que de relire
+  // un state React pour éviter tout décalage avec une mise à jour pas encore appliquée.
+  async function applyProductToPhotos(ids: string[], productId: string) {
+    if (!productId || ids.length === 0) return;
     setPhotos((prev) => prev.map((p) => (ids.includes(p.id) ? { ...p, productId } : p)));
-    setChecked(new Set());
+    setChecked((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.delete(id));
+      return next;
+    });
     // Ouvre (ou garde ouvert) l'accordéon du produit choisi, pour que le visiteur voie
     // immédiatement ses photos rejoindre ce groupe plutôt que de devoir le déplier lui-même.
     setCollapsedGroups((prev) => {
@@ -271,6 +335,22 @@ export function PrintSelectionPageView({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ galleryId, photoIds: ids, productId }),
     });
+  }
+
+  // Choisir un produit dans le sélecteur de la barre d'action assigne IMMÉDIATEMENT les photos
+  // cochées à ce produit (demande d'Adriel, 01/08/2026 : "quand je choisis un produit et quand on
+  // selectionne une ou plusieurs photo, je veux que le choix d'un produit cree un accordeon et
+  // assigne les photos au produit").
+  async function assignToProduct(productId: string) {
+    await applyProductToPhotos([...validChecked], productId);
+  }
+
+  // Réassigne TOUTES les photos d'un groupe (pas seulement celles cochées) — sélecteur intégré
+  // à l'en-tête de chaque accordéon (chantier 01/08/2026, sélections à 200 photos : déplacer un
+  // groupe de 90 photos déjà assignées vers un autre produit ne doit pas obliger à toutes les
+  // décocher/recocher une par une).
+  async function reassignGroup(ids: string[], productId: string) {
+    await applyProductToPhotos(ids, productId);
   }
 
   async function handleOrder() {
@@ -346,9 +426,22 @@ export function PrintSelectionPageView({
       </div>
 
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-        <h1 className="text-xl font-semibold text-gray-900">
-          Sélection impression{photos.length > 0 ? ` (${photos.length})` : ""}
-        </h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-xl font-semibold text-gray-900">
+            Sélection impression{photos.length > 0 ? ` (${photos.length})` : ""}
+          </h1>
+          {/* Indicateur de progression (chantier 01/08/2026, sélections à 200 photos) — permet de
+              voir en un coup d'œil où on en est sans dérouler toute la liste. */}
+          {photos.length > 0 && (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                assignedCount === photos.length ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-600"
+              }`}
+            >
+              {assignedCount} / {photos.length} assignées
+            </span>
+          )}
+        </div>
         <p className="mt-1 text-sm text-gray-500">
           Vérifiez vos tirages, indiquez vos coordonnées et votre adresse de livraison pour commander.
         </p>
@@ -367,116 +460,169 @@ export function PrintSelectionPageView({
             </Link>
           </div>
         ) : (
-          <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_380px] lg:items-start">
+          <div className={`mt-6 grid gap-6 lg:grid-cols-[1fr_380px] lg:items-start ${someChecked ? "pb-16" : ""}`}>
             {/* Colonne principale : photos regroupées par service, actions groupées, zoom. */}
             <div className="rounded-xl border border-gray-200 bg-white">
+              {/* Recherche + filtres rapides (chantier 01/08/2026, sélections à 200 photos,
+                  demande d'Adriel : "le design ne sera pas pratique a utiliser") — permettent de
+                  sauter directement aux photos qui restent à traiter plutôt que de tout parcourir. */}
+              <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-5 py-3">
+                <div className="relative min-w-[180px] flex-1">
+                  <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Rechercher une photo (nom de fichier)"
+                    className="input py-1.5 pl-8 text-xs"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setFilterMode("all")}
+                    className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                      filterMode === "all" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    Toutes ({photos.length})
+                  </button>
+                  {unassignedPhotos.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setFilterMode("unassigned")}
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                        filterMode === "unassigned"
+                          ? "bg-gray-800 text-white"
+                          : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                      }`}
+                    >
+                      Non assignées ({unassignedPhotos.length})
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-5 py-3">
                 <label className="flex items-center gap-2 text-xs text-gray-500">
                   <input
                     type="checkbox"
-                    checked={allChecked}
+                    checked={allFilteredChecked}
                     ref={(el) => {
-                      if (el) el.indeterminate = someChecked && !allChecked;
+                      if (el) el.indeterminate = someFilteredChecked && !allFilteredChecked;
                     }}
                     onChange={toggleAll}
                     className="h-4 w-4 accent-gray-800"
                   />
-                  Tout sélectionner
+                  Tout sélectionner{filterMode !== "all" || searchQuery ? " (filtré)" : ""}
                 </label>
-                <div className="flex items-center gap-3">
-                  {someChecked && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      {printProducts.length > 0 && (
-                        <div className="flex items-center gap-1.5">
-                          {/* Ancien <select> natif remplacé par SearchableSelect (déjà utilisé
-                              ailleurs dans l'app) — demande d'Adriel (01/08/2026) : "la liste des
-                              produits ne sont pas bien dans la liste (mettre une bare de
-                              recherche au dessus de <li>)". Choisir un produit ici assigne
-                              IMMÉDIATEMENT les photos cochées (voir assignToProduct) — plus de
-                              bouton "Assigner" séparé, demande du même jour : "le choix d'un
-                              produit cree un accordeon et assigne les photos au produit". */}
-                          <span className="shrink-0 text-xs text-gray-500">Assigner à :</span>
-                          <div className="w-44">
-                            <SearchableSelect
-                              value={assignTarget}
-                              onChange={(value) => {
-                                setAssignTarget(value);
-                                assignToProduct(value);
-                              }}
-                              options={printProducts.map((p) => ({ value: p.id, label: p.name }))}
-                              placeholder="Choisir un produit"
-                              searchPlaceholder="Rechercher un produit..."
-                            />
-                          </div>
-                        </div>
-                      )}
-                      <button
-                        onClick={handleBulkDelete}
-                        className="text-xs font-medium uppercase tracking-wide text-red-600 hover:text-red-800"
-                      >
-                        Supprimer ({validChecked.size})
-                      </button>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-0.5 rounded-md border border-gray-200 p-0.5">
-                    <button
-                      type="button"
-                      onClick={() => setView("list")}
-                      aria-label="Vue liste"
-                      className={`flex h-6 w-6 items-center justify-center rounded ${
-                        view === "list" ? "bg-gray-800 text-white" : "text-gray-400 hover:text-gray-700"
-                      }`}
-                    >
-                      <IconListView />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setView("grid")}
-                      aria-label="Vue grille"
-                      className={`flex h-6 w-6 items-center justify-center rounded ${
-                        view === "grid" ? "bg-gray-800 text-white" : "text-gray-400 hover:text-gray-700"
-                      }`}
-                    >
-                      <IconGridView />
-                    </button>
-                  </div>
+                <div className="flex items-center gap-0.5 rounded-md border border-gray-200 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setView("list")}
+                    aria-label="Vue liste"
+                    className={`flex h-6 w-6 items-center justify-center rounded ${
+                      view === "list" ? "bg-gray-800 text-white" : "text-gray-400 hover:text-gray-700"
+                    }`}
+                  >
+                    <IconListView />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setView("grid")}
+                    aria-label="Vue grille"
+                    className={`flex h-6 w-6 items-center justify-center rounded ${
+                      view === "grid" ? "bg-gray-800 text-white" : "text-gray-400 hover:text-gray-700"
+                    }`}
+                  >
+                    <IconGridView />
+                  </button>
                 </div>
               </div>
 
+              {displayGroups.length === 0 && (
+                <p className="px-5 py-8 text-center text-sm text-gray-400">Aucune photo ne correspond à ce filtre.</p>
+              )}
+
               <div className="divide-y divide-gray-100 px-2 py-2">
-                {groups.map((g) => {
+                {displayGroups.map((g) => {
                   const key = g.product?.id ?? "unassigned";
                   const isOpen = !collapsedGroups.has(key);
+                  const groupIds = g.photos.map((p) => p.id);
+                  const groupCheckedCount = groupIds.filter((id) => validChecked.has(id)).length;
+                  const groupAllChecked = groupIds.length > 0 && groupCheckedCount === groupIds.length;
+                  const groupSomeChecked = groupCheckedCount > 0 && !groupAllChecked;
+                  const revealedCount = revealedGroups[key] ?? GROUP_PAGE_SIZE;
+                  const visiblePhotos = g.photos.slice(0, revealedCount);
+                  const hasMore = g.photos.length > visiblePhotos.length;
                   return (
                     <div key={key} className="py-2">
                       {/* Accordéon par service (demande d'Adriel, 01/08/2026 : "a chaque
                           assignation mettre un accordeon avec les images assigné au produits")
                           — replié/déplié indépendamment des autres groupes, ouvert par défaut. */}
-                      <button
-                        type="button"
-                        onClick={() => toggleGroup(key)}
-                        className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left hover:bg-gray-50"
-                      >
-                        <span className="flex items-center gap-2">
-                          <IconChevronDown className={`shrink-0 text-gray-400 transition-transform ${isOpen ? "" : "-rotate-90"}`} />
-                          <h3
-                            className={`text-xs font-semibold uppercase tracking-wide ${
-                              g.product ? "text-gray-700" : "text-amber-700"
-                            }`}
-                          >
-                            {g.product ? g.product.name : "Service non assigné"}
-                          </h3>
-                        </span>
-                        <span className="shrink-0 text-xs text-gray-400">
-                          {g.photos.length} photo{g.photos.length > 1 ? "s" : ""}
-                          {g.product ? ` · ${formatMoney(g.product.priceCents * g.photos.length, g.product.currency)}` : ""}
-                        </span>
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+                        {/* Case du groupe (chantier 01/08/2026, sélections à 200 photos, demande
+                            d'Adriel : "avec le design que nous avons cela ne sera pas pratique a
+                            utiliser") — sélectionne/désélectionne les photos DU GROUPE ENTIER
+                            (pas seulement celles affichées si une pagination est active), pour ne
+                            pas avoir à cocher 90 photos une par une. */}
+                        <input
+                          type="checkbox"
+                          aria-label={`Sélectionner tout le groupe ${g.product ? g.product.name : "non assigné"}`}
+                          checked={groupAllChecked}
+                          ref={(el) => {
+                            if (el) el.indeterminate = groupSomeChecked;
+                          }}
+                          onChange={() => toggleGroupCheck(groupIds)}
+                          className="h-4 w-4 shrink-0 accent-gray-800"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(key)}
+                          className="flex flex-1 items-center justify-between gap-2 rounded-md py-1 text-left hover:bg-gray-50"
+                        >
+                          <span className="flex items-center gap-2">
+                            <IconChevronDown className={`shrink-0 text-gray-400 transition-transform ${isOpen ? "" : "-rotate-90"}`} />
+                            <h3
+                              className={`text-xs font-semibold uppercase tracking-wide ${
+                                g.product ? "text-gray-700" : "text-amber-700"
+                              }`}
+                            >
+                              {g.product ? g.product.name : "Service non assigné"}
+                            </h3>
+                          </span>
+                          <span className="shrink-0 text-xs text-gray-400">
+                            {g.photos.length} photo{g.photos.length > 1 ? "s" : ""}
+                            {g.product ? ` · ${formatMoney(g.product.priceCents * g.photos.length, g.product.currency)}` : ""}
+                          </span>
+                        </button>
+                        {/* Réassigne TOUT le groupe (voir reassignGroup) sans avoir à cocher les
+                            photos au préalable — le sélecteur revient au placeholder après chaque
+                            usage, c'est une action ponctuelle plutôt qu'une valeur mémorisée. */}
+                        {printProducts.length > 0 && (
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <span className="hidden text-xs text-gray-400 sm:inline">
+                              {g.product ? "Réassigner à" : "Assigner à"}
+                            </span>
+                            <div className="w-40">
+                              <SearchableSelect
+                                value=""
+                                onChange={(value) => reassignGroup(groupIds, value)}
+                                options={printProducts
+                                  .filter((p) => p.id !== g.product?.id)
+                                  .map((p) => ({ value: p.id, label: p.name }))}
+                                placeholder="Choisir..."
+                                searchPlaceholder="Rechercher un produit..."
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
 
                       {isOpen &&
                         (view === "list" ? (
                           <ul className="divide-y divide-gray-100 px-3">
-                            {g.photos.map((p) => (
+                            {visiblePhotos.map((p) => (
                               <li key={p.id} className="flex items-center gap-3 py-2.5">
                                 <input
                                   type="checkbox"
@@ -494,6 +640,7 @@ export function PrintSelectionPageView({
                                   <img
                                     src={p.thumbUrl}
                                     alt={p.filename}
+                                    loading="lazy"
                                     className="h-12 w-12 cursor-zoom-in rounded object-cover"
                                   />
                                 </button>
@@ -509,12 +656,13 @@ export function PrintSelectionPageView({
                           </ul>
                         ) : (
                           <div className="grid grid-cols-4 gap-1.5 px-3 pt-2 sm:grid-cols-6">
-                            {g.photos.map((p) => (
+                            {visiblePhotos.map((p) => (
                               <div key={p.id} className="group relative aspect-square overflow-hidden rounded bg-gray-50">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                   src={p.thumbUrl}
                                   alt={p.filename}
+                                  loading="lazy"
                                   onClick={() => setZoomIndex(flatOrder.findIndex((x) => x.id === p.id))}
                                   className="h-full w-full cursor-zoom-in object-cover"
                                 />
@@ -535,6 +683,20 @@ export function PrintSelectionPageView({
                             ))}
                           </div>
                         ))}
+
+                      {/* Pagination par groupe (chantier 01/08/2026, sélections à 200 photos,
+                          demande d'Adriel : "cela ne sera pas pratique a utiliser") — n'affiche
+                          que GROUP_PAGE_SIZE photos au départ pour garder la page rapide et
+                          scannable, quel que soit le nombre réel de photos du groupe. */}
+                      {isOpen && hasMore && (
+                        <button
+                          type="button"
+                          onClick={() => revealGroup(key, g.photos.length)}
+                          className="mx-3 mt-2 rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                        >
+                          Afficher les {g.photos.length - visiblePhotos.length} photos restantes
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -558,7 +720,8 @@ export function PrintSelectionPageView({
                         <IconAlert className="mt-0.5 shrink-0 text-amber-500" />
                         <p>
                           {unassignedPhotos.length} photo{unassignedPhotos.length > 1 ? "s" : ""} sans service assigné —
-                          sélectionnez-les puis choisissez &laquo;&nbsp;Assigner&nbsp;&raquo; ci-dessus.
+                          filtrez sur &laquo;&nbsp;Non assignées&nbsp;&raquo; pour les retrouver, puis cochez-les ou
+                          choisissez un produit directement dans l&apos;en-tête du groupe.
                         </p>
                       </div>
                     )}
@@ -694,6 +857,51 @@ export function PrintSelectionPageView({
         )}
       </div>
 
+      {/* Barre d'action persistante (chantier 01/08/2026, sélections à 200 photos, demande
+          d'Adriel : "avec le design que nous avons cela ne sera pas pratique a utiliser") — fixée
+          en bas de l'écran dès qu'au moins une photo est cochée, pour ne plus avoir à remonter en
+          haut de page après avoir coché des photos loin dans une grosse sélection. */}
+      {someChecked && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
+            <span className="text-sm font-medium text-gray-800">
+              {validChecked.size} photo{validChecked.size > 1 ? "s" : ""} sélectionnée{validChecked.size > 1 ? "s" : ""}
+            </span>
+            <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
+              {printProducts.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="hidden text-xs text-gray-500 sm:inline">Assigner à :</span>
+                  <div className="w-44">
+                    <SearchableSelect
+                      value={assignTarget}
+                      onChange={(value) => {
+                        setAssignTarget(value);
+                        assignToProduct(value);
+                      }}
+                      options={printProducts.map((p) => ({ value: p.id, label: p.name }))}
+                      placeholder="Choisir un produit"
+                      searchPlaceholder="Rechercher un produit..."
+                    />
+                  </div>
+                </div>
+              )}
+              <button
+                onClick={handleBulkDelete}
+                className="text-xs font-medium uppercase tracking-wide text-red-600 hover:text-red-800"
+              >
+                Supprimer ({validChecked.size})
+              </button>
+              <button
+                onClick={() => setChecked(new Set())}
+                className="text-xs font-medium uppercase tracking-wide text-gray-500 hover:text-gray-700"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {zoomIndex !== null && flatOrder[zoomIndex] && (
         <PrintZoomModal
           photos={flatOrder}
@@ -780,6 +988,15 @@ function IconArrowLeft() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M19 12H5M11 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconSearch({ className = "" }: { className?: string }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" strokeLinecap="round" />
     </svg>
   );
 }
