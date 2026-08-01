@@ -597,21 +597,38 @@ export function PrintSelectionPageView({
                         </button>
                         {/* Réassigne TOUT le groupe (voir reassignGroup) sans avoir à cocher les
                             photos au préalable — le sélecteur revient au placeholder après chaque
-                            usage, c'est une action ponctuelle plutôt qu'une valeur mémorisée. */}
+                            usage, c'est une action ponctuelle plutôt qu'une valeur mémorisée.
+                            Désactivé en cas de sélection PARTIELLE du groupe (bug remonté par
+                            Adriel, 01/08/2026 : coché 3 photos sur 14 puis utilisé ce sélecteur —
+                            les 14 ont été déplacées, pas seulement les 3 cochées, car ce contrôle
+                            porte volontairement sur le groupe entier, pas sur la sélection). Sans
+                            ce garde-fou, rien ne distingue visuellement "déplacer tout le groupe"
+                            de "déplacer les photos cochées" alors que ce sont deux actions
+                            différentes assises l'une à côté de l'autre. Avec une sélection
+                            partielle, le visiteur doit soit utiliser "Assigner à" en bas de page
+                            (les photos cochées uniquement), soit cocher tout le groupe d'abord. */}
                         {printProducts.length > 0 && (
                           <div className="flex shrink-0 items-center gap-1.5">
                             <span className="hidden text-xs text-gray-400 sm:inline">
                               {g.product ? "Réassigner à" : "Assigner à"}
                             </span>
-                            <div className="w-40">
+                            <div
+                              className="w-40"
+                              title={
+                                groupSomeChecked
+                                  ? "Sélection partielle dans ce groupe : utilisez \"Assigner à\" en bas de page pour ne déplacer que les photos cochées, ou cochez tout le groupe pour le déplacer en entier."
+                                  : undefined
+                              }
+                            >
                               <SearchableSelect
                                 value=""
                                 onChange={(value) => reassignGroup(groupIds, value)}
                                 options={printProducts
                                   .filter((p) => p.id !== g.product?.id)
                                   .map((p) => ({ value: p.id, label: p.name }))}
-                                placeholder="Choisir..."
+                                placeholder={groupSomeChecked ? "Sélection partielle" : "Choisir..."}
                                 searchPlaceholder="Rechercher un produit..."
+                                disabled={groupSomeChecked}
                               />
                             </div>
                           </div>
