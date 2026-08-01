@@ -37,6 +37,7 @@ export async function POST(req: Request) {
     }
 
     const item = await createPrintCatalogItem({
+      id: parsed.data.id,
       name: parsed.data.name,
       description: parsed.data.description ?? null,
       priceCents: parsed.data.priceCents,

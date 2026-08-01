@@ -73,6 +73,12 @@ export async function getPrintCatalogItem(id: string): Promise<PrintCatalogItem 
 }
 
 export async function createPrintCatalogItem(data: {
+  /** Id explicite, généré côté client (voir printCatalogItemSchema) — permet d'uploader
+   * l'image du produit avant sa création (POST /api/admin/print-catalog/[id]/image accepte un
+   * id qui n'existe pas encore en base), en donnant au produit fraîchement créé le MÊME id que
+   * celui déjà utilisé comme clé de stockage de l'image. Génère un id serveur par défaut si
+   * absent, pour rester compatible avec tout appelant qui n'en fournit pas. */
+  id?: string;
   name: string;
   description: string | null;
   priceCents: number;
@@ -82,7 +88,7 @@ export async function createPrintCatalogItem(data: {
   active: boolean;
   wholesaleCostCents: number | null;
 }): Promise<PrintCatalogItem> {
-  const id = randomUUID();
+  const id = data.id || randomUUID();
   await prisma.$executeRaw`
     INSERT INTO "Product"
       ("id", "studioId", "type", "name", "description", "priceCents", "currency", "sku",

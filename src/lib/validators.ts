@@ -69,6 +69,15 @@ export const productSchema = z.object({
  * `sku` porte ici le SKU Prodigi (ex: "GLOBAL-CAN-10x10"), utilisé pour la synchro du coût de
  * revient (voir prodigiSync.ts) et, plus tard, la soumission de commande. */
 export const printCatalogItemSchema = z.object({
+  /** Optionnel, généré côté client à l'ouverture du formulaire "Nouveau produit" (demande
+   * d'Adriel, 01/08/2026 : "pourquoi ne pas mettre l'upload sur la creation d'un nouveau
+   * produit ?") — permet d'uploader l'image AVANT le premier enregistrement du produit (la clé
+   * de stockage est indexée par cet id), en lui donnant explicitement l'id qui sera utilisé à
+   * la création plutôt que d'en laisser générer un nouveau côté serveur (voir
+   * createPrintCatalogItem). Ignoré par la route PATCH (l'id du produit existant, dans l'URL,
+   * prime toujours).
+   */
+  id: z.string().optional(),
   name: z.string().min(1),
   description: z.string().optional().nullable(),
   priceCents: z.number().int().nonnegative(),

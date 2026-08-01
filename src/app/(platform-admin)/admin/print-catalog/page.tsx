@@ -17,7 +17,14 @@ interface PrintCatalogItemDTO {
 }
 
 interface FormState {
-  id?: string;
+  /** Toujours défini, y compris pour un nouveau produit pas encore enregistré (voir makeId) —
+   * demande d'Adriel (01/08/2026) : "pourquoi ne pas mettre l'upload sur la creation d'un
+   * nouveau produit ?". Permet d'uploader l'image du produit avant le premier "Enregistrer",
+   * la clé de stockage de l'image étant indexée par cet id (voir uploadImage). */
+  id: string;
+  /** false = produit pas encore créé en base (save() doit POSTer), true = déjà existant
+   * (save() doit PATCHer) — distinct de `id` qui, lui, existe dans les deux cas. */
+  persisted: boolean;
   name: string;
   description: string;
   price: string;
@@ -27,7 +34,15 @@ interface FormState {
   wholesaleCost: string;
 }
 
-const EMPTY_FORM: FormState = {
+/** Génère un id côté client pour un nouveau produit (même patron que makeSlideId dans
+ * /dashboard/settings pour les slides de carrousel) — nécessaire pour pouvoir uploader une
+ * image AVANT le premier enregistrement du produit. */
+function makeId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `product-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+const EMPTY_FORM_FIELDS = {
   name: "",
   description: "",
   price: "0",
@@ -54,6 +69,7 @@ function formatMoney(cents: number) {
 function itemToForm(item: PrintCatalogItemDTO): FormState {
   return {
     id: item.id,
+    persisted: true,
     name: item.name,
     description: item.description || "",
     price: fromCents(item.priceCents),
@@ -89,7 +105,7 @@ function marginTone(marginCents: number, priceCents: number): { bg: string; text
 export default function AdminPrintCatalogPage() {
   const [items, setItems] = useState<PrintCatalogItemDTO[] | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [form, setForm] = useState<FormState>(() => ({ ...EMPTY_FORM_FIELDS, id: makeId(), persisted: false }));
   const [saving, setSaving] = useState(false);
   const [resyncing, setResyncing] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
@@ -112,7 +128,7 @@ export default function AdminPrintCatalogPage() {
   }, []);
 
   function openCreate() {
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM_FIELDS, id: makeId(), persisted: false });
     setError(null);
     setModalOpen(true);
   }
@@ -127,6 +143,11 @@ export default function AdminPrintCatalogPage() {
     setSaving(true);
     setError(null);
     const payload = {
+      // `id` n'est utile qu'à la création (voir printCatalogItemSchema) — permet de donner au
+      // produit le MÊME id que celui déjà utilisé comme clé de stockage si une image a été
+      // uploadée avant ce premier "Enregistrer" (voir makeId/uploadImage). Ignoré par la route
+      // PATCH (l'id de l'URL prime), donc sans risque de l'envoyer aussi en édition.
+      id: form.id,
       name: form.name.trim(),
       description: form.description.trim() || null,
       priceCents: toCents(form.price),
@@ -138,8 +159,8 @@ export default function AdminPrintCatalogPage() {
     };
 
     try {
-      const res = await fetch(form.id ? `/api/admin/print-catalog/${form.id}` : "/api/admin/print-catalog", {
-        method: form.id ? "PATCH" : "POST",
+      const res = await fetch(form.persisted ? `/api/admin/print-catalog/${form.id}` : "/api/admin/print-catalog", {
+        method: form.persisted ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -161,16 +182,16 @@ export default function AdminPrintCatalogPage() {
   }
 
   /**
-   * Upload de l'image du produit en cours d'édition (demande d'Adriel, 01/08/2026 : "dans
-   * Image (URL) est il possible de passer par l'upload ?") — n'est possible qu'une fois le
-   * produit déjà enregistré une première fois (form.id présent), même garde-fou que l'upload
-   * d'image des blocs marketing (voir /admin/site) : la clé de stockage est indexée par l'id
-   * du produit. L'API met à jour `imageUrl` en base immédiatement (voir route), donc on
-   * rafraîchit aussi la liste en plus du formulaire pour rester cohérent si la modale est
-   * fermée sans re-cliquer "Enregistrer".
+   * Upload de l'image du produit en cours d'édition — fonctionne aussi bien pour un produit
+   * déjà enregistré que pour un nouveau produit pas encore créé (demande d'Adriel, 01/08/2026 :
+   * "pourquoi ne pas mettre l'upload sur la creation d'un nouveau produit ?"), form.id étant
+   * toujours défini (voir makeId). Si le produit existe déjà en base, l'API met aussi à jour
+   * `imageUrl` immédiatement (voir route), donc on rafraîchit la liste en plus du formulaire
+   * pour rester cohérent si la modale est fermée sans re-cliquer "Enregistrer" ; pour un
+   * nouveau produit, seul le fichier est stocké côté serveur — c'est le prochain "Enregistrer"
+   * (POST, avec ce même id) qui créera la ligne avec cette imageUrl.
    */
   async function uploadImage(file: File) {
-    if (!form.id) return;
     setUploadingImage(true);
     setError(null);
     const fd = new FormData();
@@ -524,7 +545,7 @@ function ProductModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={form.id ? "Modifier le produit" : "Nouveau produit"}
+      title={form.persisted ? "Modifier le produit" : "Nouveau produit"}
       widthClassName="max-w-2xl"
       footer={
         <>
@@ -629,41 +650,35 @@ function ProductModal({
         </div>
 
         {/* Upload de fichier (demande d'Adriel, 01/08/2026 : "dans Image (URL) est il possible
-            de passer par l'upload ?") — remplace l'ancien champ texte "Image (URL)". Même
-            garde-fou que l'upload d'image des blocs marketing (voir /admin/site) : impossible
-            tant que le produit n'a pas été enregistré une première fois, la clé de stockage
-            étant indexée par son id. */}
+            de passer par l'upload ?") — remplace l'ancien champ texte "Image (URL)". Fonctionne
+            dès l'ouverture de la modale "Nouveau produit", sans attendre un premier
+            enregistrement (demande d'Adriel, même jour : "pourquoi ne pas mettre l'upload sur
+            la creation d'un nouveau produit ?") : form.id est toujours généré à l'avance côté
+            client (voir makeId), donc la clé de stockage existe déjà même si le produit n'est
+            pas encore en base. */}
         <div>
           <label className="mb-1 block text-sm font-medium">Image</label>
-          {!form.id ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              Enregistre d&apos;abord ce produit pour pouvoir y ajouter une image.
-            </div>
-          ) : (
-            <>
-              {form.imageUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={form.imageUrl}
-                  alt=""
-                  className="mb-2 h-24 w-24 rounded-lg border border-gray-200 object-cover"
-                />
-              )}
-              <input
-                type="file"
-                accept="image/*"
-                disabled={uploadingImage}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) onUploadImage(file);
-                }}
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                {form.imageUrl ? "Choisis un fichier pour remplacer l'image. " : ""}
-                {uploadingImage ? "Envoi en cours..." : "JPG, PNG ou WEBP — recadrée automatiquement en carré."}
-              </p>
-            </>
+          {form.imageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={form.imageUrl}
+              alt=""
+              className="mb-2 h-24 w-24 rounded-lg border border-gray-200 object-cover"
+            />
           )}
+          <input
+            type="file"
+            accept="image/*"
+            disabled={uploadingImage}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onUploadImage(file);
+            }}
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            {form.imageUrl ? "Choisis un fichier pour remplacer l'image. " : ""}
+            {uploadingImage ? "Envoi en cours..." : "JPG, PNG ou WEBP — recadrée automatiquement en carré."}
+          </p>
         </div>
 
         <label className="flex items-center gap-2 text-sm">
