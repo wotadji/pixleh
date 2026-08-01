@@ -358,14 +358,17 @@ export function GalleryView({
     } else {
       next.add(photoId);
       setPrintSelection(next);
-      // Assignation par défaut au premier service configuré (s'il n'y en a qu'un, aucune
-      // friction pour le visiteur) — reste modifiable ensuite par groupe dans la page dédiée
-      // (voir /g/[gallerySlug]/print-selection).
-      const defaultProductId = printProducts[0]?.id ?? null;
+      // Plus d'assignation par défaut au premier service (retiré le 01/08/2026, demande
+      // d'Adriel : "je veux que cela soit faite sur uniquement les photos choisit" — l'ancien
+      // comportement mettait TOUTES les nouvelles photos dans le même groupe par défaut, ce qui
+      // donnait l'impression qu'une réassignation groupée "touchait toutes les photos" alors
+      // qu'elle ne faisait que confirmer ce regroupement automatique préexistant). Chaque photo
+      // arrive donc "Service non assigné" dans la page dédiée (/g/[gallerySlug]/print-selection)
+      // et n'est groupée que lorsque le client la coche puis choisit explicitement un produit.
       await fetch("/api/selections", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ galleryId: gallery.id, photoId, type: "PRINT", productId: defaultProductId }),
+        body: JSON.stringify({ galleryId: gallery.id, photoId, type: "PRINT", productId: null }),
       });
     }
   }
