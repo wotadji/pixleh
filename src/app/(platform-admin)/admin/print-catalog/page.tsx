@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { PageSpinner } from "@/components/ui/Spinner";
 
@@ -209,6 +209,24 @@ export default function AdminPrintCatalogPage() {
     } catch {
       setError("Erreur réseau lors de l'upload.");
     }
+    setUploadingImage(false);
+  }
+
+  /** Retire l'image du produit en cours d'édition — supprime aussi le fichier stocké côté
+   * serveur si le produit existe déjà en base (rien à supprimer côté serveur pour un nouveau
+   * produit pas encore enregistré : le fichier orphelin, s'il y en a un, sera simplement
+   * remplacé/écrasé si un autre est uploadé sous le même id). */
+  async function removeImage() {
+    setUploadingImage(true);
+    if (form.persisted) {
+      try {
+        await fetch(`/api/admin/print-catalog/${form.id}/image`, { method: "DELETE" });
+        await loadItems();
+      } catch {
+        // best-effort : on vide quand même l'aperçu local ci-dessous
+      }
+    }
+    setForm((f) => ({ ...f, imageUrl: "" }));
     setUploadingImage(false);
   }
 
@@ -486,6 +504,7 @@ export default function AdminPrintCatalogPage() {
         onClose={() => setModalOpen(false)}
         onSave={save}
         onUploadImage={uploadImage}
+        onRemoveImage={removeImage}
         uploadingImage={uploadingImage}
       />
     </div>
@@ -524,6 +543,7 @@ function ProductModal({
   onClose,
   onSave,
   onUploadImage,
+  onRemoveImage,
   uploadingImage,
 }: {
   open: boolean;
@@ -534,6 +554,7 @@ function ProductModal({
   onClose: () => void;
   onSave: () => void;
   onUploadImage: (file: File) => void;
+  onRemoveImage: () => void;
   uploadingImage: boolean;
 }) {
   const priceCents = toCents(form.price);
@@ -649,37 +670,19 @@ function ProductModal({
           />
         </div>
 
-        {/* Upload de fichier (demande d'Adriel, 01/08/2026 : "dans Image (URL) est il possible
-            de passer par l'upload ?") — remplace l'ancien champ texte "Image (URL)". Fonctionne
-            dès l'ouverture de la modale "Nouveau produit", sans attendre un premier
-            enregistrement (demande d'Adriel, même jour : "pourquoi ne pas mettre l'upload sur
-            la creation d'un nouveau produit ?") : form.id est toujours généré à l'avance côté
-            client (voir makeId), donc la clé de stockage existe déjà même si le produit n'est
-            pas encore en base. */}
-        <div>
-          <label className="mb-1 block text-sm font-medium">Image</label>
-          {form.imageUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={form.imageUrl}
-              alt=""
-              className="mb-2 h-24 w-24 rounded-lg border border-gray-200 object-cover"
-            />
-          )}
-          <input
-            type="file"
-            accept="image/*"
-            disabled={uploadingImage}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) onUploadImage(file);
-            }}
-          />
-          <p className="mt-1 text-xs text-gray-500">
-            {form.imageUrl ? "Choisis un fichier pour remplacer l'image. " : ""}
-            {uploadingImage ? "Envoi en cours..." : "JPG, PNG ou WEBP — recadrée automatiquement en carré."}
-          </p>
-        </div>
+        {/* Zone de dépôt (demande d'Adriel, 01/08/2026 : "je veux une meilleur presentation plus
+            pro la zone choissir un fichier") — remplace l'input file brut par un vrai
+            dropzone : glisser-déposer ou clic, aperçu carré avec overlay "Remplacer" au survol,
+            bouton retirer, état de chargement. Fonctionne dès l'ouverture de la modale "Nouveau
+            produit", sans attendre un premier enregistrement (demande d'Adriel, même jour :
+            "pourquoi ne pas mettre l'upload sur la creation d'un nouveau produit ?") : form.id
+            est toujours généré à l'avance côté client (voir makeId). */}
+        <ImageDropzone
+          imageUrl={form.imageUrl}
+          uploading={uploadingImage}
+          onUpload={onUploadImage}
+          onRemove={onRemoveImage}
+        />
 
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -696,6 +699,117 @@ function ProductModal({
   );
 }
 
+/**
+ * Zone de dépôt pour l'image d'un produit (demande d'Adriel, 01/08/2026 : "je veux une
+ * meilleur presentation plus pro la zone choissir un fichier") — remplace le `<input
+ * type="file">` brut par un vrai dropzone : cliquable ET glisser-déposer, aperçu carré en
+ * place de l'input une fois une image présente, overlay "Remplacer" au survol, bouton retirer
+ * dédié (croix en haut à droite), état de chargement avec spinner par-dessus l'aperçu.
+ */
+function ImageDropzone({
+  imageUrl,
+  uploading,
+  onUpload,
+  onRemove,
+}: {
+  imageUrl: string;
+  uploading: boolean;
+  onUpload: (file: File) => void;
+  onRemove: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  function pick(file: File | undefined | null) {
+    if (file) onUpload(file);
+  }
+
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium">Image</label>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => !uploading && inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if ((e.key === "Enter" || e.key === " ") && !uploading) inputRef.current?.click();
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          if (!uploading) setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          if (!uploading) pick(e.dataTransfer.files?.[0]);
+        }}
+        className={`group relative flex h-32 w-32 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl border-2 border-dashed transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1 ${
+          dragOver
+            ? "border-brand-500 bg-brand-50"
+            : imageUrl
+              ? "border-transparent"
+              : "border-gray-300 bg-gray-50 hover:border-brand-400 hover:bg-brand-50/50"
+        }`}
+      >
+        {imageUrl ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/0 opacity-0 transition-all group-hover:bg-black/55 group-hover:opacity-100">
+              <IconUpload className="text-white" />
+              <span className="text-xs font-medium text-white">Remplacer</span>
+            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!uploading) onRemove();
+              }}
+              aria-label="Retirer l'image"
+              title="Retirer l'image"
+              className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity hover:bg-black/80 group-hover:opacity-100"
+            >
+              <IconClose />
+            </button>
+          </>
+        ) : (
+          <div className="flex flex-col items-center gap-1.5 px-3 text-center">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50 text-brand-600">
+              <IconUpload />
+            </span>
+            <span className="text-xs font-medium leading-tight text-gray-600">
+              Glisser une image
+              <br />
+              ou cliquer
+            </span>
+          </div>
+        )}
+
+        {uploading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-white/85">
+            <IconSpinner />
+            <span className="text-xs font-medium text-gray-600">Envoi...</span>
+          </div>
+        )}
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          disabled={uploading}
+          className="hidden"
+          onChange={(e) => {
+            pick(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
+      </div>
+      <p className="mt-1.5 text-xs text-gray-500">JPG, PNG ou WEBP — recadrée automatiquement en carré.</p>
+    </div>
+  );
+}
+
 function IconPrinter({ small }: { small?: boolean }) {
   const size = small ? 18 : 22;
   return (
@@ -704,6 +818,31 @@ function IconPrinter({ small }: { small?: boolean }) {
       <rect x="4" y="9" width="16" height="8" rx="1.5" />
       <path d="M6 13h12v8H6z" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M8 16h8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconUpload({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className={className}
+    >
+      <path d="M12 16V4M12 4l-4 4M12 4l4 4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconClose() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+      <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
     </svg>
   );
 }
