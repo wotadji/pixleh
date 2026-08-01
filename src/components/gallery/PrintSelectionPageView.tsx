@@ -1393,33 +1393,40 @@ function VariantSelectionModal({
       onClick={onCancel}
       role="presentation"
     >
+      {/* Agrandi (02/08/2026, demande d'Adriel : "agrandir ce modal") — même traitement que
+          GroupProductsPreviewModal juste avant : largeur et paddings augmentés, description en
+          line-clamp-2 au lieu de "truncate" 1 ligne (coupait au milieu d'un mot). */}
       <div
-        className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl"
+        className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={`Choisir une taille pour ${group.name}`}
       >
-        <h3 className="text-sm font-semibold text-gray-900">Choisir une taille — {group.name}</h3>
-        <p className="mt-1 text-xs text-gray-500">
-          Sélectionnez le format avant d&apos;assigner {count > 1 ? `ces ${count} photos` : "cette photo"}.
-        </p>
+        <div className="border-b border-gray-100 px-8 py-6">
+          <h3 className="text-lg font-semibold text-gray-900">Choisir une taille — {group.name}</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Sélectionnez le format avant d&apos;assigner {count > 1 ? `ces ${count} photos` : "cette photo"}.
+          </p>
+        </div>
 
-        <div className="mt-4 space-y-2">
+        <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-8 py-6">
           {variants.map((variant) => (
             <button
               key={variant.id}
               type="button"
               onClick={() => onConfirm(variant)}
-              className="flex w-full items-center justify-between gap-3 rounded-lg border border-gray-200 px-3.5 py-2.5 text-left hover:border-brand-400 hover:bg-brand-50/40"
+              className="flex w-full items-center justify-between gap-4 rounded-xl border border-gray-200 px-5 py-4 text-left hover:border-brand-400 hover:bg-brand-50/40"
             >
               <span className="min-w-0">
-                <span className="block truncate text-sm font-medium text-gray-900">{variant.name}</span>
+                <span className="block text-sm font-medium leading-snug text-gray-900">{variant.name}</span>
                 {variant.description && (
-                  <span className="block truncate text-xs text-gray-500">{variant.description}</span>
+                  <span className="mt-0.5 line-clamp-2 block text-xs leading-snug text-gray-500">
+                    {variant.description}
+                  </span>
                 )}
               </span>
-              <span className="shrink-0 text-sm font-semibold text-gray-800">
+              <span className="shrink-0 text-base font-semibold text-gray-800">
                 {formatMoney(variant.priceCents, variant.currency)}
               </span>
             </button>
@@ -1429,7 +1436,7 @@ function VariantSelectionModal({
           )}
         </div>
 
-        <div className="mt-5 flex justify-end">
+        <div className="flex justify-end border-t border-gray-100 bg-gray-50/60 px-8 py-5">
           <button type="button" className="btn-secondary text-sm" onClick={onCancel}>
             Annuler
           </button>
