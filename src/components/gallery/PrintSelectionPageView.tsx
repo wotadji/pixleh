@@ -15,8 +15,10 @@ interface PhotoDTO {
 interface PrintProductDTO {
   id: string;
   name: string;
+  description: string | null;
   priceCents: number;
   currency: string;
+  imageUrl: string | null;
 }
 
 interface ProductGroup {
@@ -144,12 +146,17 @@ export function PrintSelectionPageView({
   const [zoomIndex, setZoomIndex] = useState<number | null>(null);
   // Groupes repliés (accordéon par service, demande d'Adriel du 01/08/2026 : "a chaque
   // assignation mettre un accordeon avec les images assigné au produits") — clé = id produit,
-  // ou "unassigned" pour les photos sans service. Ouverts par défaut au premier affichage ; un
-  // groupe se replie automatiquement dès qu'on vient d'y assigner des photos (voir
-  // applyProductToPhotos plus bas — demande d'Adriel : "quand je fini d'assigner les images a un
-  // produit, l'accordeon doit etre fermé [pas] ouvert"), sinon seul un clic du visiteur change
-  // son état.
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  // ou "unassigned" pour les photos sans service. TOUS repliés au chargement/à l'actualisation de
+  // la page (demande d'Adriel, 01/08/2026 : "quand on actualise page le accordeon est toujours
+  // ouvert, je veux que le accordeon soit fermé") — calculé une seule fois à partir de la
+  // sélection initiale plutôt que de démarrer vide (= tout ouvert). Un groupe se replie aussi
+  // automatiquement dès qu'on vient d'y assigner des photos (voir applyProductToPhotos plus bas —
+  // demande d'Adriel : "quand je fini d'assigner les images a un produit, l'accordeon doit etre
+  // fermé [pas] ouvert"), sinon seul un clic du visiteur change son état.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
+    const initialGroups = groupByProduct(initialPhotos, printProducts);
+    return new Set(initialGroups.map((g) => g.product?.id ?? "unassigned"));
+  });
 
   // Filtre + recherche (chantier 01/08/2026, gestion de sélections à 200 photos, demande
   // d'Adriel : "le design ne sera pas pratique a utiliser") — permettent de sauter directement
@@ -456,6 +463,41 @@ export function PrintSelectionPageView({
           Vérifiez vos tirages, indiquez vos coordonnées et votre adresse de livraison pour commander.
         </p>
 
+        {/* Catalogue des produits d'impression disponibles (demande d'Adriel, 01/08/2026 :
+            "mettre apres [le titre] la liste des produits (photo description et prix)") —
+            permet de voir d'un coup d'œil ce qui est proposé (visuel, description, tarif) avant
+            d'assigner les photos, plutôt que de découvrir les produits un par un dans chaque
+            sélecteur "Assigner à". */}
+        {printProducts.length > 0 && (
+          <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
+            {printProducts.map((p) => (
+              <div
+                key={p.id}
+                className="flex w-48 shrink-0 flex-col gap-2 rounded-lg border border-gray-200 bg-white p-3"
+              >
+                <div className="flex h-24 w-full items-center justify-center overflow-hidden rounded-md bg-gray-50">
+                  {p.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.imageUrl} alt={p.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-gray-300">
+                      <IconPrinterEmpty />
+                    </span>
+                  )}
+                </div>
+                <p className="truncate text-sm font-semibold text-gray-900">{p.name}</p>
+                {p.description && (
+                  <p className="line-clamp-2 text-xs text-gray-500">{p.description}</p>
+                )}
+                <p className="mt-auto text-sm font-medium text-gray-800">
+                  {formatMoney(p.priceCents, p.currency)}
+                  <span className="ml-1 text-xs font-normal text-gray-400">/ photo</span>
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
         {photos.length === 0 ? (
           <div className="mt-10 flex flex-col items-center gap-3 rounded-xl border border-gray-200 bg-white py-16 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-50 text-gray-300">
@@ -599,6 +641,15 @@ export function PrintSelectionPageView({
                               }`}
                             >
                               {g.product ? g.product.name : "Service non assigné"}
+                              {/* Prix à l'unité à côté du nom du produit (demande d'Adriel,
+                                  01/08/2026 : "au niveau de la checklist a coté du nom de la
+                                  liste mettre le prix à l'unité") — distinct du total du groupe
+                                  déjà affiché à droite (nombre de photos × prix). */}
+                              {g.product && (
+                                <span className="ml-1.5 font-normal normal-case text-gray-400">
+                                  · {formatMoney(g.product.priceCents, g.product.currency)}/photo
+                                </span>
+                              )}
                             </h3>
                           </span>
                           <span className="shrink-0 text-xs text-gray-400">

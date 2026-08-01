@@ -71,8 +71,10 @@ export default async function PrintSelectionPage({ params }: { params: { gallery
       printProducts={printProducts.map((p) => ({
         id: p.id,
         name: p.name,
+        description: p.description,
         priceCents: p.priceCents,
         currency: p.currency,
+        imageUrl: p.imageUrl,
       }))}
     />
   );
