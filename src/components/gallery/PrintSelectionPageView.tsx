@@ -1450,71 +1450,102 @@ function VariantSelectionModal({
  */
 function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO; onClose: () => void }) {
   const variants = group.variants ?? [];
+  const prices = variants.map((v) => v.priceCents);
+  const minPrice = prices.length > 0 ? Math.min(...prices) : null;
+  const maxPrice = prices.length > 0 ? Math.max(...prices) : null;
+
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 px-4"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 px-4 backdrop-blur-[1px]"
       onClick={onClose}
       role="presentation"
     >
       <div
-        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-xl bg-white p-5 shadow-xl"
+        className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={`Produits du groupe ${group.name}`}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900">{group.name}</h3>
+        {/* En-tête — redesign "pro" (01/08/2026, demande d'Adriel : "tu es expert en ux, ui et
+            expert en web design, je veux que tu me proposes un design pro de ce modal") :
+            pictogramme dossier (même code visuel que le badge "Groupe" du catalogue), fourchette
+            de prix affichée dès l'en-tête plutôt que noyée dans la liste, bouton fermer circulaire
+            au survol au lieu d'une simple croix flottante. */}
+        <div className="flex items-start gap-3 border-b border-gray-100 px-5 py-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+            <IconFolder />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="truncate text-base font-semibold text-gray-900">{group.name}</h3>
             <p className="mt-0.5 text-xs text-gray-500">
-              {variants.length} produit{variants.length > 1 ? "s" : ""} disponible{variants.length > 1 ? "s" : ""} dans ce
-              groupe.
+              {variants.length} produit{variants.length > 1 ? "s" : ""} disponible{variants.length > 1 ? "s" : ""}
+              {minPrice != null && maxPrice != null && (
+                <>
+                  {" "}
+                  ·{" "}
+                  {minPrice === maxPrice
+                    ? formatMoney(minPrice, variants[0].currency)
+                    : `${formatMoney(minPrice, variants[0].currency)} – ${formatMoney(maxPrice, variants[0].currency)}`}
+                </>
+              )}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Fermer"
-            className="shrink-0 text-gray-400 hover:text-gray-700"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
           >
             <IconClose />
           </button>
         </div>
 
-        <div className="mt-4 space-y-2.5">
-          {variants.map((variant) => (
-            <div
-              key={variant.id}
-              className="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-2.5"
-            >
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-gray-50">
-                {variant.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={variant.imageUrl} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <span className="text-gray-300">
-                    <IconPrinterEmpty />
-                  </span>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-gray-900">{variant.name}</p>
-                {variant.description && (
-                  <p className="truncate text-xs text-gray-500">{variant.description}</p>
-                )}
-              </div>
-              <span className="shrink-0 text-sm font-semibold text-gray-800">
-                {formatMoney(variant.priceCents, variant.currency)}
-              </span>
-            </div>
-          ))}
-          {variants.length === 0 && (
-            <p className="text-sm text-gray-400">Aucun produit disponible dans ce groupe pour le moment.</p>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {variants.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-gray-400">
+              Aucun produit disponible dans ce groupe pour le moment.
+            </p>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {variants.map((variant) => (
+                <li key={variant.id} className="flex items-center gap-3.5 px-5 py-3.5 hover:bg-gray-50/70">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
+                    {variant.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={variant.imageUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-gray-300">
+                        <IconPrinterEmpty />
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium leading-snug text-gray-900">{variant.name}</p>
+                    {/* line-clamp-2 plutôt que "truncate" (1 ligne, coupait la description au
+                        milieu d'un mot avec "...") — laisse la description respirer sur deux
+                        lignes complètes avant de tronquer proprement. */}
+                    {variant.description && (
+                      <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-gray-500">
+                        {variant.description}
+                      </p>
+                    )}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-semibold text-gray-900">
+                      {formatMoney(variant.priceCents, variant.currency)}
+                    </p>
+                    <p className="text-[11px] text-gray-400">/ photo</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
 
-        <div className="mt-5 flex justify-end">
-          <button type="button" className="btn-secondary text-sm" onClick={onClose}>
+        <div className="flex items-center justify-between gap-3 border-t border-gray-100 bg-gray-50/60 px-5 py-3.5">
+          <p className="text-xs text-gray-400">Le format se choisit au moment d&apos;assigner une photo.</p>
+          <button type="button" className="btn-secondary shrink-0 text-sm" onClick={onClose}>
             Fermer
           </button>
         </div>
@@ -1691,6 +1722,20 @@ function IconPrinterEmpty() {
       <path d="M6 9V4h12v5" strokeLinecap="round" strokeLinejoin="round" />
       <rect x="4" y="9" width="16" height="8" rx="1.5" />
       <path d="M6 14h12v6H6z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Icône dossier — représente un GROUPE de produits dans GroupProductsPreviewModal, même code
+ * visuel que le badge "Groupe" du catalogue admin (voir /admin/print-catalog/page.tsx). */
+function IconFolder() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path
+        d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
