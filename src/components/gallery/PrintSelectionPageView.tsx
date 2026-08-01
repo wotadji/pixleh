@@ -141,7 +141,6 @@ export function PrintSelectionPageView({
   const [photos, setPhotos] = useState(initialPhotos);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [view, setView] = useState<"list" | "grid">("list");
-  const [assignTarget, setAssignTarget] = useState(printProducts[0]?.id || "");
   const [zoomIndex, setZoomIndex] = useState<number | null>(null);
   // Groupes repliés (accordéon par service, demande d'Adriel du 01/08/2026 : "a chaque
   // assignation mettre un accordeon avec les images assigné au produits") — clé = id produit,
@@ -872,12 +871,19 @@ export function PrintSelectionPageView({
                 <div className="flex items-center gap-1.5">
                   <span className="hidden text-xs text-gray-500 sm:inline">Assigner à :</span>
                   <div className="w-44">
+                    {/* value="" en permanence (jamais l'id du dernier produit choisi) — bug
+                        remonté par Adriel (01/08/2026) : "au footer il assigne deja sans que je
+                        face le choix [...] toutes les photos sont assigné". Cause : ce sélecteur
+                        mémorisait le dernier produit choisi (state assignTarget) ET l'affichait
+                        comme "déjà sélectionné" ; rouvrir le menu et recliquer cette même option
+                        déjà en surbrillance redéclenchait l'assignation, cette fois sur TOUTES les
+                        photos si "Tout sélectionner" avait entre-temps été coché. Comme les
+                        sélecteurs "Réassigner à" des en-têtes de groupe, c'est désormais une
+                        action ponctuelle sans valeur mémorisée : le bouton affiche toujours le
+                        placeholder, jamais un produit "déjà choisi". */}
                     <SearchableSelect
-                      value={assignTarget}
-                      onChange={(value) => {
-                        setAssignTarget(value);
-                        assignToProduct(value);
-                      }}
+                      value=""
+                      onChange={(value) => assignToProduct(value)}
                       options={printProducts.map((p) => ({ value: p.id, label: p.name }))}
                       placeholder="Choisir un produit"
                       searchPlaceholder="Rechercher un produit..."
