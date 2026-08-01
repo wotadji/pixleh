@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { PageSpinner } from "@/components/ui/Spinner";
@@ -401,14 +402,24 @@ export default function AdminPrintCatalogPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-serif text-2xl font-semibold">Catalogue impression</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Produits d&apos;impression physique (tirages, toiles...) proposés dans toutes les galeries.
-            Fulfillment via Prodigi — le paiement va directement à pixleh, les studios n&apos;en gèrent
-            plus le prix.
-          </p>
+      {/* En-tête — redesign "pro" (demande d'Adriel, 01/08/2026 : "tu es expert en ux, ui et
+          expert en web design, je veux que tu me proposes un design pro de cette page"). Les deux
+          actions de création portent désormais une icône + (au lieu du "+" typographique brut)
+          pour un rendu plus soigné, et un pictogramme dossier/imprimante en filigrane rappelle
+          visuellement la distinction groupe/produit dès l'en-tête. */}
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-gray-100 pb-5">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+            <IconPrinter />
+          </div>
+          <div>
+            <h1 className="font-serif text-2xl font-semibold text-gray-900">Catalogue impression</h1>
+            <p className="mt-1 max-w-2xl text-sm text-gray-500">
+              Produits d&apos;impression physique (tirages, toiles...) proposés dans toutes les galeries.
+              Fulfillment via Prodigi — le paiement va directement à pixleh, les studios n&apos;en gèrent
+              plus le prix.
+            </p>
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {/* "Nouveau groupe" — chantier "groupe de produits" (02/08/2026, demande d'Adriel :
@@ -416,37 +427,59 @@ export default function AdminPrintCatalogPage() {
               ajouter les SKU adéquat ?") : un groupe sert à proposer plusieurs tailles/SKU
               Prodigi (ex: 12x16 et 20x30, deux SKU distincts chez Prodigi) sous un même produit
               côté client, qui choisit sa taille au moment de l'achat. */}
-          <button type="button" className="btn-secondary" onClick={openCreateGroup}>
-            + Nouveau groupe
+          <button type="button" className="btn-secondary inline-flex items-center gap-1.5" onClick={openCreateGroup}>
+            <IconFolder small /> Nouveau groupe
           </button>
-          <button type="button" className="btn-primary" onClick={openCreate}>
-            + Nouveau produit
+          <button type="button" className="btn-primary inline-flex items-center gap-1.5" onClick={openCreate}>
+            <IconPlus /> Nouveau produit
           </button>
         </div>
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <StatCard label="Groupes actifs" value={`${stats.groupsActive} / ${stats.groupsTotal}`} />
-        <StatCard label="Produits actifs" value={`${stats.productsActive} / ${stats.productsTotal}`} />
-        <StatCard label="Prix de vente moyen" value={formatMoney(stats.avgPrice)} />
+        <StatCard
+          label="Groupes actifs"
+          value={`${stats.groupsActive} / ${stats.groupsTotal}`}
+          icon={<IconFolder small />}
+          accent="indigo"
+        />
+        <StatCard
+          label="Produits actifs"
+          value={`${stats.productsActive} / ${stats.productsTotal}`}
+          icon={<IconPrinter small />}
+          accent="brand"
+        />
+        <StatCard
+          label="Prix de vente moyen"
+          value={formatMoney(stats.avgPrice)}
+          icon={<IconTag small />}
+          accent="gray"
+        />
         <StatCard
           label="Marge moyenne"
           value={stats.avgMarginPct != null ? `${Math.round(stats.avgMarginPct)} %` : "—"}
-          tone={
-            stats.avgMarginPct == null ? undefined : stats.avgMarginPct < 20 ? "amber" : "green"
-          }
+          icon={<IconPercent small />}
+          tone={stats.avgMarginPct == null ? undefined : stats.avgMarginPct < 20 ? "amber" : "green"}
+          accent={stats.avgMarginPct == null ? "gray" : stats.avgMarginPct < 20 ? "amber" : "green"}
         />
         <StatCard
           label="Sans SKU Prodigi"
           value={String(stats.noSku)}
+          icon={<IconAlert small />}
           tone={stats.noSku > 0 ? "amber" : undefined}
+          accent={stats.noSku > 0 ? "amber" : "gray"}
         />
       </div>
 
-      <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-        Le SKU correspond au SKU Prodigi (ex: <code>GLOBAL-CAN-10x10</code>) — renseigne-le pour pouvoir
-        resynchroniser le coût de revient réel. Le prix de vente reste toujours fixé ici à la main, avec
-        ta marge par-dessus.
+      <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+        <span className="mt-0.5 shrink-0 text-gray-400">
+          <IconInfo />
+        </span>
+        <span>
+          Le SKU correspond au SKU Prodigi (ex: <code>GLOBAL-CAN-10x10</code>) — renseigne-le pour pouvoir
+          resynchroniser le coût de revient réel. Le prix de vente reste toujours fixé ici à la main, avec
+          ta marge par-dessus.
+        </span>
       </div>
 
       {prodigiWarning && (
@@ -458,27 +491,32 @@ export default function AdminPrintCatalogPage() {
         </div>
       )}
 
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="w-56 shrink-0">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher (nom, SKU)"
-            className="input"
-          />
-        </div>
-        <div className="w-48 shrink-0">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-            className="input"
-          >
-            <option value="ALL">Tous les statuts</option>
-            <option value="ACTIVE">Actifs</option>
-            <option value="INACTIVE">Désactivés</option>
-            <option value="NO_SKU">Sans SKU Prodigi</option>
-          </select>
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-56 shrink-0">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-300">
+              <IconSearch />
+            </span>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher (nom, SKU)"
+              className="input pl-8"
+            />
+          </div>
+          <div className="w-48 shrink-0">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              className="input"
+            >
+              <option value="ALL">Tous les statuts</option>
+              <option value="ACTIVE">Actifs</option>
+              <option value="INACTIVE">Désactivés</option>
+              <option value="NO_SKU">Sans SKU Prodigi</option>
+            </select>
+          </div>
         </div>
         {/* Bascule liste/grille (demande d'Adriel, 02/08/2026 : "peux tu mettres un filtre
             d'affichage en ligne et en grid") — la vue grille regroupe chaque produit (et, pour
@@ -514,12 +552,12 @@ export default function AdminPrintCatalogPage() {
         className={
           view === "grid"
             ? "mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
-            : "mt-4 divide-y divide-gray-100 rounded-xl border border-gray-200"
+            : "mt-4 divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white"
         }
       >
         {filtered.length === 0 && (
           <div
-            className={`flex flex-col items-center gap-3 p-12 text-center ${
+            className={`flex flex-col items-center gap-3 rounded-xl border border-dashed border-gray-200 p-12 text-center ${
               view === "grid" ? "md:col-span-2 xl:col-span-3" : ""
             }`}
           >
@@ -533,13 +571,12 @@ export default function AdminPrintCatalogPage() {
             </p>
           </div>
         )}
-        {filtered.map((item) => (
-          <div
-            key={item.id}
-            className={view === "grid" ? "overflow-hidden rounded-xl border border-gray-200 bg-white" : undefined}
-          >
-            <CatalogRow
+        {filtered.map((item) =>
+          view === "grid" ? (
+            <GridCard
+              key={item.id}
               item={item}
+              variants={variantsByGroup.get(item.id) ?? []}
               groupDisplayPriceCents={
                 item.isProductGroup
                   ? (() => {
@@ -554,38 +591,59 @@ export default function AdminPrintCatalogPage() {
               onResync={resync}
               onEdit={openEdit}
               onRemove={remove}
+              onAddVariant={openAddVariant}
             />
-            {item.isProductGroup && (
-              <div className="divide-y divide-gray-100 border-t border-gray-100 bg-gray-50/60 pl-6">
-                {(variantsByGroup.get(item.id) ?? []).length === 0 && (
-                  <p className="p-4 text-sm text-gray-400">Aucun SKU dans ce groupe pour le moment.</p>
-                )}
-                {(variantsByGroup.get(item.id) ?? []).map((variant) => (
-                  <CatalogRow
-                    key={variant.id}
-                    item={variant}
-                    isVariant
-                    resyncing={resyncing}
-                    toggling={toggling}
-                    onToggleActive={toggleActive}
-                    onResync={resync}
-                    onEdit={openEdit}
-                    onRemove={remove}
-                  />
-                ))}
-                <div className="p-3">
-                  <button
-                    type="button"
-                    className="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-brand-700 shadow-sm ring-1 ring-brand-200 hover:bg-brand-50"
-                    onClick={() => openAddVariant(item)}
-                  >
-                    + Ajouter un SKU dans ce groupe
-                  </button>
+          ) : (
+            <div key={item.id}>
+              <CatalogRow
+                item={item}
+                groupDisplayPriceCents={
+                  item.isProductGroup
+                    ? (() => {
+                        const variants = (variantsByGroup.get(item.id) ?? []).filter((v) => v.active);
+                        return variants.length > 0 ? Math.min(...variants.map((v) => v.priceCents)) : null;
+                      })()
+                    : undefined
+                }
+                resyncing={resyncing}
+                toggling={toggling}
+                onToggleActive={toggleActive}
+                onResync={resync}
+                onEdit={openEdit}
+                onRemove={remove}
+              />
+              {item.isProductGroup && (
+                <div className="divide-y divide-gray-100 border-t border-gray-100 bg-gray-50/60 pl-6">
+                  {(variantsByGroup.get(item.id) ?? []).length === 0 && (
+                    <p className="p-4 text-sm text-gray-400">Aucun SKU dans ce groupe pour le moment.</p>
+                  )}
+                  {(variantsByGroup.get(item.id) ?? []).map((variant) => (
+                    <CatalogRow
+                      key={variant.id}
+                      item={variant}
+                      isVariant
+                      resyncing={resyncing}
+                      toggling={toggling}
+                      onToggleActive={toggleActive}
+                      onResync={resync}
+                      onEdit={openEdit}
+                      onRemove={remove}
+                    />
+                  ))}
+                  <div className="p-3">
+                    <button
+                      type="button"
+                      className="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-brand-700 shadow-sm ring-1 ring-brand-200 hover:bg-brand-50"
+                      onClick={() => openAddVariant(item)}
+                    >
+                      + Ajouter un SKU dans ce groupe
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        ))}
+              )}
+            </div>
+          )
+        )}
       </div>
 
       <ProductModal
@@ -605,25 +663,246 @@ export default function AdminPrintCatalogPage() {
   );
 }
 
+const ACCENT_STYLES: Record<string, { bar: string; iconBg: string; iconText: string }> = {
+  brand: { bar: "bg-brand-500", iconBg: "bg-brand-50", iconText: "text-brand-600" },
+  indigo: { bar: "bg-indigo-500", iconBg: "bg-indigo-50", iconText: "text-indigo-600" },
+  green: { bar: "bg-green-500", iconBg: "bg-green-50", iconText: "text-green-600" },
+  amber: { bar: "bg-amber-500", iconBg: "bg-amber-50", iconText: "text-amber-600" },
+  gray: { bar: "bg-gray-300", iconBg: "bg-gray-50", iconText: "text-gray-500" },
+};
+
+/** Carte de stat — redesign "pro" (01/08/2026, demande d'Adriel) : liseré de couleur + icône
+ * dédiée par indicateur, pour un repérage visuel plus rapide qu'un simple bloc chiffre/texte. */
 function StatCard({
   label,
   value,
   tone,
+  icon,
+  accent = "gray",
 }: {
   label: string;
   value: string;
   tone?: "amber" | "green";
+  icon?: ReactNode;
+  accent?: keyof typeof ACCENT_STYLES;
 }) {
+  const a = ACCENT_STYLES[accent];
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
-      <p className="text-xs font-medium text-gray-500">{label}</p>
+    <div className="relative overflow-hidden rounded-xl border border-gray-200 bg-white p-4 pl-5">
+      <span className={`absolute inset-y-0 left-0 w-1 ${a.bar}`} />
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium text-gray-500">{label}</p>
+        {icon && (
+          <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${a.iconBg} ${a.iconText}`}>
+            {icon}
+          </span>
+        )}
+      </div>
       <p
-        className={`mt-1 text-xl font-semibold ${
+        className={`mt-1.5 text-xl font-semibold ${
           tone === "amber" ? "text-amber-600" : tone === "green" ? "text-green-600" : "text-gray-900"
         }`}
       >
         {value}
       </p>
+    </div>
+  );
+}
+
+/**
+ * Carte produit/groupe pour la vue grille (demande d'Adriel, 01/08/2026 : "tu es expert en ux,
+ * ui et expert en web design, je veux que tu me proposes un design pro de cette page") —
+ * remplace l'ancienne CatalogRow simplement encadrée par un vrai gabarit "fiche produit" :
+ * grande image en tête (ou pictogramme si absente), badges en overlay, prix/marge bien visibles,
+ * actions condensées en icônes dans un pied de carte. Pour un GROUPE, les variantes sont listées
+ * de façon compacte directement dans la carte plutôt que dans un bloc séparé.
+ */
+function GridCard({
+  item,
+  variants,
+  groupDisplayPriceCents,
+  resyncing,
+  toggling,
+  onToggleActive,
+  onResync,
+  onEdit,
+  onRemove,
+  onAddVariant,
+}: {
+  item: PrintCatalogItemDTO;
+  variants: PrintCatalogItemDTO[];
+  groupDisplayPriceCents?: number | null;
+  resyncing: string | null;
+  toggling: string | null;
+  onToggleActive: (item: PrintCatalogItemDTO) => void;
+  onResync: (item: PrintCatalogItemDTO) => void;
+  onEdit: (item: PrintCatalogItemDTO) => void;
+  onRemove: (item: PrintCatalogItemDTO) => void;
+  onAddVariant: (group: PrintCatalogItemDTO) => void;
+}) {
+  const marginCents = item.wholesaleCostCents != null ? item.priceCents - item.wholesaleCostCents : null;
+  const tone = marginCents != null ? marginTone(marginCents, item.priceCents) : null;
+  const attributeOptions = parseAttributeOptions(item.prodigiAttributeOptions);
+
+  return (
+    <div className="group flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md">
+      <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden bg-gray-50">
+        {item.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-brand-200">
+            <span className="scale-[2.4]">{item.isProductGroup ? <IconFolder /> : <IconPrinter />}</span>
+          </div>
+        )}
+        {!item.active && <div className="absolute inset-0 bg-white/55" />}
+        <div className="absolute left-2 top-2 flex flex-wrap gap-1">
+          {item.isProductGroup && (
+            <span className="rounded-full bg-indigo-600/90 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
+              Groupe
+            </span>
+          )}
+          {!item.active && (
+            <span className="rounded-full bg-gray-800/85 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
+              Désactivé
+            </span>
+          )}
+          {!item.sku && !item.isProductGroup && (
+            <span className="rounded-full bg-amber-500/90 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
+              Sans SKU
+            </span>
+          )}
+          {Object.keys(attributeOptions).length > 0 && (
+            <span className="rounded-full bg-brand-600/90 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
+              {Object.keys(attributeOptions).length} attribut{Object.keys(attributeOptions).length > 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-1 flex-col p-4">
+        <p className="truncate font-medium text-gray-900">{item.name}</p>
+        <p className="mt-0.5 truncate text-xs text-gray-500">
+          {item.sku ? (
+            <code className="text-gray-600">{item.sku}</code>
+          ) : item.isProductGroup ? (
+            "Conteneur de tailles/SKU"
+          ) : (
+            item.description || "—"
+          )}
+        </p>
+
+        <div className="mt-3 flex items-end justify-between gap-2">
+          <div>
+            <p className="font-semibold text-gray-900">
+              {item.isProductGroup
+                ? groupDisplayPriceCents != null
+                  ? `dès ${formatMoney(groupDisplayPriceCents)}`
+                  : "—"
+                : formatMoney(item.priceCents)}
+            </p>
+            {marginCents != null && tone ? (
+              <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${tone.bg} ${tone.text}`}>
+                {marginCents >= 0 ? "+" : ""}
+                {formatMoney(marginCents)}
+              </span>
+            ) : (
+              <p className="mt-1 text-xs text-gray-400">
+                {item.isProductGroup ? "prix le plus bas" : "coût inconnu"}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={item.active}
+            disabled={toggling === item.id}
+            onClick={() => onToggleActive(item)}
+            title={item.active ? "Désactiver" : "Activer"}
+            className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:opacity-50 ${
+              item.active ? "bg-green-600" : "bg-gray-300"
+            }`}
+          >
+            <span
+              className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                item.active ? "translate-x-4" : "translate-x-0"
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+
+      {item.isProductGroup && (
+        <div className="border-t border-gray-100 bg-gray-50/70 px-4 py-3">
+          {variants.length === 0 ? (
+            <p className="text-xs text-gray-400">Aucun SKU dans ce groupe pour le moment.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {variants.map((v) => (
+                <li key={v.id} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="min-w-0 truncate text-gray-600">{v.name}</span>
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    <span className="font-medium text-gray-800">{formatMoney(v.priceCents)}</span>
+                    <button
+                      type="button"
+                      title="Modifier"
+                      onClick={() => onEdit(v)}
+                      className="text-gray-300 hover:text-gray-600"
+                    >
+                      <IconEdit />
+                    </button>
+                    <button
+                      type="button"
+                      title="Supprimer"
+                      onClick={() => onRemove(v)}
+                      className="text-gray-300 hover:text-red-600"
+                    >
+                      <IconTrash />
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button
+            type="button"
+            className="mt-2.5 w-full rounded-full bg-white px-3 py-1.5 text-xs font-medium text-brand-700 shadow-sm ring-1 ring-brand-200 hover:bg-brand-50"
+            onClick={() => onAddVariant(item)}
+          >
+            + Ajouter un SKU
+          </button>
+        </div>
+      )}
+
+      <div className="flex items-center justify-end gap-1 border-t border-gray-100 px-2 py-1.5">
+        {item.sku && (
+          <button
+            type="button"
+            disabled={resyncing === item.id}
+            onClick={() => onResync(item)}
+            title="Resynchroniser"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-gray-50 hover:text-gray-700 disabled:opacity-50"
+          >
+            {resyncing === item.id ? <IconSpinner /> : <IconRefresh />}
+          </button>
+        )}
+        <button
+          type="button"
+          title="Modifier"
+          onClick={() => onEdit(item)}
+          className="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-gray-50 hover:text-gray-700"
+        >
+          <IconEdit />
+        </button>
+        <button
+          type="button"
+          title="Supprimer"
+          onClick={() => onRemove(item)}
+          className="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-red-50 hover:text-red-600"
+        >
+          <IconTrash />
+        </button>
+      </div>
     </div>
   );
 }
@@ -1228,6 +1507,97 @@ function IconGridView() {
       <rect x="14" y="3" width="7" height="7" rx="1" />
       <rect x="3" y="14" width="7" height="7" rx="1" />
       <rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  );
+}
+
+/** Icônes ajoutées pour le redesign "pro" de la page catalogue (01/08/2026, demande d'Adriel :
+ * "tu es expert en ux, ui et expert en web design, je veux que tu me proposes un design pro de
+ * cette page") — boutons de création avec icône, stats avec pictogramme dédié, actions
+ * condensées en icônes dans les cartes de la vue grille. */
+function IconPlus() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+      <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconTag({ small }: { small?: boolean }) {
+  const size = small ? 14 : 16;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path
+        d="M20.59 13.41 11 3.83A2 2 0 0 0 9.59 3.24L4 3.24 4 8.83a2 2 0 0 0 .59 1.41l9.59 9.58a2 2 0 0 0 2.82 0l3.59-3.59a2 2 0 0 0 0-2.82Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function IconPercent({ small }: { small?: boolean }) {
+  const size = small ? 14 : 16;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M19 5 5 19" strokeLinecap="round" />
+      <circle cx="6.5" cy="6.5" r="2.5" />
+      <circle cx="17.5" cy="17.5" r="2.5" />
+    </svg>
+  );
+}
+
+function IconAlert({ small }: { small?: boolean }) {
+  const size = small ? 14 : 16;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 3 2 20h20L12 3Z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 10v4" strokeLinecap="round" />
+      <circle cx="12" cy="17" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function IconInfo() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5" strokeLinecap="round" />
+      <circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function IconSearch() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconEdit() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+      <path d="M12 20h9" strokeLinecap="round" />
+      <path
+        d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function IconTrash() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+      <path d="M3 6h18" strokeLinecap="round" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10 11v6M14 11v6" strokeLinecap="round" />
     </svg>
   );
 }
