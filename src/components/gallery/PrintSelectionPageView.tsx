@@ -317,22 +317,27 @@ export function PrintSelectionPageView({
   // "Réassigner à" (toutes les photos d'un groupe en un clic, en-tête d'accordéon) — voir
   // assignToProduct et reassignGroup ci-dessous. Reçoit `ids` en paramètre plutôt que de relire
   // un state React pour éviter tout décalage avec une mise à jour pas encore appliquée.
-  async function applyProductToPhotos(ids: string[], productId: string) {
-    if (!productId || ids.length === 0) return;
+  //
+  // `productId: null` désassigne les photos (demande d'Adriel, 01/08/2026 : "je veux la
+  // possibilité pour une image assigné de le rendre non-assigné") — les deux sélecteurs
+  // proposent une option "Non assigné" en tête de liste (voir emptyOptionLabel) qui appelle
+  // cette fonction avec null plutôt que de forcer un choix parmi les produits existants.
+  async function applyProductToPhotos(ids: string[], productId: string | null) {
+    if (ids.length === 0) return;
     setPhotos((prev) => prev.map((p) => (ids.includes(p.id) ? { ...p, productId } : p)));
     setChecked((prev) => {
       const next = new Set(prev);
       ids.forEach((id) => next.delete(id));
       return next;
     });
-    // Referme l'accordéon du produit choisi une fois l'assignation faite (demande d'Adriel,
-    // 01/08/2026 : "quand je fini d'assigner les images a un produit, l'accordeon doit etre
-    // fermé [pas] ouvert") — signale visuellement que ce lot est traité et dégage la place pour
-    // repérer/sélectionner d'autres photos dans les groupes encore ouverts. Comportement inverse
-    // de la version précédente qui rouvrait le groupe automatiquement.
+    // Referme l'accordéon de destination (produit choisi, ou "unassigned" en cas de
+    // désassignation) une fois l'action faite (demande d'Adriel, 01/08/2026 : "quand je fini
+    // d'assigner les images a un produit, l'accordeon doit etre fermé [pas] ouvert") — signale
+    // visuellement que ce lot est traité et dégage la place pour repérer/sélectionner d'autres
+    // photos dans les groupes encore ouverts.
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
-      next.add(productId);
+      next.add(productId ?? "unassigned");
       return next;
     });
     await fetch("/api/selections", {
@@ -345,17 +350,17 @@ export function PrintSelectionPageView({
   // Choisir un produit dans le sélecteur de la barre d'action assigne IMMÉDIATEMENT les photos
   // cochées à ce produit (demande d'Adriel, 01/08/2026 : "quand je choisis un produit et quand on
   // selectionne une ou plusieurs photo, je veux que le choix d'un produit cree un accordeon et
-  // assigne les photos au produit").
-  async function assignToProduct(productId: string) {
-    await applyProductToPhotos([...validChecked], productId);
+  // assigne les photos au produit"). `value === ""` correspond à l'option "Non assigné".
+  async function assignToProduct(value: string) {
+    await applyProductToPhotos([...validChecked], value === "" ? null : value);
   }
 
   // Réassigne TOUTES les photos d'un groupe (pas seulement celles cochées) — sélecteur intégré
   // à l'en-tête de chaque accordéon (chantier 01/08/2026, sélections à 200 photos : déplacer un
   // groupe de 90 photos déjà assignées vers un autre produit ne doit pas obliger à toutes les
-  // décocher/recocher une par une).
-  async function reassignGroup(ids: string[], productId: string) {
-    await applyProductToPhotos(ids, productId);
+  // décocher/recocher une par une). `value === ""` correspond à l'option "Non assigné".
+  async function reassignGroup(ids: string[], value: string) {
+    await applyProductToPhotos(ids, value === "" ? null : value);
   }
 
   async function handleOrder() {
@@ -635,6 +640,12 @@ export function PrintSelectionPageView({
                                 placeholder={groupSomeChecked ? "Sélection partielle" : "Choisir..."}
                                 searchPlaceholder="Rechercher un produit..."
                                 disabled={groupSomeChecked}
+                                // "Non assigné" n'a de sens que pour désassigner un groupe déjà
+                                // assigné (g.product non nul) — le groupe "unassigned" l'est
+                                // déjà, inutile de proposer de s'y réassigner lui-même (demande
+                                // d'Adriel, 01/08/2026 : "je veux la possibilité pour une image
+                                // assigné de le rendre non-assigné").
+                                emptyOptionLabel={g.product ? "Non assigné" : undefined}
                               />
                             </div>
                           </div>
@@ -917,6 +928,11 @@ export function PrintSelectionPageView({
                       placeholder="Choisir un produit"
                       searchPlaceholder="Rechercher un produit..."
                       openUpward
+                      // Permet de désassigner les photos cochées, y compris déjà assignées
+                      // (demande d'Adriel, 01/08/2026 : "je veux la possibilité pour une image
+                      // assigné de le rendre non-assigné") — cocher une photo dans un groupe puis
+                      // choisir "Non assigné" ici la fait ressortir vers "Service non assigné".
+                      emptyOptionLabel="Non assigné"
                     />
                   </div>
                 </div>

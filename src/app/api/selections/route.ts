@@ -45,10 +45,15 @@ export async function POST(req: Request) {
  * panier impression du visiteur courant — utilisé par le panneau "Sélection impression"
  * pour déplacer une sélection de photos d'un groupe (service) à un autre en un clic, plutôt
  * que de devoir les retirer puis les rajouter une par une.
+ *
+ * `productId: null` désassigne les photos (demande d'Adriel, 01/08/2026 : "je veux la
+ * possibilité pour une image assigné de le rendre non-assigné") — remet le lot dans le groupe
+ * "Service non assigné" plutôt que de forcer un choix parmi les produits existants.
  */
 export async function PATCH(req: Request) {
   const { galleryId, photoIds, productId } = await req.json();
-  if (!galleryId || !Array.isArray(photoIds) || photoIds.length === 0 || typeof productId !== "string") {
+  const validProductId = productId === null || typeof productId === "string";
+  if (!galleryId || !Array.isArray(photoIds) || photoIds.length === 0 || !validProductId) {
     return NextResponse.json({ error: "Paramètres manquants" }, { status: 400 });
   }
 
