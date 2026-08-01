@@ -813,6 +813,14 @@ model Product {
   groupId     String?
   group       Product?    @relation("ProductGroupVariants", fields: [groupId], references: [id], onDelete: Cascade)
   variants    Product[]   @relation("ProductGroupVariants")
+  /// Ordre d'affichage manuel (demande d'Adriel, 01/08/2026 : "ajouter la possibilité de
+  /// déplacer les groupe de produits pour classer par ordre d'affichage") — croissant, réglé
+  /// par glisser-déposer dans /admin/print-catalog (voir reorderPrintCatalogItems). Comparé
+  /// séparément entre les lignes racine (groupId=NULL) et les variantes d'un même groupe
+  /// (mêmes groupId) : chaque "niveau" a son propre classement, jamais mélangés entre eux. Un
+  /// nouveau produit prend systématiquement la valeur la plus haute de ses frères + 1 (ajouté
+  /// en fin de liste), voir createPrintCatalogItem.
+  sortOrder   Int         @default(0)
   galleries   Gallery[]   @relation("GalleryProducts")
   orderItems  OrderItem[]
   selections  Selection[]

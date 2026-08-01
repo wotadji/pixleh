@@ -26,6 +26,11 @@ interface PrintCatalogItemDTO {
   isProductGroup: boolean;
   /** Non-null uniquement sur une variante : id du groupe parent. */
   groupId: string | null;
+  /** Ordre d'affichage manuel (demande d'Adriel, 01/08/2026 : "ajouter la possibilité de
+   * déplacer les groupe de produits pour classer par ordre d'affichage") — voir
+   * reorderPrintCatalogItems. Pas affiché tel quel, sert juste au tri côté serveur ; réordonné
+   * par glisser-déposer dans la liste (voir handleDrop). */
+  sortOrder: number;
 }
 
 /** Parse prodigiAttributeOptions en toute sécurité — utilisé aussi bien dans la liste que dans
@@ -151,6 +156,67 @@ export default function AdminPrintCatalogPage() {
   // Bascule liste/grille (demande d'Adriel, 02/08/2026 : "peux tu mettres un filtre d'affichage
   // en ligne et en grid") — même vocabulaire visuel que la page /print-selection côté client.
   const [view, setView] = useState<"list" | "grid">("list");
+
+  /**
+   * Réordonnancement par glisser-déposer (01/08/2026, demande d'Adriel : "ajouter la possibilité
+   * de déplacer les groupe de produits pour classer par ordre d'affichage (drill down par
+   * exemple)"). Le classement n'a de sens qu'entre "frères" d'un même niveau (voir sortOrder
+   * dans schema.prisma) : soit les lignes racine (groupes + produits autonomes) entre elles,
+   * soit les variantes d'un même groupe entre elles ("drill down") — jamais les deux mélangés.
+   * Les lignes racine ne sont réordonnables que si aucune recherche/filtre n'est actif : sinon
+   * l'ordre visible ne correspondrait plus à l'ordre réel de la liste complète (voir
+   * canReorderRoot ci-dessous, contrôle le rendu de la poignée dans CatalogRow/GridCard).
+   */
+  const canReorderRoot = search.trim() === "" && statusFilter === "ALL";
+
+  async function persistReorder(ids: string[]) {
+    try {
+      await fetch("/api/admin/print-catalog/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+    } catch {
+      // best-effort : en cas d'échec réseau, un rechargement de page retrouvera l'ordre
+      // précédent (toujours celui persisté en base) — pas bloquant pour l'admin.
+    }
+  }
+
+  function reorderRoot(draggedId: string, targetId: string) {
+    if (draggedId === targetId) return;
+    setItems((prev) => {
+      if (!prev) return prev;
+      const rootIds = prev.filter((i) => !i.groupId).map((i) => i.id);
+      const fromIdx = rootIds.indexOf(draggedId);
+      const toIdx = rootIds.indexOf(targetId);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      const newRootIds = [...rootIds];
+      newRootIds.splice(fromIdx, 1);
+      newRootIds.splice(toIdx, 0, draggedId);
+      persistReorder(newRootIds);
+      const byId = new Map(prev.map((i) => [i.id, i]));
+      const rest = prev.filter((i) => i.groupId);
+      return [...newRootIds.map((id) => byId.get(id)!), ...rest];
+    });
+  }
+
+  function reorderVariants(groupId: string, draggedId: string, targetId: string) {
+    if (draggedId === targetId) return;
+    setItems((prev) => {
+      if (!prev) return prev;
+      const variantIds = prev.filter((i) => i.groupId === groupId).map((i) => i.id);
+      const fromIdx = variantIds.indexOf(draggedId);
+      const toIdx = variantIds.indexOf(targetId);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      const newIds = [...variantIds];
+      newIds.splice(fromIdx, 1);
+      newIds.splice(toIdx, 0, draggedId);
+      persistReorder(newIds);
+      const byId = new Map(prev.map((i) => [i.id, i]));
+      const rest = prev.filter((i) => i.groupId !== groupId);
+      return [...rest, ...newIds.map((id) => byId.get(id)!)];
+    });
+  }
 
   async function loadItems() {
     const res = await fetch("/api/admin/print-catalog");
@@ -548,6 +614,13 @@ export default function AdminPrintCatalogPage() {
         </div>
       </div>
 
+      {!canReorderRoot && (
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-gray-400">
+          <IconGrip small /> Vide la recherche et remets le filtre sur « Tous les statuts » pour réordonner
+          les groupes/produits par glisser-déposer.
+        </p>
+      )}
+
       <div
         className={
           view === "grid"
@@ -592,6 +665,9 @@ export default function AdminPrintCatalogPage() {
               onEdit={openEdit}
               onRemove={remove}
               onAddVariant={openAddVariant}
+              reorderEnabled={canReorderRoot}
+              onReorder={reorderRoot}
+              onReorderVariant={(draggedId, targetId) => reorderVariants(item.id, draggedId, targetId)}
             />
           ) : (
             <div key={item.id}>
@@ -611,6 +687,8 @@ export default function AdminPrintCatalogPage() {
                 onResync={resync}
                 onEdit={openEdit}
                 onRemove={remove}
+                reorderEnabled={canReorderRoot}
+                onReorder={reorderRoot}
               />
               {item.isProductGroup && (
                 <div className="divide-y divide-gray-100 border-t border-gray-100 bg-gray-50/60 pl-6">
@@ -628,6 +706,8 @@ export default function AdminPrintCatalogPage() {
                       onResync={resync}
                       onEdit={openEdit}
                       onRemove={remove}
+                      reorderEnabled
+                      onReorder={(draggedId, targetId) => reorderVariants(item.id, draggedId, targetId)}
                     />
                   ))}
                   <div className="p-3">
@@ -728,6 +808,9 @@ function GridCard({
   onEdit,
   onRemove,
   onAddVariant,
+  reorderEnabled,
+  onReorder,
+  onReorderVariant,
 }: {
   item: PrintCatalogItemDTO;
   variants: PrintCatalogItemDTO[];
@@ -739,13 +822,40 @@ function GridCard({
   onEdit: (item: PrintCatalogItemDTO) => void;
   onRemove: (item: PrintCatalogItemDTO) => void;
   onAddVariant: (group: PrintCatalogItemDTO) => void;
+  /** Glisser-déposer (01/08/2026, demande d'Adriel : "ajouter la possibilité de déplacer les
+   * groupe de produits pour classer par ordre d'affichage") — la carte elle-même se déplace
+   * parmi les autres cartes racine (désactivé si une recherche/filtre est active, voir
+   * canReorderRoot), et ses variantes (si groupe) se réordonnent indépendamment entre elles. */
+  reorderEnabled?: boolean;
+  onReorder?: (draggedId: string, targetId: string) => void;
+  onReorderVariant?: (draggedId: string, targetId: string) => void;
 }) {
   const marginCents = item.wholesaleCostCents != null ? item.priceCents - item.wholesaleCostCents : null;
   const tone = marginCents != null ? marginTone(marginCents, item.priceCents) : null;
   const attributeOptions = parseAttributeOptions(item.prodigiAttributeOptions);
 
   return (
-    <div className="group flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md">
+    <div
+      draggable={reorderEnabled}
+      onDragStart={(e) => {
+        if (!reorderEnabled) return;
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", item.id);
+      }}
+      onDragOver={(e) => {
+        if (reorderEnabled) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        if (!reorderEnabled || !onReorder) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const draggedId = e.dataTransfer.getData("text/plain");
+        if (draggedId) onReorder(draggedId, item.id);
+      }}
+      className={`group flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md ${
+        reorderEnabled ? "cursor-grab active:cursor-grabbing" : ""
+      }`}
+    >
       <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden bg-gray-50">
         {item.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -756,6 +866,14 @@ function GridCard({
           </div>
         )}
         {!item.active && <div className="absolute inset-0 bg-white/55" />}
+        {reorderEnabled && (
+          <span
+            className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-white/85 text-gray-500 backdrop-blur-sm"
+            title="Glisser pour réordonner"
+          >
+            <IconGrip />
+          </span>
+        )}
         <div className="absolute left-2 top-2 flex flex-wrap gap-1">
           {item.isProductGroup && (
             <span className="rounded-full bg-indigo-600/90 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
@@ -839,8 +957,32 @@ function GridCard({
           ) : (
             <ul className="space-y-1.5">
               {variants.map((v) => (
-                <li key={v.id} className="flex items-center justify-between gap-2 text-xs">
-                  <span className="min-w-0 truncate text-gray-600">{v.name}</span>
+                <li
+                  key={v.id}
+                  draggable
+                  onDragStart={(e) => {
+                    e.stopPropagation();
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("text/plain", v.id);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const draggedId = e.dataTransfer.getData("text/plain");
+                    if (draggedId && onReorderVariant) onReorderVariant(draggedId, v.id);
+                  }}
+                  className="flex cursor-grab items-center justify-between gap-2 text-xs active:cursor-grabbing"
+                >
+                  <span className="flex min-w-0 items-center gap-1 text-gray-600">
+                    <span className="shrink-0 text-gray-300">
+                      <IconGrip small />
+                    </span>
+                    <span className="truncate">{v.name}</span>
+                  </span>
                   <span className="flex shrink-0 items-center gap-1.5">
                     <span className="font-medium text-gray-800">{formatMoney(v.priceCents)}</span>
                     <button
@@ -926,6 +1068,8 @@ function CatalogRow({
   onResync,
   onEdit,
   onRemove,
+  reorderEnabled,
+  onReorder,
 }: {
   item: PrintCatalogItemDTO;
   isVariant?: boolean;
@@ -936,6 +1080,12 @@ function CatalogRow({
   onResync: (item: PrintCatalogItemDTO) => void;
   onEdit: (item: PrintCatalogItemDTO) => void;
   onRemove: (item: PrintCatalogItemDTO) => void;
+  /** Glisser-déposer pour réordonner (01/08/2026, demande d'Adriel : "ajouter la possibilité de
+   * déplacer les groupe de produits pour classer par ordre d'affichage") — poignée visible
+   * uniquement si `reorderEnabled` (faux quand une recherche/filtre est active au niveau
+   * racine, voir canReorderRoot ; toujours vrai pour les variantes d'un groupe). */
+  reorderEnabled?: boolean;
+  onReorder?: (draggedId: string, targetId: string) => void;
 }) {
   const marginCents = item.wholesaleCostCents != null ? item.priceCents - item.wholesaleCostCents : null;
   const tone = marginCents != null ? marginTone(marginCents, item.priceCents) : null;
@@ -943,9 +1093,31 @@ function CatalogRow({
 
   return (
     <div
-      className={`flex flex-wrap items-center justify-between gap-3 p-4 ${!item.active ? "bg-gray-50/60" : ""}`}
+      draggable={reorderEnabled}
+      onDragStart={(e) => {
+        if (!reorderEnabled) return;
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", item.id);
+      }}
+      onDragOver={(e) => {
+        if (reorderEnabled) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        if (!reorderEnabled || !onReorder) return;
+        e.preventDefault();
+        const draggedId = e.dataTransfer.getData("text/plain");
+        if (draggedId) onReorder(draggedId, item.id);
+      }}
+      className={`flex flex-wrap items-center justify-between gap-3 p-4 ${!item.active ? "bg-gray-50/60" : ""} ${
+        reorderEnabled ? "cursor-grab active:cursor-grabbing" : ""
+      }`}
     >
       <div className="flex min-w-0 items-center gap-3">
+        {reorderEnabled && (
+          <span className="shrink-0 text-gray-300" title="Glisser pour réordonner">
+            <IconGrip />
+          </span>
+        )}
         {item.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -1587,6 +1759,23 @@ function IconEdit() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+/** Poignée de glisser-déposer (01/08/2026, demande d'Adriel : "ajouter la possibilité de
+ * déplacer les groupe de produits pour classer par ordre d'affichage (drill down par
+ * exemple)") — six points façon "grip", même symbole que la plupart des listes réordonnables. */
+function IconGrip({ small }: { small?: boolean }) {
+  const size = small ? 10 : 14;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="8" cy="5" r="1.6" />
+      <circle cx="8" cy="12" r="1.6" />
+      <circle cx="8" cy="19" r="1.6" />
+      <circle cx="16" cy="5" r="1.6" />
+      <circle cx="16" cy="12" r="1.6" />
+      <circle cx="16" cy="19" r="1.6" />
     </svg>
   );
 }

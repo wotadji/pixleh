@@ -36,19 +36,22 @@ export interface PrintCatalogItem {
   isProductGroup: boolean;
   /** Non-null uniquement sur une variante : id du Product groupe parent. */
   groupId: string | null;
+  /** Ordre d'affichage manuel — voir schema.prisma. Comparé séparément par "niveau" (lignes
+   * racine entre elles, variantes d'un même groupe entre elles), jamais mélangé entre niveaux. */
+  sortOrder: number;
   createdAt: Date;
 }
 
 const SELECT_COLUMNS = `"id", "name", "description", "priceCents", "currency", "sku", "imageUrl",
        "active", "wholesaleCostCents", "prodigiAttributeOptions", "isProductGroup", "groupId",
-       "createdAt"`;
+       "sortOrder", "createdAt"`;
 
 export async function listPrintCatalog(): Promise<PrintCatalogItem[]> {
   return prisma.$queryRaw<PrintCatalogItem[]>`
     SELECT ${Prisma.raw(SELECT_COLUMNS)}
     FROM "Product"
     WHERE "platformManaged" = true
-    ORDER BY "createdAt" DESC
+    ORDER BY "sortOrder" ASC, "createdAt" DESC
   `;
 }
 
@@ -61,21 +64,43 @@ export async function getActivePrintCatalog(): Promise<PrintCatalogItem[]> {
     SELECT ${Prisma.raw(SELECT_COLUMNS)}
     FROM "Product"
     WHERE "platformManaged" = true AND "active" = true AND "groupId" IS NULL
+    ORDER BY "sortOrder" ASC, "createdAt" DESC
   `;
 }
 
 /** Variantes actives d'un ou plusieurs groupes (Product.groupId) — chantier "groupe de
  * produits" (02/08/2026, demande d'Adriel). Utilisé par la page /print-selection pour proposer
  * le choix de taille/SKU sous chaque produit-groupe, sans jamais lister les variantes comme des
- * produits autonomes (voir getActivePrintCatalog ci-dessus). */
+ * produits autonomes (voir getActivePrintCatalog ci-dessus). Triées par sortOrder (classement
+ * manuel, demande d'Adriel 01/08/2026 : "déplacer les groupe de produits pour classer par ordre
+ * d'affichage [...] drill down") plutôt que par prix seul — l'admin choisit l'ordre des tailles
+ * proposées au client, le prix ne servant que de repère secondaire (SKU jamais réordonné). */
 export async function getPrintCatalogVariants(groupIds: string[]): Promise<PrintCatalogItem[]> {
   if (groupIds.length === 0) return [];
   return prisma.$queryRaw<PrintCatalogItem[]>`
     SELECT ${Prisma.raw(SELECT_COLUMNS)}
     FROM "Product"
     WHERE "platformManaged" = true AND "active" = true AND "groupId" IN (${Prisma.join(groupIds)})
-    ORDER BY "priceCents" ASC
+    ORDER BY "sortOrder" ASC, "priceCents" ASC
   `;
+}
+
+/**
+ * Réordonne les lignes d'un même "niveau" (soit toutes les lignes racine si parentGroupId est
+ * null, soit les variantes d'un groupe précis) — chantier "réorganisation par glisser-déposer"
+ * (01/08/2026, demande d'Adriel : "ajouter la possibilité de déplacer les groupe de produits
+ * pour classer par ordre d'affichage (drill down par exemple)"). `orderedIds` est la liste
+ * complète des ids de ce niveau, dans le nouvel ordre voulu : chaque id reçoit son index comme
+ * sortOrder. Volontairement un simple set d'UPDATE en série plutôt qu'une transaction Prisma
+ * classique (déjà en mode $queryRaw/$executeRaw partout ailleurs dans ce fichier, voir l'en-tête
+ * du fichier — colonne pas encore dans le Prisma Client généré du sandbox).
+ */
+export async function reorderPrintCatalogItems(orderedIds: string[]): Promise<void> {
+  await Promise.all(
+    orderedIds.map((id, index) =>
+      prisma.$executeRaw`UPDATE "Product" SET "sortOrder" = ${index} WHERE "id" = ${id} AND "platformManaged" = true`
+    )
+  );
 }
 
 /** Utilisé par le checkout (/api/cart/checkout) pour valider/tarifer les lignes du panier qui
@@ -121,15 +146,23 @@ export async function createPrintCatalogItem(data: {
   groupId?: string | null;
 }): Promise<PrintCatalogItem> {
   const id = data.id || randomUUID();
+  // Nouveau produit ajouté en fin de son "niveau" d'affichage (racine ou variantes du même
+  // groupId) — voir reorderPrintCatalogItems ci-dessus pour le classement manuel ensuite.
+  const groupId = data.groupId ?? null;
+  const [siblingMax] = await prisma.$queryRaw<Array<{ max: number | null }>>`
+    SELECT MAX("sortOrder") as max FROM "Product"
+    WHERE "platformManaged" = true AND ${groupId === null ? Prisma.sql`"groupId" IS NULL` : Prisma.sql`"groupId" = ${groupId}`}
+  `;
+  const sortOrder = (siblingMax?.max ?? -1) + 1;
   await prisma.$executeRaw`
     INSERT INTO "Product"
       ("id", "studioId", "type", "name", "description", "priceCents", "currency", "sku",
        "imageUrl", "active", "platformManaged", "wholesaleCostCents", "isProductGroup", "groupId",
-       "createdAt")
+       "sortOrder", "createdAt")
     VALUES
       (${id}, NULL, 'PRINT', ${data.name}, ${data.description}, ${data.priceCents},
        ${data.currency}, ${data.sku}, ${data.imageUrl}, ${data.active}, true,
-       ${data.wholesaleCostCents}, ${data.isProductGroup ?? false}, ${data.groupId ?? null}, NOW())
+       ${data.wholesaleCostCents}, ${data.isProductGroup ?? false}, ${groupId}, ${sortOrder}, NOW())
   `;
   const created = await getPrintCatalogItem(id);
   if (!created) throw new Error("Échec de la création du produit catalogue.");
