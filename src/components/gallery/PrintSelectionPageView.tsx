@@ -4,6 +4,26 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { Spinner } from "@/components/ui/Spinner";
+import { useLanguage } from "@/lib/i18n/LanguageProvider";
+import { MarketingLanguageSwitcher } from "@/components/marketing/MarketingLanguageSwitcher";
+
+/** Résout le nom/la description affichés selon la langue active (02/08/2026, demande d'Adriel :
+ * "je veux la possibilité de traduire par les différents langues [...] dans gallery mettre la
+ * possibilité de changer de langue") — repli sur le français (product.name/description, source
+ * de vérité) si la langue active est "fr" OU si aucune traduction n'a été saisie pour cette
+ * langue sur ce produit précis. Utilisé partout où un nom/description de PrintProductDTO est
+ * affiché dans cette page, pour rester cohérent quelle que soit la langue choisie. */
+function useProductText() {
+  const { locale } = useLanguage();
+  return function resolveProductText(product: { name: string; description: string | null; translations: Record<string, { name?: string; description?: string }> }) {
+    if (locale === "fr") return { name: product.name, description: product.description };
+    const t = product.translations[locale];
+    return {
+      name: t?.name || product.name,
+      description: t?.description || product.description,
+    };
+  };
+}
 
 interface PhotoDTO {
   id: string;
@@ -48,6 +68,11 @@ interface PrintProductDTO {
    * coloré + marge) autour de l'aperçu ; false = seule la photo est affichée, sans cadre. LOCAL
    * à pixleh, jamais transmis à Prodigi. */
   hasFrame: boolean;
+  /** Traductions du nom/de la description saisies en admin (02/08/2026, demande d'Adriel : "je
+   * veux la possibilité de traduire par les différents langues") — voir doc
+   * Product.translations dans schema.prisma et useProductText ci-dessus. {} = aucune traduction
+   * saisie, le français (name/description ci-dessus) s'affiche dans toutes les langues. */
+  translations: Record<string, { name?: string; description?: string }>;
   /** Chantier "groupe de produits" (02/08/2026, demande d'Adriel : "peux tu ajouter la
    * possibilité de creer un groupe de produit et a l'intérieur ajouter les SKU adéquat ?") —
    * non-vide UNIQUEMENT sur un produit-GROUPE (ex: "Toile photo") : ses tailles/SKU réels
@@ -265,6 +290,7 @@ export function PrintSelectionPageView({
   photos: PhotoDTO[];
   printProducts: PrintProductDTO[];
 }) {
+  const tr = useProductText();
   const [photos, setPhotos] = useState(initialPhotos);
   // Liste "à plat" incluant les variantes de chaque groupe (chantier "groupe de produits",
   // 02/08/2026) — utilisée partout où on doit RETROUVER le produit réellement assigné à une
@@ -791,7 +817,9 @@ export function PrintSelectionPageView({
               onScroll={updateProductStripArrows}
               className="flex gap-3 overflow-x-auto scroll-smooth pb-1"
             >
-              {printProducts.map((p) => (
+              {printProducts.map((p) => {
+                const pt = tr(p);
+                return (
               <div
                 key={p.id}
                 className="flex w-48 shrink-0 flex-col gap-2 rounded-lg border border-gray-200 bg-white p-3"
@@ -799,7 +827,7 @@ export function PrintSelectionPageView({
                 <div className="flex h-24 w-full items-center justify-center overflow-hidden rounded-md bg-gray-50">
                   {p.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.imageUrl} alt={p.name} className="h-full w-full object-cover" />
+                    <img src={p.imageUrl} alt={pt.name} className="h-full w-full object-cover" />
                   ) : (
                     <span className="text-gray-300">
                       <IconPrinterEmpty />
@@ -807,7 +835,7 @@ export function PrintSelectionPageView({
                   )}
                 </div>
                 <p className="truncate text-sm font-semibold text-gray-900">
-                  {p.name}
+                  {pt.name}
                   {/* "Groupe" = plusieurs tailles/SKU au choix (chantier "groupe de produits",
                       02/08/2026) — le prix affiché est celui de la variante la moins chère. */}
                   {p.variants && p.variants.length > 0 && (
@@ -816,8 +844,8 @@ export function PrintSelectionPageView({
                     </span>
                   )}
                 </p>
-                {p.description && (
-                  <p className="line-clamp-2 text-xs text-gray-500">{p.description}</p>
+                {pt.description && (
+                  <p className="line-clamp-2 text-xs text-gray-500">{pt.description}</p>
                 )}
                 <p className="mt-auto text-sm font-medium text-gray-800">
                   {p.variants && p.variants.length > 0 ? (
@@ -845,7 +873,8 @@ export function PrintSelectionPageView({
                   </button>
                 )}
               </div>
-              ))}
+                );
+              })}
             </div>
             {canScrollProductsRight && (
               <button
@@ -1010,7 +1039,7 @@ export function PrintSelectionPageView({
                             pas avoir à cocher 90 photos une par une. */}
                         <input
                           type="checkbox"
-                          aria-label={`Sélectionner tout le groupe ${g.product ? g.product.name : "non assigné"}`}
+                          aria-label={`Sélectionner tout le groupe ${g.product ? tr(g.product).name : "non assigné"}`}
                           checked={groupAllChecked}
                           ref={(el) => {
                             if (el) el.indeterminate = groupSomeChecked;
@@ -1030,7 +1059,7 @@ export function PrintSelectionPageView({
                                 g.product ? "text-gray-700" : "text-amber-700"
                               }`}
                             >
-                              {g.product ? g.product.name : "Service non assigné"}
+                              {g.product ? tr(g.product).name : "Service non assigné"}
                               {/* Prix à l'unité à côté du nom du produit (demande d'Adriel,
                                   01/08/2026 : "au niveau de la checklist a coté du nom de la
                                   liste mettre le prix à l'unité") — distinct du total du groupe
@@ -1239,7 +1268,7 @@ export function PrintSelectionPageView({
                         .map((g) => (
                           <div key={g.product!.id} className="flex items-center justify-between text-sm text-gray-600">
                             <span className="truncate">
-                              {g.photos.length} × {g.product!.name}
+                              {g.photos.length} × {tr(g.product!).name}
                             </span>
                             <span className="shrink-0 font-medium text-gray-800">
                               {formatMoney(g.product!.priceCents * g.photos.length, g.product!.currency)}
@@ -1463,7 +1492,7 @@ export function PrintSelectionPageView({
                     <SearchableSelect
                       value=""
                       onChange={(value) => assignToProduct(value)}
-                      options={printProducts.map((p) => ({ value: p.id, label: p.name }))}
+                      options={printProducts.map((p) => ({ value: p.id, label: tr(p).name }))}
                       placeholder="Choisir un produit"
                       searchPlaceholder="Rechercher un produit..."
                       openUpward
@@ -1571,6 +1600,7 @@ function ProductOptionsModal({
   onCancel: () => void;
   onConfirm: (variantId: string, attributes: Record<string, string> | null, borderType: string | null) => void;
 }) {
+  const tr = useProductText();
   const variants = entry.variants && entry.variants.length > 0 ? entry.variants : [entry];
   const showSizePicker = variants.length > 1;
 
@@ -1686,7 +1716,7 @@ function ProductOptionsModal({
               referenceDims={referenceDims}
             />
             <div className="w-full text-center">
-              <p className="line-clamp-2 text-sm font-medium leading-snug text-gray-900">{selectedVariant.name}</p>
+              <p className="line-clamp-2 text-sm font-medium leading-snug text-gray-900">{tr(selectedVariant).name}</p>
               <p className="mt-1 text-base font-semibold text-gray-800">
                 {formatMoney(selectedVariant.priceCents, selectedVariant.currency)}
               </p>
@@ -1716,7 +1746,7 @@ function ProductOptionsModal({
                               : "border-gray-200 text-gray-700 hover:border-gray-300"
                           }`}
                         >
-                          <span className="min-w-0 flex-1 truncate font-medium">{variant.name}</span>
+                          <span className="min-w-0 flex-1 truncate font-medium">{tr(variant).name}</span>
                           <span className="shrink-0 text-sm font-semibold">
                             {formatMoney(variant.priceCents, variant.currency)}
                           </span>
@@ -2008,6 +2038,7 @@ function FramePreview({
  * partie ou on a la photo du groupe et le texte") : w-64 → w-96.
  */
 function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO; onClose: () => void }) {
+  const tr = useProductText();
   const variants = group.variants ?? [];
   const prices = variants.map((v) => v.priceCents);
   const minPrice = prices.length > 0 ? Math.min(...prices) : null;
@@ -2024,7 +2055,7 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label={`Produits du groupe ${group.name}`}
+        aria-label={`Produits du groupe ${tr(group).name}`}
       >
         {/* En-tête — redesign "pro" (01/08/2026, demande d'Adriel : "tu es expert en ux, ui et
             expert en web design, je veux que tu me proposes un design pro de ce modal" puis
@@ -2037,7 +2068,7 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
             <IconFolder />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-lg font-semibold text-gray-900">{group.name}</h3>
+            <h3 className="truncate text-lg font-semibold text-gray-900">{tr(group).name}</h3>
             <p className="mt-1 text-sm text-gray-500">
               {variants.length} produit{variants.length > 1 ? "s" : ""} disponible{variants.length > 1 ? "s" : ""}
               {minPrice != null && maxPrice != null && (
@@ -2077,8 +2108,8 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
                 </div>
               )}
             </div>
-            {group.description ? (
-              <p className="whitespace-pre-line text-sm leading-relaxed text-gray-600">{group.description}</p>
+            {tr(group).description ? (
+              <p className="whitespace-pre-line text-sm leading-relaxed text-gray-600">{tr(group).description}</p>
             ) : (
               <p className="text-sm italic text-gray-400">Aucune description renseignée pour ce groupe.</p>
             )}
@@ -2092,7 +2123,9 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
               </p>
             ) : (
               <ul className="divide-y divide-gray-100">
-                {variants.map((variant) => (
+                {variants.map((variant) => {
+                  const vt = tr(variant);
+                  return (
                   <li key={variant.id} className="flex items-center gap-4 px-8 py-4 hover:bg-gray-50/70">
                     <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
                       {variant.imageUrl ? (
@@ -2105,13 +2138,13 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium leading-snug text-gray-900">{variant.name}</p>
+                      <p className="text-sm font-medium leading-snug text-gray-900">{vt.name}</p>
                       {/* line-clamp-2 plutôt que "truncate" (1 ligne, coupait la description au
                           milieu d'un mot avec "...") — laisse la description respirer sur deux
                           lignes complètes avant de tronquer proprement. */}
-                      {variant.description && (
+                      {vt.description && (
                         <p className="mt-1 line-clamp-2 text-xs leading-snug text-gray-500">
-                          {variant.description}
+                          {vt.description}
                         </p>
                       )}
                     </div>
@@ -2122,7 +2155,8 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
                       <p className="text-[11px] text-gray-400">/ photo</p>
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </div>
