@@ -1424,7 +1424,18 @@ function ProductOptionsModal({
   function defaultValuesFor(variant: PrintProductDTO, seed?: Record<string, string>) {
     const v: Record<string, string> = {};
     for (const [name, options] of Object.entries(variant.attributeOptions)) {
-      v[name] = seed?.[name] && options.includes(seed[name]) ? seed[name] : options[0];
+      if (seed?.[name] && options.includes(seed[name])) {
+        v[name] = seed[name];
+        continue;
+      }
+      // Couleur par défaut sur "black" quand elle est disponible (02/08/2026, demande d'Adriel :
+      // "par defaut mettre la couleur sur black") — avant, la première option de la liste
+      // Prodigi était prise par défaut, quelle qu'elle soit (souvent "natural"). On ne touche
+      // qu'aux vrais attributs de couleur (voir colorSwatchFor plus haut pour le même filtre
+      // "couleur|colour|color|glaze|verre|finish|finition"), pas à "Cadre"/matériau.
+      const isColorAttribute = /couleur|colour|color|glaze|verre|finish|finition/i.test(name);
+      const blackOption = isColorAttribute ? options.find((o) => /^black$|^noir$/i.test(o)) : undefined;
+      v[name] = blackOption ?? options[0];
     }
     return v;
   }
