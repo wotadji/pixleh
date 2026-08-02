@@ -1315,46 +1315,77 @@ function AttributeSelectionModal({
     return v;
   });
 
+  const attributeEntries = Object.entries(product.attributeOptions);
+
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 px-4"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 px-4 backdrop-blur-[1px]"
       onClick={onCancel}
       role="presentation"
     >
+      {/* Redesign "pro" (02/08/2026, demande d'Adriel : "tu es expert en ux, ui et expert en web
+          design, je veux que tu me proposes un design pro de ce modal") — même vocabulaire visuel
+          que GroupProductsPreviewModal/VariantSelectionModal juste avant : en-tête avec icône +
+          fourchette d'attributs en sous-titre, champs en grille 2 colonnes (au lieu d'empilés en
+          1 colonne, ce qui rendait la modale inutilement longue dès 4-5 attributs), pied de
+          modale séparé par une bordure. */}
       <div
-        className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl"
+        className="flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={`Options pour ${product.name}`}
       >
-        <h3 className="text-sm font-semibold text-gray-900">Options — {product.name}</h3>
-        <p className="mt-1 text-xs text-gray-500">
-          Choisissez les options avant d&apos;assigner {count > 1 ? `ces ${count} photos` : "cette photo"}.
-        </p>
-
-        <div className="mt-4 space-y-3">
-          {Object.entries(product.attributeOptions).map(([name, options]) => (
-            <div key={name}>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
-                {attributeLabel(name)}
-              </label>
-              <select
-                className="input"
-                value={values[name]}
-                onChange={(e) => setValues((v) => ({ ...v, [name]: e.target.value }))}
-              >
-                {options.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ))}
+        <div className="flex items-start gap-4 border-b border-gray-100 px-8 py-6">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+            <IconSliders />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="truncate text-lg font-semibold text-gray-900">Options — {product.name}</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Choisissez les {attributeEntries.length} option{attributeEntries.length > 1 ? "s" : ""} avant
+              d&apos;assigner {count > 1 ? `ces ${count} photos` : "cette photo"}.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            aria-label="Fermer"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+          >
+            <IconClose />
+          </button>
         </div>
 
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {attributeEntries.map(([name, options]) => (
+              <div key={name}>
+                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-gray-500">
+                  {attributeLabel(name)}
+                </label>
+                <div className="relative">
+                  <select
+                    className="input appearance-none pr-9"
+                    value={values[name]}
+                    onChange={(e) => setValues((v) => ({ ...v, [name]: e.target.value }))}
+                  >
+                    {options.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <IconChevronDown />
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-gray-100 bg-gray-50/60 px-8 py-5">
           <button type="button" className="btn-secondary text-sm" onClick={onCancel}>
             Annuler
           </button>
@@ -1645,6 +1676,19 @@ function IconSearch({ className = "" }: { className?: string }) {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
       <circle cx="11" cy="11" r="7" />
       <path d="m20 20-3.5-3.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Icône "curseurs de réglage" — en-tête de la modale d'options d'attributs Prodigi (redesign
+ * pro, 02/08/2026, demande d'Adriel). */
+function IconSliders() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h13M21 18h-2" strokeLinecap="round" />
+      <circle cx="13" cy="6" r="2" />
+      <circle cx="7" cy="12" r="2" />
+      <circle cx="17" cy="18" r="2" />
     </svg>
   );
 }
