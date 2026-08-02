@@ -5,6 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { ImageCropModal } from "@/components/admin/ImageCropModal";
 import { LOCALES, LOCALE_LABELS, DEFAULT_LOCALE, type Locale } from "@/lib/i18n/locales";
+import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import {
   MARKETING_BLOCK_LABELS,
   MARKETING_PAGE_LABELS,
@@ -58,6 +59,25 @@ function newFeatureItem(): NormalizedFeatureItem {
 
 const PAGES: MarketingPageKey[] = ["HOME", "EXEMPLES", "TARIFS", "A_PROPOS"];
 const BLOCK_TYPES: MarketingBlockType[] = ["HERO", "FEATURES", "CATEGORIES", "RICH_TEXT", "CTA"];
+
+/** Clés de traduction des libellés de type de bloc / page — MARKETING_BLOCK_LABELS et
+ * MARKETING_PAGE_LABELS (src/lib/marketingBlocks.ts) sont en français en dur, utilisés
+ * ailleurs (aperçus non traduits) ; ici on les traduit via t() pour le chantier "tout
+ * traduire" du panel admin (demande d'Adriel, 02/08/2026). */
+const BLOCK_LABEL_KEYS: Record<MarketingBlockType, string> = {
+  HERO: "admin.site.blockHero",
+  FEATURES: "admin.site.blockFeatures",
+  CATEGORIES: "admin.site.blockCategories",
+  RICH_TEXT: "admin.site.blockRichText",
+  CTA: "admin.site.blockCta",
+};
+
+const PAGE_LABEL_KEYS: Record<MarketingPageKey, string> = {
+  HOME: "admin.site.pageHome",
+  EXEMPLES: "admin.site.pageExemples",
+  TARIFS: "admin.site.pageTarifs",
+  A_PROPOS: "admin.site.pageAPropos",
+};
 
 interface BlockFormState {
   id?: string;
@@ -217,6 +237,7 @@ export default function AdminSitePage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   async function load(page: MarketingPageKey) {
     setBlocks(null);
@@ -277,7 +298,7 @@ export default function AdminSitePage() {
       );
       const resData = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(resData?.error?.formErrors?.[0] || resData?.error || "Erreur lors de l'enregistrement.");
+        setError(resData?.error?.formErrors?.[0] || resData?.error || t("admin.site.errorSave"));
         setSaving(false);
         return;
       }
@@ -289,13 +310,13 @@ export default function AdminSitePage() {
       }
       await load(activePage);
     } catch {
-      setError("Erreur réseau.");
+      setError(t("admin.site.errorNetwork"));
     }
     setSaving(false);
   }
 
   async function remove(block: MarketingBlockDTO) {
-    if (!confirm("Supprimer ce bloc ? Cette action est irréversible.")) return;
+    if (!confirm(t("admin.site.confirmDeleteBlock"))) return;
     const res = await fetch(`/api/admin/marketing-blocks/${block.id}`, { method: "DELETE" });
     if (res.ok) await load(activePage);
   }
@@ -325,7 +346,7 @@ export default function AdminSitePage() {
     const data = await res.json().catch(() => ({}));
     setUploading(false);
     if (!res.ok) {
-      setError(data?.error || "Échec de l'upload de l'image.");
+      setError(data?.error || t("admin.site.errorUploadImage"));
       return null;
     }
     return data.imageUrl as string;
@@ -364,23 +385,17 @@ export default function AdminSitePage() {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <h1 className="font-serif text-2xl font-semibold">Contenu du site</h1>
+        <h1 className="font-serif text-2xl font-semibold">{t("admin.site.title")}</h1>
         <button type="button" className="btn-primary" onClick={openAddPicker}>
-          + Ajouter un bloc
+          {t("admin.site.addBlock")}
         </button>
       </div>
-      <p className="mt-1 text-sm text-gray-500">
-        Chaque page du site marketing (accueil, exemples, tarifs, à propos) est composée de blocs
-        modifiables, réordonnables et supprimables — sans toucher au code. Chaque bloc peut être
-        traduit dans les 6 langues de la plateforme.
-      </p>
+      <p className="mt-1 text-sm text-gray-500">{t("admin.site.subtitle")}</p>
 
       <PageTabs activePage={activePage} onChange={setActivePage} />
 
       <div className="mt-6 space-y-3">
-        {blocks.length === 0 && (
-          <p className="text-sm text-gray-500">Aucun bloc sur cette page — ajoute le premier.</p>
-        )}
+        {blocks.length === 0 && <p className="text-sm text-gray-500">{t("admin.site.emptyBlocks")}</p>}
         {blocks.map((block, i) => (
           <div
             key={block.id}
@@ -389,15 +404,20 @@ export default function AdminSitePage() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-800">
-                  {MARKETING_BLOCK_LABELS[block.type]}
+                  {t(BLOCK_LABEL_KEYS[block.type])}
                 </span>
                 {!block.active && (
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">Masqué</span>
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                    {t("admin.site.hiddenBadge")}
+                  </span>
                 )}
                 {(block.data as any)?.sharedAcrossPages === true && (
                   <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
-                    Partagé sur les autres pages (
-                    {(block.data as any)?.sharedPosition === "before" ? "au-dessus" : "en dessous"})
+                    {t("admin.site.sharedBadgePrefix")} (
+                    {(block.data as any)?.sharedPosition === "before"
+                      ? t("admin.site.sharedBefore")
+                      : t("admin.site.sharedAfter")}
+                    )
                   </span>
                 )}
               </div>
@@ -409,7 +429,7 @@ export default function AdminSitePage() {
                 disabled={i === 0}
                 onClick={() => move(block, "up")}
                 className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-30"
-                aria-label="Monter"
+                aria-label={t("admin.site.moveUp")}
               >
                 ↑
               </button>
@@ -418,19 +438,19 @@ export default function AdminSitePage() {
                 disabled={i === blocks.length - 1}
                 onClick={() => move(block, "down")}
                 className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-30"
-                aria-label="Descendre"
+                aria-label={t("admin.site.moveDown")}
               >
                 ↓
               </button>
               <button type="button" className="btn-secondary ml-2 text-sm" onClick={() => openEdit(block)}>
-                Modifier
+                {t("admin.site.edit")}
               </button>
               <button
                 type="button"
                 className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
                 onClick={() => remove(block)}
               >
-                Supprimer
+                {t("admin.site.delete")}
               </button>
             </div>
           </div>
@@ -440,16 +460,16 @@ export default function AdminSitePage() {
       <Modal
         open={modalOpen}
         onClose={closeModal}
-        title={pickingType ? "Type de bloc" : form?.id ? "Modifier le bloc" : "Nouveau bloc"}
+        title={pickingType ? t("admin.site.modalTypeTitle") : form?.id ? t("admin.site.modalEditTitle") : t("admin.site.modalNewTitle")}
         widthClassName="max-w-2xl"
         footer={
           pickingType ? undefined : (
             <>
               <button type="button" className="btn-secondary text-sm" onClick={closeModal}>
-                Fermer
+                {t("admin.site.close")}
               </button>
               <button type="button" className="btn-primary text-sm" disabled={saving} onClick={save}>
-                {saving ? "Enregistrement..." : "Enregistrer"}
+                {saving ? t("admin.site.saving") : t("admin.site.save")}
               </button>
             </>
           )
@@ -464,7 +484,7 @@ export default function AdminSitePage() {
                 onClick={() => chooseType(type)}
                 className="rounded-lg border border-gray-200 px-4 py-3 text-left text-sm hover:border-brand-600 hover:bg-brand-50"
               >
-                {MARKETING_BLOCK_LABELS[type]}
+                {t(BLOCK_LABEL_KEYS[type])}
               </button>
             ))}
           </div>
@@ -495,6 +515,7 @@ function PageTabs({
   activePage: MarketingPageKey;
   onChange: (p: MarketingPageKey) => void;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="mt-6 flex gap-2 border-b border-gray-200">
       {PAGES.map((page) => (
@@ -508,7 +529,7 @@ function PageTabs({
               : "border-transparent text-gray-500 hover:text-gray-800"
           }`}
         >
-          {MARKETING_PAGE_LABELS[page]}
+          {t(PAGE_LABEL_KEYS[page])}
         </button>
       ))}
     </div>
@@ -569,6 +590,7 @@ function BlockForm({
 }) {
   const locale = form.activeLocale;
   const tr = form.translations[locale] || {};
+  const { t } = useLanguage();
 
   function setTr(patch: Partial<TranslationFields>) {
     setForm({ ...form, translations: { ...form.translations, [locale]: { ...tr, ...patch } } });
@@ -614,26 +636,26 @@ function BlockForm({
 
       {form.type === "HERO" && (
         <>
-          <Field label="Eyebrow (petit texte au-dessus du titre)">
+          <Field label={t("admin.site.fieldEyebrow")}>
             <input className="input" value={tr.eyebrow || ""} onChange={(e) => setTr({ eyebrow: e.target.value })} />
           </Field>
-          <Field label="Titre">
+          <Field label={t("admin.site.fieldTitle")}>
             <input className="input" value={tr.title || ""} onChange={(e) => setTr({ title: e.target.value })} />
           </Field>
-          <Field label="Sous-titre">
+          <Field label={t("admin.site.fieldSubtitle")}>
             <textarea className="input" rows={2} value={tr.subtitle || ""} onChange={(e) => setTr({ subtitle: e.target.value })} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Bouton principal — texte">
+            <Field label={t("admin.site.fieldPrimaryBtnText")}>
               <input className="input" value={tr.ctaLabel || ""} onChange={(e) => setTr({ ctaLabel: e.target.value })} />
             </Field>
-            <Field label="Bouton principal — lien (identique pour toutes les langues)">
+            <Field label={t("admin.site.fieldPrimaryBtnLink")}>
               <input className="input" placeholder="/register" value={form.ctaHref} onChange={(e) => setForm({ ...form, ctaHref: e.target.value })} />
             </Field>
-            <Field label="Bouton secondaire — texte">
+            <Field label={t("admin.site.fieldSecondaryBtnText")}>
               <input className="input" value={tr.secondaryCtaLabel || ""} onChange={(e) => setTr({ secondaryCtaLabel: e.target.value })} />
             </Field>
-            <Field label="Bouton secondaire — lien (identique pour toutes les langues)">
+            <Field label={t("admin.site.fieldSecondaryBtnLink")}>
               <input
                 className="input"
                 placeholder="/exemples"
@@ -642,7 +664,7 @@ function BlockForm({
               />
             </Field>
           </div>
-          <Field label="Couleur de fond (optionnelle, pleine largeur)">
+          <Field label={t("admin.site.fieldBgColor")}>
             <div className="flex items-center gap-2">
               <input
                 type="color"
@@ -652,28 +674,28 @@ function BlockForm({
               />
               <input
                 className="input"
-                placeholder="Aucune (transparent)"
+                placeholder={t("admin.site.bgColorNone")}
                 value={form.backgroundColor}
                 onChange={(e) => setForm({ ...form, backgroundColor: e.target.value })}
               />
               {form.backgroundColor && (
                 <button type="button" className="btn-secondary shrink-0 text-xs" onClick={() => setForm({ ...form, backgroundColor: "" })}>
-                  Retirer
+                  {t("admin.site.remove")}
                 </button>
               )}
             </div>
-            <p className="mt-1 text-xs text-gray-500">S&apos;applique sur toute la largeur de l&apos;écran, pas seulement le bloc de texte.</p>
+            <p className="mt-1 text-xs text-gray-500">{t("admin.site.bgColorHint")}</p>
           </Field>
-          <Field label="Visuel (identique pour toutes les langues)">
+          <Field label={t("admin.site.fieldVisual")}>
             <select
               className="input"
               value={form.mediaType}
               onChange={(e) => setForm({ ...form, mediaType: e.target.value as BlockFormState["mediaType"] })}
             >
-              <option value="none">Aucun (texte seul, centré — pour un simple en-tête de page)</option>
-              <option value="mockup">Mockup animé pixleh (par défaut, aucun fichier requis)</option>
-              <option value="photo">Photo</option>
-              <option value="video">Vidéo</option>
+              <option value="none">{t("admin.site.visualNone")}</option>
+              <option value="mockup">{t("admin.site.visualMockup")}</option>
+              <option value="photo">{t("admin.site.visualPhoto")}</option>
+              <option value="video">{t("admin.site.visualVideo")}</option>
             </select>
           </Field>
           {form.mediaType === "photo" && (
@@ -684,10 +706,10 @@ function BlockForm({
                 uploading={uploading}
                 onUpload={onUploadImage}
                 aspectRatio={4 / 3}
-                cropTitle="Recadrer l'image du hero"
-                recommendation="Recommandé : 1600×1200px minimum (ratio 4:3), JPG ou WEBP, poids < 2 Mo. Vous pourrez repositionner/zoomer avant l'envoi."
+                cropTitle={t("admin.site.cropHeroTitle")}
+                recommendation={t("admin.site.heroRecommendation")}
               />
-              <Field label="Style de présentation (identique pour toutes les langues)">
+              <Field label={t("admin.site.fieldLayoutStyle")}>
                 <select
                   className="input"
                   value={form.heroLayout}
@@ -699,26 +721,19 @@ function BlockForm({
                     </option>
                   ))}
                 </select>
-                <p className="mt-1 text-xs text-gray-500">
-                  5 façons de mettre en valeur la même photo — changez librement, l&apos;image
-                  n&apos;a pas besoin d&apos;être ré-uploadée.
-                </p>
+                <p className="mt-1 text-xs text-gray-500">{t("admin.site.layoutStyleHint")}</p>
               </Field>
             </>
           )}
           {form.mediaType === "video" && (
-            <Field label="URL de la vidéo (fichier .mp4 hébergé par vous ou un CDN)">
+            <Field label={t("admin.site.fieldVideoUrl")}>
               <input
                 className="input"
                 placeholder="https://..."
                 value={form.videoUrl}
                 onChange={(e) => setForm({ ...form, videoUrl: e.target.value })}
               />
-              <p className="mt-1 text-xs text-gray-500">
-                Recommandé : MP4 (H.264), 1920×1080, quelques secondes en boucle, sans son (lue
-                automatiquement muette). Pas d&apos;upload direct pour l&apos;instant — hébergez le
-                fichier ailleurs et collez son URL ici.
-              </p>
+              <p className="mt-1 text-xs text-gray-500">{t("admin.site.videoUrlHint")}</p>
             </Field>
           )}
         </>
@@ -726,17 +741,17 @@ function BlockForm({
 
       {form.type === "FEATURES" && (
         <>
-          <Field label="Eyebrow">
+          <Field label={t("admin.site.fieldEyebrow")}>
             <input className="input" value={tr.eyebrow || ""} onChange={(e) => setTr({ eyebrow: e.target.value })} />
           </Field>
-          <Field label="Titre">
+          <Field label={t("admin.site.fieldTitle")}>
             <input className="input" value={tr.title || ""} onChange={(e) => setTr({ title: e.target.value })} />
           </Field>
-          <Field label="Sous-titre">
+          <Field label={t("admin.site.fieldSubtitle")}>
             <textarea className="input" rows={2} value={tr.subtitle || ""} onChange={(e) => setTr({ subtitle: e.target.value })} />
           </Field>
           <div>
-            <p className="mb-1 text-sm font-medium">Fonctionnalités affichées (cartes)</p>
+            <p className="mb-1 text-sm font-medium">{t("admin.site.featuresListLabel")}</p>
             <div className="space-y-3">
               {form.featureItems.map((item) => {
                 const itemTr = item.translations[locale] || { title: "", desc: "" };
@@ -747,19 +762,19 @@ function BlockForm({
                       <img src={item.imageUrl} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
                     ) : (
                       <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-xs text-gray-400">
-                        Aucune
+                        {t("admin.site.noneImage")}
                       </div>
                     )}
                     <div className="flex-1 space-y-1">
                       <input
                         className="input"
-                        placeholder="Titre"
+                        placeholder={t("admin.site.placeholderTitle")}
                         value={itemTr.title}
                         onChange={(e) => setFeatureItemTr(item.id, { title: e.target.value })}
                       />
                       <textarea
                         className="input"
-                        placeholder="Description"
+                        placeholder={t("admin.site.placeholderDesc")}
                         rows={2}
                         value={itemTr.desc}
                         onChange={(e) => setFeatureItemTr(item.id, { desc: e.target.value })}
@@ -769,7 +784,7 @@ function BlockForm({
                         uploading={uploading}
                         onUpload={(file) => onUploadFeatureItemImage(item.id, file)}
                         aspectRatio={4 / 3}
-                        cropTitle="Recadrer l'image de la fonctionnalité"
+                        cropTitle={t("admin.site.cropFeatureTitle")}
                       />
                     </div>
                     <button
@@ -777,7 +792,7 @@ function BlockForm({
                       className="self-start shrink-0 rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
                       onClick={() => setForm({ ...form, featureItems: form.featureItems.filter((it) => it.id !== item.id) })}
                     >
-                      Retirer
+                      {t("admin.site.remove")}
                     </button>
                   </div>
                 );
@@ -788,28 +803,26 @@ function BlockForm({
               className="btn-secondary mt-2 text-sm"
               onClick={() => setForm({ ...form, featureItems: [...form.featureItems, newFeatureItem()] })}
             >
-              + Ajouter une fonctionnalité
+              {t("admin.site.addFeature")}
             </button>
-            <p className="mt-1 text-xs text-gray-500">
-              Image recommandée : 800×600px minimum (ratio 4:3), optionnelle — la même image sert pour toutes les langues.
-            </p>
+            <p className="mt-1 text-xs text-gray-500">{t("admin.site.featureImageHint")}</p>
           </div>
         </>
       )}
 
       {form.type === "CATEGORIES" && (
         <>
-          <Field label="Eyebrow">
+          <Field label={t("admin.site.fieldEyebrow")}>
             <input className="input" value={tr.eyebrow || ""} onChange={(e) => setTr({ eyebrow: e.target.value })} />
           </Field>
-          <Field label="Titre">
+          <Field label={t("admin.site.fieldTitle")}>
             <input className="input" value={tr.title || ""} onChange={(e) => setTr({ title: e.target.value })} />
           </Field>
-          <Field label="Sous-titre">
+          <Field label={t("admin.site.fieldSubtitle")}>
             <textarea className="input" rows={2} value={tr.subtitle || ""} onChange={(e) => setTr({ subtitle: e.target.value })} />
           </Field>
           <div>
-            <p className="mb-1 text-sm font-medium">Pastilles</p>
+            <p className="mb-1 text-sm font-medium">{t("admin.site.pastillesLabel")}</p>
             <div className="space-y-3">
               {form.categoryItems.map((cat) => {
                 const label = cat.translations[locale]?.label || "";
@@ -820,13 +833,13 @@ function BlockForm({
                       <img src={cat.imageUrl} alt="" className="h-14 w-14 shrink-0 rounded-full object-cover" />
                     ) : (
                       <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs text-gray-400">
-                        Aucune
+                        {t("admin.site.noneImage")}
                       </div>
                     )}
                     <div className="flex-1 space-y-1">
                       <input
                         className="input"
-                        placeholder="Nom (ex: Mariage)"
+                        placeholder={t("admin.site.placeholderCategoryName")}
                         value={label}
                         onChange={(e) => setCategoryItemTr(cat.id, e.target.value)}
                       />
@@ -841,7 +854,7 @@ function BlockForm({
                       className="self-start shrink-0 rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
                       onClick={() => setForm({ ...form, categoryItems: form.categoryItems.filter((it) => it.id !== cat.id) })}
                     >
-                      Retirer
+                      {t("admin.site.remove")}
                     </button>
                   </div>
                 );
@@ -852,7 +865,7 @@ function BlockForm({
               className="btn-secondary mt-2 text-sm"
               onClick={() => setForm({ ...form, categoryItems: [...form.categoryItems, newCategoryItem()] })}
             >
-              + Ajouter une pastille
+              {t("admin.site.addPastille")}
             </button>
           </div>
         </>
@@ -860,24 +873,24 @@ function BlockForm({
 
       {form.type === "RICH_TEXT" && (
         <>
-          <Field label="Eyebrow">
+          <Field label={t("admin.site.fieldEyebrow")}>
             <input className="input" value={tr.eyebrow || ""} onChange={(e) => setTr({ eyebrow: e.target.value })} />
           </Field>
-          <Field label="Titre">
+          <Field label={t("admin.site.fieldTitle")}>
             <input className="input" value={tr.title || ""} onChange={(e) => setTr({ title: e.target.value })} />
           </Field>
-          <Field label="Texte (une ligne vide = nouveau paragraphe)">
+          <Field label={t("admin.site.fieldBodyText")}>
             <textarea className="input" rows={8} value={tr.body || ""} onChange={(e) => setTr({ body: e.target.value })} />
           </Field>
-          <Field label="Image (identique pour toutes les langues)">
+          <Field label={t("admin.site.fieldImagePosition")}>
             <select
               className="input"
               value={form.imagePosition}
               onChange={(e) => setForm({ ...form, imagePosition: e.target.value as BlockFormState["imagePosition"] })}
             >
-              <option value="none">Aucune</option>
-              <option value="left">À gauche du texte</option>
-              <option value="right">À droite du texte</option>
+              <option value="none">{t("admin.site.imgPosNone")}</option>
+              <option value="left">{t("admin.site.imgPosLeft")}</option>
+              <option value="right">{t("admin.site.imgPosRight")}</option>
             </select>
           </Field>
           {form.imagePosition !== "none" && (
@@ -887,8 +900,8 @@ function BlockForm({
               uploading={uploading}
               onUpload={onUploadImage}
               aspectRatio={4 / 5}
-              cropTitle="Recadrer l'image"
-              recommendation="Recommandé : 1200×1500px minimum (format portrait), JPG ou WEBP. Vous pourrez repositionner/zoomer avant l'envoi."
+              cropTitle={t("admin.site.cropRichTextTitle")}
+              recommendation={t("admin.site.richTextRecommendation")}
             />
           )}
         </>
@@ -896,17 +909,17 @@ function BlockForm({
 
       {form.type === "CTA" && (
         <>
-          <Field label="Titre">
+          <Field label={t("admin.site.fieldTitle")}>
             <input className="input" value={tr.title || ""} onChange={(e) => setTr({ title: e.target.value })} />
           </Field>
-          <Field label="Sous-titre">
+          <Field label={t("admin.site.fieldSubtitle")}>
             <textarea className="input" rows={2} value={tr.subtitle || ""} onChange={(e) => setTr({ subtitle: e.target.value })} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Bouton — texte">
+            <Field label={t("admin.site.ctaButtonText")}>
               <input className="input" value={tr.ctaLabel || ""} onChange={(e) => setTr({ ctaLabel: e.target.value })} />
             </Field>
-            <Field label="Bouton — lien (identique pour toutes les langues)">
+            <Field label={t("admin.site.ctaButtonLink")}>
               <input className="input" placeholder="/register" value={form.ctaHref} onChange={(e) => setForm({ ...form, ctaHref: e.target.value })} />
             </Field>
           </div>
@@ -916,13 +929,13 @@ function BlockForm({
             uploading={uploading}
             onUpload={onUploadImage}
             aspectRatio={4 / 3}
-            cropTitle="Recadrer l'image de l'appel à l'action"
-            recommendation="Recommandé : 1600×1200px minimum (ratio 4:3), JPG ou WEBP. Si aucune image n'est envoyée, le visuel par défaut ci-dessous peut être affiché à la place."
+            cropTitle={t("admin.site.cropCtaTitle")}
+            recommendation={t("admin.site.ctaRecommendation")}
           />
           {!form.imageUrl && (
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={form.showVisual} onChange={(e) => setForm({ ...form, showVisual: e.target.checked })} />
-              Afficher le visuel par défaut (cartes facture/boutique) tant qu&apos;aucune image n&apos;est envoyée
+              {t("admin.site.showDefaultVisual")}
             </label>
           )}
         </>
@@ -930,7 +943,8 @@ function BlockForm({
 
       <label className="flex items-center gap-2 border-t border-gray-100 pt-4 text-sm">
         <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
-        Actif (visible sur la page {MARKETING_PAGE_LABELS[page]})
+        {t("admin.site.activePrefix")} {t(PAGE_LABEL_KEYS[page])}
+        {t("admin.site.activeSuffix")}
       </label>
 
       {page === "HOME" && (
@@ -941,18 +955,18 @@ function BlockForm({
               checked={form.sharedAcrossPages}
               onChange={(e) => setForm({ ...form, sharedAcrossPages: e.target.checked })}
             />
-            Afficher aussi sur Exemples, Tarifs et À propos
+            {t("admin.site.sharedAcrossPagesLabel")}
           </label>
           {form.sharedAcrossPages && (
             <label className="ml-6 flex items-center gap-2 text-sm text-gray-600">
-              Position sur ces pages :
+              {t("admin.site.sharedPositionLabel")}
               <select
                 className="input w-auto"
                 value={form.sharedPosition}
                 onChange={(e) => setForm({ ...form, sharedPosition: e.target.value as "before" | "after" })}
               >
-                <option value="before">Au-dessus du contenu de la page</option>
-                <option value="after">En dessous du contenu de la page</option>
+                <option value="before">{t("admin.site.positionBefore")}</option>
+                <option value="after">{t("admin.site.positionAfter")}</option>
               </select>
             </label>
           )}
@@ -992,16 +1006,17 @@ function ImageUploadField({
 }) {
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [inputKey, setInputKey] = useState(0);
+  const { t } = useLanguage();
 
   if (!blockId) {
     return (
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-        Enregistre d&apos;abord ce bloc pour pouvoir y ajouter une image.
+        {t("admin.site.saveBlockFirst")}
       </div>
     );
   }
   return (
-    <Field label="Image">
+    <Field label={t("admin.site.fieldImage")}>
       {imageUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={imageUrl} alt="" className="mb-2 h-32 w-full rounded-lg object-cover" />
@@ -1017,8 +1032,8 @@ function ImageUploadField({
         }}
       />
       <p className="mt-1 text-xs text-gray-500">
-        {imageUrl ? "Choisissez un fichier pour remplacer et recadrer l'image. " : ""}
-        {uploading ? "Envoi en cours..." : ""}
+        {imageUrl ? t("admin.site.uploadReplaceHint") : ""}
+        {uploading ? t("admin.site.uploading") : ""}
       </p>
       <p className="mt-1 text-xs text-gray-500">{recommendation}</p>
 
@@ -1050,7 +1065,7 @@ function CategoryImageUploader({
   uploading,
   onUpload,
   aspectRatio = 1,
-  cropTitle = "Recadrer l'image",
+  cropTitle,
 }: {
   blockId?: string;
   uploading: boolean;
@@ -1060,9 +1075,10 @@ function CategoryImageUploader({
 }) {
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [inputKey, setInputKey] = useState(0);
+  const { t } = useLanguage();
 
   if (!blockId) {
-    return <p className="text-xs text-amber-700">Enregistre d&apos;abord ce bloc pour ajouter une image.</p>;
+    return <p className="text-xs text-amber-700">{t("admin.site.saveBlockFirstShort")}</p>;
   }
 
   return (
@@ -1082,7 +1098,7 @@ function CategoryImageUploader({
         <ImageCropModal
           file={cropFile}
           aspectRatio={aspectRatio}
-          title={cropTitle}
+          title={cropTitle || t("admin.site.cropDefaultTitle")}
           onCancel={() => {
             setCropFile(null);
             setInputKey((k) => k + 1);
