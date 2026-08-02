@@ -1256,14 +1256,16 @@ export function PrintSelectionPageView({
                     <div className="mt-5 space-y-2 border-t border-gray-100 pt-5">
                       <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Vos coordonnées</p>
                       <input
-                        placeholder="Votre nom"
+                        placeholder="Votre nom *"
+                        required
                         className="input"
                         value={customer.name}
                         onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
                       />
                       <input
-                        placeholder="Votre email"
+                        placeholder="Votre email *"
                         type="email"
+                        required
                         className="input"
                         value={customer.email}
                         onChange={(e) => setCustomer({ ...customer, email: e.target.value })}
@@ -1277,7 +1279,8 @@ export function PrintSelectionPageView({
 
                       <div ref={addressBoxRef} className="relative">
                         <input
-                          placeholder="Adresse (numéro et rue)"
+                          placeholder="Adresse (numéro et rue) *"
+                          required
                           className="input"
                           value={shipping.line1}
                           onChange={(e) => onLine1Change(e.target.value)}
@@ -1310,13 +1313,15 @@ export function PrintSelectionPageView({
                       />
                       <div className="grid grid-cols-2 gap-3">
                         <input
-                          placeholder="Code postal"
+                          placeholder="Code postal *"
+                          required
                           className="input"
                           value={shipping.postalCode}
                           onChange={(e) => setShipping({ ...shipping, postalCode: e.target.value })}
                         />
                         <input
-                          placeholder="Ville"
+                          placeholder="Ville *"
+                          required
                           className="input"
                           value={shipping.city}
                           onChange={(e) => setShipping({ ...shipping, city: e.target.value })}
@@ -1345,7 +1350,10 @@ export function PrintSelectionPageView({
                           onChange={(e) => setShipping({ ...shipping, phone: e.target.value })}
                         />
                       </div>
-                      <p className="text-[11px] text-gray-400">* Téléphone requis pour faciliter la livraison.</p>
+                      <p className="text-[11px] text-gray-400">
+                        * Champs obligatoires (nom, email, adresse, code postal, ville, téléphone) —
+                        seul le complément d&apos;adresse est optionnel.
+                      </p>
                     </div>
 
                     {/* Ligne "Livraison" DYNAMIQUE, APRÈS l'adresse (02/08/2026, demande d'Adriel :

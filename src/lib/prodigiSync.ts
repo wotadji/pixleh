@@ -298,6 +298,15 @@ export async function getProdigiShippingQuote(params: {
         };
       }
 
+      // Log serveur systématique sur tout échec (02/08/2026, demande d'Adriel : "est ce que
+      // c'est parce que j'ai choisit deux produits différents ?") — le message d'erreur renvoyé
+      // au client tronque le corps Prodigi à 300 caractères ; ce log complet (SKUs du panier +
+      // statut + corps brut) permet de vérifier après coup si un panier multi-SKU est vraiment en
+      // cause, plutôt que de deviner. Non bloquant : n'affecte jamais la réponse renvoyée.
+      console.error(
+        `Devis de livraison Prodigi — tentative ${attempt + 1}/${MAX_ATTEMPTS} échouée (status ${res.status}) pour SKUs [${items.map((it) => it.sku).join(", ")}] → ${JSON.stringify(data)}`
+      );
+
       if (!attributeRetryUsed && data?.outcome === "ValidationFailed" && data?.failures) {
         const missingByIndex = extractMissingAttributesByItemIndex(data);
         if (Object.keys(missingByIndex).length > 0) {
