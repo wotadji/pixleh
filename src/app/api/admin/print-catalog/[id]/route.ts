@@ -55,6 +55,12 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         borderOptionEnabled: parsed.data.borderOptionEnabled,
       }),
       ...(parsed.data.hasFrame !== undefined && { hasFrame: parsed.data.hasFrame }),
+      ...(parsed.data.translations !== undefined && {
+        translations:
+          parsed.data.translations && Object.keys(parsed.data.translations).length
+            ? JSON.stringify(parsed.data.translations)
+            : null,
+      }),
     });
 
     return NextResponse.json({ item });

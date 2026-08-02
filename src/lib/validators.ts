@@ -105,6 +105,13 @@ export const printCatalogItemSchema = z.object({
    * valider si on dois mettre un Cadre sur la photo [...] pour le moment toute les produits on
    * un cadre avec couleur grise") — voir doc Product.hasFrame dans schema.prisma. */
   hasFrame: z.boolean().optional(),
+  /** Traductions du nom/de la description par langue (02/08/2026, demande d'Adriel : "je veux la
+   * possibilité de traduire par les différents langues que nous avons dans notre saas") — clés =
+   * codes de src/lib/i18n/locales.ts (hors "fr", qui reste dans name/description ci-dessus).
+   * Reçu ici comme objet (pas encore sérialisé) : l'API route le JSON.stringify avant de le
+   * transmettre à createPrintCatalogItem/updatePrintCatalogItem, voir doc Product.translations
+   * dans schema.prisma. */
+  translations: z.record(z.string(), z.object({ name: z.string().optional(), description: z.string().optional().nullable() })).optional(),
 });
 
 export const bookingRequestSchema = z.object({

@@ -70,6 +70,10 @@ export async function POST(req: Request) {
       groupId,
       borderOptionEnabled: parsed.data.borderOptionEnabled ?? false,
       hasFrame: parsed.data.hasFrame ?? true,
+      translations:
+        parsed.data.translations && Object.keys(parsed.data.translations).length
+          ? JSON.stringify(parsed.data.translations)
+          : null,
     });
 
     return NextResponse.json({ item, prodigiSync }, { status: 201 });

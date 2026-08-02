@@ -850,6 +850,18 @@ model Product {
   /// explicitement cette case pour un produit qui n'a pas de cadre physique (ex: tirage seul,
   /// toile, papier photo).
   hasFrame Boolean @default(true)
+  /// Traductions EN/ES/PT/ZH/AR du nom et de la description (02/08/2026, demande d'Adriel : "a
+  /// l'ajoute d'un groupe et d'un produit, je veux la possibilité de traduire par les différents
+  /// langues que nous avons dans notre saas et traduire ce que nous avons deja enregistré") —
+  /// JSON stringifié (comme prodigiAttributeOptions ci-dessus, pas de colonne Json native : Product
+  /// est entièrement géré via $queryRaw/$executeRaw dans printCatalog.ts, colonne pas encore
+  /// migrée dans le Prisma Client généré du sandbox, voir tâche #254). Forme :
+  /// {"en":{"name":"...","description":"..."},"es":{...},...} — clés = codes de
+  /// src/lib/i18n/locales.ts (LOCALES, hors "fr"). Le français reste dans les colonnes
+  /// name/description ci-dessus (source de vérité, jamais dupliqué ici). Résolu côté client
+  /// (PrintSelectionPageView.tsx) selon la langue active (useLanguage()), repli sur le français
+  /// si la langue n'a pas (encore) de traduction pour ce produit.
+  translations String? @db.Text
   galleries   Gallery[]   @relation("GalleryProducts")
   orderItems  OrderItem[]
   selections  Selection[]

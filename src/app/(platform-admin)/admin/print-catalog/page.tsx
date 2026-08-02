@@ -4,6 +4,13 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { PageSpinner } from "@/components/ui/Spinner";
+import { LOCALES, LOCALE_LABELS, DEFAULT_LOCALE, type Locale } from "@/lib/i18n/locales";
+
+/** Langues traduisibles pour le nom/la description d'un groupe ou produit — toutes les langues
+ * du SaaS SAUF le français, qui reste dans les colonnes de base name/description (source de
+ * vérité, jamais dupliqué dans `translations`). Voir doc Product.translations dans
+ * schema.prisma. */
+const TRANSLATABLE_LOCALES = LOCALES.filter((l) => l !== DEFAULT_LOCALE);
 
 interface PrintCatalogItemDTO {
   id: string;
@@ -43,6 +50,57 @@ interface PrintCatalogItemDTO {
    * encadrement autour de l'aperçu du tirage pour ce produit. LOCAL à pixleh, jamais transmis à
    * Prodigi. */
   hasFrame: boolean;
+  /** Traductions du nom/de la description (JSON string) — voir doc Product.translations dans
+   * schema.prisma. null = aucune traduction saisie. */
+  translations: string | null;
+}
+
+/** Une entrée de traduction par langue non-française — les deux champs restent optionnels côté
+ * saisie (un studio peut vouloir traduire seulement le nom, pas la description) mais sont
+ * toujours présents comme chaînes (vides = non traduit) côté FormState, pour simplifier la
+ * liaison aux <input> contrôlés. */
+interface TranslationEntry {
+  name: string;
+  description: string;
+}
+
+/** Parse Product.translations en toute sécurité (JSON string ou null) — retourne un objet vide
+ * si absent/invalide plutôt que de faire planter le rendu, même patron que
+ * parseAttributeOptions ci-dessous. */
+function parseTranslations(json: string | null): Partial<Record<Locale, TranslationEntry>> {
+  if (!json) return {};
+  try {
+    const parsed = JSON.parse(json);
+    if (!parsed || typeof parsed !== "object") return {};
+    const result: Partial<Record<Locale, TranslationEntry>> = {};
+    for (const loc of TRANSLATABLE_LOCALES) {
+      const entry = parsed[loc];
+      if (entry && typeof entry === "object") {
+        result[loc] = { name: entry.name || "", description: entry.description || "" };
+      }
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+/** Construit le payload `translations` envoyé à l'API : ne garde que les langues où au moins le
+ * nom a été saisi (une description seule sans nom n'aurait pas de sens à l'affichage), et
+ * trimme/omet la description si vide — évite d'envoyer des entrées "vides" qui polluent le JSON
+ * en base pour rien. undefined si aucune langue n'a de nom saisi. */
+function buildTranslationsPayload(
+  translations: Partial<Record<Locale, TranslationEntry>>
+): Record<string, { name: string; description?: string }> | undefined {
+  const result: Record<string, { name: string; description?: string }> = {};
+  for (const loc of TRANSLATABLE_LOCALES) {
+    const entry = translations[loc];
+    const name = entry?.name.trim();
+    if (!name) continue;
+    const description = entry?.description.trim();
+    result[loc] = description ? { name, description } : { name };
+  }
+  return Object.keys(result).length ? result : undefined;
 }
 
 /** Parse prodigiAttributeOptions en toute sécurité — utilisé aussi bien dans la liste que dans
@@ -83,6 +141,12 @@ interface FormState {
   borderOptionEnabled: boolean;
   /** Voir doc PrintCatalogItemDTO.hasFrame — LOCAL, jamais transmis à Prodigi. */
   hasFrame: boolean;
+  /** Traductions du nom/de la description, une entrée par langue non-française (02/08/2026,
+   * demande d'Adriel : "je veux la possibilité de traduire par les différents langues"). Une
+   * langue absente du record = pas encore ouverte/éditée dans le formulaire ; une entrée
+   * présente avec des champs vides = ouverte mais rien saisi (n'est PAS envoyée à l'API, voir
+   * buildTranslationsPayload). */
+  translations: Partial<Record<Locale, TranslationEntry>>;
 }
 
 /** Génère un id côté client pour un nouveau produit (même patron que makeSlideId dans
@@ -105,6 +169,7 @@ const EMPTY_FORM_FIELDS = {
   groupId: null as string | null,
   borderOptionEnabled: false,
   hasFrame: true,
+  translations: {} as Partial<Record<Locale, TranslationEntry>>,
 };
 
 type StatusFilter = "ALL" | "ACTIVE" | "INACTIVE" | "NO_SKU";
@@ -136,6 +201,7 @@ function itemToForm(item: PrintCatalogItemDTO): FormState {
     groupId: item.groupId,
     borderOptionEnabled: item.borderOptionEnabled,
     hasFrame: item.hasFrame,
+    translations: parseTranslations(item.translations),
   };
 }
 
@@ -324,6 +390,7 @@ export default function AdminPrintCatalogPage() {
       groupId: form.groupId,
       borderOptionEnabled: form.borderOptionEnabled,
       hasFrame: form.hasFrame,
+      translations: buildTranslationsPayload(form.translations),
     };
 
     try {
@@ -1454,6 +1521,43 @@ function ProductModal({
    * produit"). */
   groups: PrintCatalogItemDTO[];
 }) {
+  // Langue actuellement éditée dans le bloc Nom/Description (02/08/2026, demande d'Adriel : "a
+  // l'ajoute d'un groupe et d'un produit, je veux la possibilité de traduire par les différents
+  // langues") — état purement local à la modale (pas dans FormState). ProductModal reste monté
+  // en permanence (Modal gère juste l'affichage via `open`, voir l'appel côté page) : sans ce
+  // reset explicite sur changement de `form.id`, la langue affichée resterait celle du dernier
+  // produit ouvert au lieu de repartir sur "fr" à chaque nouvelle ouverture.
+  const [activeLang, setActiveLang] = useState<Locale>(DEFAULT_LOCALE);
+  useEffect(() => {
+    setActiveLang(DEFAULT_LOCALE);
+  }, [form.id]);
+  // Lecture/écriture du Nom et de la Description selon la langue active — "fr" reste dans les
+  // colonnes de base (name/description), les autres langues dans form.translations[activeLang]
+  // (voir doc TranslationEntry). Fonctions plutôt que des variables : recalculées à chaque rendu,
+  // toujours cohérentes avec `activeLang`/`form` courants.
+  function currentName() {
+    return activeLang === DEFAULT_LOCALE ? form.name : (form.translations[activeLang]?.name ?? "");
+  }
+  function currentDescription() {
+    return activeLang === DEFAULT_LOCALE ? form.description : (form.translations[activeLang]?.description ?? "");
+  }
+  function setCurrentName(value: string) {
+    if (activeLang === DEFAULT_LOCALE) {
+      setForm({ ...form, name: value });
+      return;
+    }
+    const entry = form.translations[activeLang] ?? { name: "", description: "" };
+    setForm({ ...form, translations: { ...form.translations, [activeLang]: { ...entry, name: value } } });
+  }
+  function setCurrentDescription(value: string) {
+    if (activeLang === DEFAULT_LOCALE) {
+      setForm({ ...form, description: value });
+      return;
+    }
+    const entry = form.translations[activeLang] ?? { name: "", description: "" };
+    setForm({ ...form, translations: { ...form.translations, [activeLang]: { ...entry, description: value } } });
+  }
+
   const priceCents = toCents(form.price);
   const costCents = form.wholesaleCost.trim() ? toCents(form.wholesaleCost) : null;
   const marginCents = costCents != null ? priceCents - costCents : null;
@@ -1518,23 +1622,64 @@ function ProductModal({
               {form.isProductGroup ? <IconFolder /> : <IconPrinter />}
             </div>
           )}
-          <div className="min-w-0 flex-1">
-            <label className="mb-1 block text-sm font-medium">Nom</label>
-            <input
-              className="input"
-              placeholder={form.isProductGroup ? "Toile photo" : "Impression 10x15"}
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
-          </div>
+          <p className="min-w-0 flex-1 text-xs text-gray-400">
+            Photo du {form.isProductGroup ? "groupe" : "produit"} — voir le champ Nom ci-dessous
+            (onglets de langue).
+          </p>
         </div>
 
+        {/* Onglets de langue — chantier "traduction du catalogue" (02/08/2026, demande d'Adriel :
+            "a l'ajoute d'un groupe et d'un produit, je veux la possibilité de traduire par les
+            différents langues que nous avons dans notre saas"). "fr" reste toujours le premier
+            onglet et édite directement les champs Nom/Description ci-dessus (source de vérité,
+            déjà saisie plus haut) — les onglets suivants ouvrent translations[langue]. Pastille
+            verte discrète sur un onglet déjà traduit (nom non-vide), pour repérer en un coup
+            d'œil ce qu'il reste à faire sur un produit donné. */}
         <div>
-          <label className="mb-1 block text-sm font-medium">Description</label>
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {([DEFAULT_LOCALE, ...TRANSLATABLE_LOCALES] as Locale[]).map((loc) => {
+              const isActive = activeLang === loc;
+              const isTranslated = loc !== DEFAULT_LOCALE && !!form.translations[loc]?.name.trim();
+              return (
+                <button
+                  key={loc}
+                  type="button"
+                  onClick={() => setActiveLang(loc)}
+                  className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                    isActive ? "bg-brand-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {LOCALE_LABELS[loc]}
+                  {isTranslated && !isActive && <span className="h-1.5 w-1.5 rounded-full bg-green-500" />}
+                </button>
+              );
+            })}
+          </div>
+
+          <label className="mb-1 block text-sm font-medium">
+            {activeLang === DEFAULT_LOCALE ? "Nom" : `Nom (${LOCALE_LABELS[activeLang]})`}
+          </label>
           <input
             className="input"
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            placeholder={
+              activeLang === DEFAULT_LOCALE
+                ? form.isProductGroup
+                  ? "Toile photo"
+                  : "Impression 10x15"
+                : form.name
+            }
+            value={currentName()}
+            onChange={(e) => setCurrentName(e.target.value)}
+          />
+
+          <label className="mb-1 mt-3 block text-sm font-medium">
+            {activeLang === DEFAULT_LOCALE ? "Description" : `Description (${LOCALE_LABELS[activeLang]})`}
+          </label>
+          <input
+            className="input"
+            placeholder={activeLang !== DEFAULT_LOCALE ? form.description : undefined}
+            value={currentDescription()}
+            onChange={(e) => setCurrentDescription(e.target.value)}
           />
         </div>
 

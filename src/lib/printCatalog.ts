@@ -45,12 +45,17 @@ export interface PrintCatalogItem {
   /** Checkbox admin "Cadre" — true = FramePreview dessine un encadrement autour de l'aperçu
    * (voir doc Product.hasFrame dans schema.prisma). LOCAL, jamais transmis à Prodigi. */
   hasFrame: boolean;
+  /** Traductions du nom/de la description (JSON string, ex: {"en":{"name":"...",
+   * "description":"..."}}) — voir doc Product.translations dans schema.prisma. null = aucune
+   * traduction saisie, le français (name/description ci-dessus) sert de repli dans toutes les
+   * langues. */
+  translations: string | null;
   createdAt: Date;
 }
 
 const SELECT_COLUMNS = `"id", "name", "description", "priceCents", "currency", "sku", "imageUrl",
        "active", "wholesaleCostCents", "prodigiAttributeOptions", "isProductGroup", "groupId",
-       "sortOrder", "borderOptionEnabled", "hasFrame", "createdAt"`;
+       "sortOrder", "borderOptionEnabled", "hasFrame", "translations", "createdAt"`;
 
 export async function listPrintCatalog(): Promise<PrintCatalogItem[]> {
   return prisma.$queryRaw<PrintCatalogItem[]>`
@@ -156,6 +161,9 @@ export async function createPrintCatalogItem(data: {
   /** Checkbox admin "Cadre" (02/08/2026, demande d'Adriel) — voir doc Product.hasFrame dans
    * schema.prisma. LOCAL, jamais transmis à Prodigi. */
   hasFrame?: boolean;
+  /** Traductions du nom/de la description, JSON string déjà sérialisé par l'appelant (02/08/2026,
+   * demande d'Adriel) — voir doc Product.translations dans schema.prisma. */
+  translations?: string | null;
 }): Promise<PrintCatalogItem> {
   const id = data.id || randomUUID();
   // Nouveau produit ajouté en fin de son "niveau" d'affichage (racine ou variantes du même
@@ -170,12 +178,12 @@ export async function createPrintCatalogItem(data: {
     INSERT INTO "Product"
       ("id", "studioId", "type", "name", "description", "priceCents", "currency", "sku",
        "imageUrl", "active", "platformManaged", "wholesaleCostCents", "isProductGroup", "groupId",
-       "sortOrder", "borderOptionEnabled", "hasFrame", "createdAt")
+       "sortOrder", "borderOptionEnabled", "hasFrame", "translations", "createdAt")
     VALUES
       (${id}, NULL, 'PRINT', ${data.name}, ${data.description}, ${data.priceCents},
        ${data.currency}, ${data.sku}, ${data.imageUrl}, ${data.active}, true,
        ${data.wholesaleCostCents}, ${data.isProductGroup ?? false}, ${groupId}, ${sortOrder},
-       ${data.borderOptionEnabled ?? false}, ${data.hasFrame ?? true}, NOW())
+       ${data.borderOptionEnabled ?? false}, ${data.hasFrame ?? true}, ${data.translations ?? null}, NOW())
   `;
   const created = await getPrintCatalogItem(id);
   if (!created) throw new Error("Échec de la création du produit catalogue.");
@@ -201,6 +209,9 @@ export async function updatePrintCatalogItem(
     /** Checkbox admin "Cadre" — voir doc Product.hasFrame dans schema.prisma. LOCAL, jamais
      * transmis à Prodigi. */
     hasFrame: boolean;
+    /** Traductions du nom/de la description, JSON string déjà sérialisé par l'appelant — voir
+     * doc Product.translations dans schema.prisma. */
+    translations: string | null;
   }>
 ): Promise<PrintCatalogItem | null> {
   const existing = await getPrintCatalogItem(id);
@@ -221,7 +232,8 @@ export async function updatePrintCatalogItem(
         "isProductGroup" = ${merged.isProductGroup},
         "groupId" = ${merged.groupId},
         "borderOptionEnabled" = ${merged.borderOptionEnabled},
-        "hasFrame" = ${merged.hasFrame}
+        "hasFrame" = ${merged.hasFrame},
+        "translations" = ${merged.translations}
     WHERE "id" = ${id} AND "platformManaged" = true
   `;
   return getPrintCatalogItem(id);
