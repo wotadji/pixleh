@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getStudioSession } from "@/lib/access";
 import { AdminSidebarNav } from "@/components/admin/AdminSidebarNav";
 import { PixlehLogo } from "@/components/marketing/PixlehLogo";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 /**
  * Espace admin plateforme — distinct du dashboard studio (/dashboard) : ici on gère pixleh
@@ -59,6 +60,13 @@ export default async function PlatformAdminLayout({ children }: { children: Reac
             <IconArrowLeft />
             Retour au dashboard studio
           </Link>
+        </div>
+
+        {/* Sélecteur de langue (02/08/2026, demande d'Adriel : "je veux dans panel admin
+            avoir le choix de langue aussi") — même composant que le dashboard studio (voir
+            DashboardSidebar.tsx), ouvre vers le haut car en bas de sidebar. */}
+        <div className="mt-3 border-t border-gray-200 pt-3">
+          <LanguageSwitcher />
         </div>
       </aside>
       <main className="flex-1 p-8">{children}</main>
