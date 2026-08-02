@@ -1347,6 +1347,22 @@ export function PrintSelectionPageView({
                         )}
                       </div>
                     )}
+                    {/* Délai indicatif STATIQUE, pas un vrai calcul (02/08/2026, demande d'Adriel :
+                        "et avec l'API pouvons nous avoir le delai de livraison" [...] "applique ce
+                        que tu proposes") — vérifié dans la doc officielle Prodigi (Order/Quote/Product
+                        Details) : AUCUN des endpoints utilisés ici ne renvoie de délai de production
+                        ou de livraison estimé, seulement un coût et un transporteur. Le "Lead Time"
+                        visible sur la fiche produit du site prodigi.com est une info de LEUR dashboard
+                        web, jamais exposée par l'API. Fourchette ci-dessous basée sur leurs infos
+                        publiques de méthode d'envoi (voir support.prodigi.com/.../shipping-or-courier-
+                        options) : shippingMethod = "Standard" (seule utilisée par pixleh aujourd'hui,
+                        voir prodigiOrder.ts), qui peut être suivie ou non selon destination/produit. */}
+                    {shippingQuote && (
+                      <p className="mt-2 text-[11px] text-gray-400">
+                        Délai indicatif : impression sous 2 à 4 jours ouvrés, puis expédition en
+                        Standard (délai de transport variable selon la destination).
+                      </p>
+                    )}
                     {!shippingQuote && !shippingQuoteLoading && !shippingQuoteError && assignedCount > 0 && (
                       <p className="mt-3 border-t border-gray-100 pt-3 text-[11px] text-gray-400">
                         Renseignez une adresse complète ci-dessus pour calculer les frais de livraison.
