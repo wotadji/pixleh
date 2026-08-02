@@ -878,6 +878,16 @@ model Order {
   /// chantier (jamais utilisée jusqu'ici) : réutilisée telle quelle pour ne pas dépendre d'une
   /// nouvelle migration.
   shippingAddress String?   @db.Text
+  /// Coût de PORT réellement facturé au client, en centimes, calculé au moment du checkout via
+  /// un devis Prodigi réel sur le panier + la destination (chantier "shipping dynamique",
+  /// 02/08/2026, demande d'Adriel : "un vrai calcul de shipping dynamique au moment du
+  /// checkout [...] affiché comme ligne Livraison séparée dans le panier") — DÉJÀ INCLUS dans
+  /// totalCents (voir /api/cart/checkout), stocké séparément ici pour affichage/réconciliation
+  /// (ex: comparer à ce que Prodigi facture réellement à la soumission de commande, voir
+  /// src/lib/prodigiOrder.ts). null/0 sur une commande sans article catalogue impression.
+  /// N'existe pas encore dans le Prisma Client généré du sandbox (tâche #254) : lu/écrit via
+  /// $queryRaw/$executeRaw comme le reste des champs récents du catalogue impression.
+  shippingCents   Int?      @default(0)
   /// Identifiant de la commande chez Prodigi une fois soumise avec succès (voir
   /// src/lib/prodigiOrder.ts) — null tant qu'aucun article catalogue plateforme n'a été soumis.
   prodigiOrderId  String?

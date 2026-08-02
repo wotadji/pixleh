@@ -316,6 +316,19 @@ export function PrintSelectionPageView({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Devis de livraison DYNAMIQUE (02/08/2026, demande d'Adriel : "mets en place un vrai calcul
+  // de shipping dynamique au moment du checkout [...] affiché comme ligne Livraison séparée
+  // dans le panier") — jusqu'ici le shipping n'était JAMAIS facturé au client (voir
+  // /api/cart/checkout : seul product.priceCents comptait dans le total), alors que Prodigi
+  // facture bien un vrai coût de port à pixleh lors de la soumission réelle de la commande (voir
+  // src/lib/prodigiOrder.ts). null = pas encore de devis (panier vide d'articles imprimés, ou
+  // adresse incomplète) ; voir shippingQuoteError pour un échec Prodigi (clé API manquante,
+  // panne...).
+  const [shippingQuote, setShippingQuote] = useState<{ cents: number; currency: string } | null>(null);
+  const [shippingQuoteLoading, setShippingQuoteLoading] = useState(false);
+  const [shippingQuoteError, setShippingQuoteError] = useState<string | null>(null);
+  const shippingQuoteDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -398,6 +411,53 @@ export function PrintSelectionPageView({
   const totalCents = groups.reduce((sum, g) => sum + (g.product ? g.product.priceCents * g.photos.length : 0), 0);
   const currency = printProducts[0]?.currency || "EUR";
   const assignedCount = photos.filter((p) => p.productId).length;
+
+  // Redéclenche le devis de livraison dès que le panier (produits/attributs assignés) OU
+  // l'adresse minimale (rue/ville/code postal/pays) change — les deux influencent le coût de
+  // port réel chez Prodigi. Debounce 500ms pour ne pas spammer l'API à chaque frappe dans le
+  // champ adresse. Purement informatif : /api/cart/checkout refait ce même devis côté serveur
+  // avant de créer la session Stripe (voir doc dans /api/cart/shipping-quote).
+  useEffect(() => {
+    if (shippingQuoteDebounceRef.current) clearTimeout(shippingQuoteDebounceRef.current);
+    const printItems = photos.filter((p) => p.productId);
+    if (printItems.length === 0 || !shipping.line1 || !shipping.city || !shipping.postalCode || !shipping.countryCode) {
+      setShippingQuote(null);
+      setShippingQuoteError(null);
+      setShippingQuoteLoading(false);
+      return;
+    }
+    setShippingQuoteLoading(true);
+    shippingQuoteDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/cart/shipping-quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            galleryId,
+            countryCode: shipping.countryCode,
+            items: printItems.map((p) => ({ productId: p.productId, quantity: 1, attributes: p.selectedAttributes })),
+          }),
+        });
+        const data = await res.json();
+        if (data.synced) {
+          setShippingQuote({ cents: data.shippingCents ?? 0, currency: data.currency || currency });
+          setShippingQuoteError(null);
+        } else {
+          setShippingQuote(null);
+          setShippingQuoteError(data.error || "Livraison : devis momentanément indisponible.");
+        }
+      } catch {
+        setShippingQuote(null);
+        setShippingQuoteError("Livraison : devis momentanément indisponible.");
+      } finally {
+        setShippingQuoteLoading(false);
+      }
+    }, 500);
+    return () => {
+      if (shippingQuoteDebounceRef.current) clearTimeout(shippingQuoteDebounceRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photos, shipping.line1, shipping.city, shipping.postalCode, shipping.countryCode, galleryId, currency]);
 
   // Filtre + recherche (voir state plus haut) : n'affectent que ce qui est affiché/sélectionnable
   // via "Tout sélectionner", jamais le récapitulatif ni la commande.
@@ -599,6 +659,18 @@ export function PrintSelectionPageView({
     }
     if (!shipping.line1 || !shipping.city || !shipping.postalCode || !shipping.countryCode || !shipping.phone) {
       setError("Merci de renseigner votre adresse de livraison complète, téléphone inclus.");
+      return;
+    }
+    // Bloque la commande si le devis de livraison n'a pas pu être calculé (Prodigi indisponible)
+    // — /api/cart/checkout refait de toute façon ce devis côté serveur avant paiement et refuse
+    // la commande dans ce cas (voir doc dans checkout/route.ts) ; prévenir ICI évite au client
+    // d'arriver jusqu'à Stripe pour rien (02/08/2026, chantier "shipping dynamique").
+    if (shippingQuoteLoading) {
+      setError("Calcul des frais de livraison en cours, réessayez dans un instant.");
+      return;
+    }
+    if (!shippingQuote) {
+      setError(shippingQuoteError || "Impossible de calculer les frais de livraison pour le moment. Réessayez.");
       return;
     }
     // attributes transmis au panier — chantier "sélection d'attribut au moment de l'achat"
@@ -1142,10 +1214,40 @@ export function PrintSelectionPageView({
                           </div>
                         ))}
                     </div>
+
+                    {/* Ligne "Livraison" DYNAMIQUE (02/08/2026, demande d'Adriel : "un vrai calcul
+                        de shipping dynamique au moment du checkout [...] affiché comme ligne
+                        Livraison séparée dans le panier") — auparavant le shipping n'apparaissait
+                        JAMAIS ici, le total ne portait que sur le prix des tirages. Trois états :
+                        en cours de calcul (adresse tout juste saisie), calculé (montant Prodigi
+                        réel selon panier + destination), ou indisponible (Prodigi hors service :
+                        on prévient plutôt que d'annoncer un montant faux). */}
+                    {(shippingQuoteLoading || shippingQuote || shippingQuoteError) && (
+                      <div className="mt-1.5 flex items-center justify-between text-sm text-gray-600">
+                        <span>Livraison</span>
+                        {shippingQuoteLoading ? (
+                          <span className="text-xs text-gray-400">Calcul en cours…</span>
+                        ) : shippingQuote ? (
+                          <span className="shrink-0 font-medium text-gray-800">
+                            {formatMoney(shippingQuote.cents, shippingQuote.currency)}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-amber-600">Calculée à l&apos;étape suivante</span>
+                        )}
+                      </div>
+                    )}
+
                     <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
                       <span className="text-sm font-medium text-gray-600">Total</span>
-                      <span className="text-lg font-semibold text-gray-900">{formatMoney(totalCents, currency)}</span>
+                      <span className="text-lg font-semibold text-gray-900">
+                        {formatMoney(totalCents + (shippingQuote?.cents ?? 0), currency)}
+                      </span>
                     </div>
+                    {!shippingQuote && !shippingQuoteLoading && assignedCount > 0 && (
+                      <p className="mt-1 text-[11px] text-gray-400">
+                        Hors frais de livraison — renseignez votre adresse ci-dessous pour les inclure.
+                      </p>
+                    )}
 
                     <div className="mt-5 space-y-2 border-t border-gray-100 pt-5">
                       <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Vos coordonnées</p>
@@ -1245,7 +1347,9 @@ export function PrintSelectionPageView({
                     {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
 
                     <button onClick={handleOrder} disabled={loading} className="btn-primary mt-4 w-full">
-                      {loading ? "Redirection..." : `Commander · ${formatMoney(totalCents, currency)}`}
+                      {loading
+                        ? "Redirection..."
+                        : `Commander · ${formatMoney(totalCents + (shippingQuote?.cents ?? 0), currency)}`}
                     </button>
                     <p className="mt-2 text-center text-[11px] text-gray-400">
                       Paiement sécurisé par carte bancaire (Stripe). Vos tirages sont imprimés et expédiés par notre

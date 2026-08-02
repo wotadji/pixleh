@@ -185,6 +185,138 @@ export async function getProdigiQuote(params: {
   }
 }
 
+export interface ProdigiShippingQuoteResult {
+  synced: boolean;
+  /** Coût de PORT total pour l'ensemble du panier envoyé (tous les items expédiés ensemble en un
+   * seul colis chez Prodigi), en centimes — null si non synchronisé. Distinct de
+   * ProdigiQuoteResult.unitCostCents (coût de fabrication d'UN exemplaire, sans port). */
+  shippingCents?: number;
+  currency?: string;
+  error?: string;
+}
+
+/**
+ * Devis de LIVRAISON réel pour le panier complet — chantier "shipping dynamique au checkout"
+ * (02/08/2026, demande d'Adriel : "mets en place un vrai calcul de shipping dynamique au moment
+ * du checkout [...] affiché comme ligne Livraison séparée dans le panier"). Contrairement à
+ * getProdigiQuote (un SEUL SKU, SANS le port, ne sert qu'à aider Adriel à fixer priceCents dans
+ * /admin/print-catalog), cette fonction interroge le MÊME endpoint POST /v4.0/quotes mais avec
+ * TOUS les items du panier en une seule requête (comme le fait réellement submitProdigiOrder à
+ * la commande, voir src/lib/prodigiOrder.ts) et une destination réelle — le coût de port dépend
+ * du panier complet (poids/volume cumulé) ET du pays, jamais d'un seul article isolé.
+ *
+ * Comme getProdigiQuote/submitProdigiOrder : dégrade proprement (ne lève jamais), et retente une
+ * fois avec la première valeur valide de chaque attribut manquant si Prodigi répond
+ * "ValidationFailed" (même mécanique multi-items que submitProdigiOrder, via
+ * extractMissingAttributesByItemIndex).
+ */
+export async function getProdigiShippingQuote(params: {
+  items: Array<{ sku: string; copies: number; attributes?: Record<string, string> | null }>;
+  destinationCountryCode: string;
+  currencyCode?: string;
+}): Promise<ProdigiShippingQuoteResult> {
+  const apiKey = process.env.PRODIGI_API_KEY;
+  if (!apiKey) {
+    return { synced: false, error: "PRODIGI_API_KEY non configuré" };
+  }
+  if (!params.items || params.items.length === 0) {
+    return { synced: false, error: "Panier vide" };
+  }
+
+  const baseUrl = process.env.PRODIGI_API_BASE_URL || DEFAULT_BASE_URL;
+  const currencyCode = params.currencyCode || "EUR";
+
+  let items = params.items.map((it) => ({
+    sku: it.sku,
+    copies: it.copies,
+    attributes: it.attributes ?? {},
+    assets: [{ printArea: "default" }],
+  }));
+  let lastData: any = null;
+  let lastStatus = 0;
+
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = await fetch(`${baseUrl}/quotes`, {
+        method: "POST",
+        headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          destinationCountryCode: params.destinationCountryCode,
+          currencyCode,
+          items,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      lastData = data;
+      lastStatus = res.status;
+
+      if (res.ok && data) {
+        if (data.outcome !== "Created" && data.outcome !== "CreatedWithIssues") {
+          return { synced: false, error: `Réponse Prodigi inattendue (${data.outcome ?? "inconnue"})` };
+        }
+        // Forme observée de la réponse "Quote" Prodigi : quotes[0].costSummary.shipping.amount
+        // (total de port pour CE devis, tous items du panier confondus) — fallback sur la somme
+        // de quotes[0].shipments[].cost.amount si costSummary est absent (formes de réponse déjà
+        // vues varier légèrement selon la version d'API Prodigi).
+        const quote = data.quotes?.[0];
+        let shippingAmountRaw: string | number | undefined = quote?.costSummary?.shipping?.amount;
+        let shippingCurrency: string | undefined = quote?.costSummary?.shipping?.currency;
+        if (shippingAmountRaw === undefined && Array.isArray(quote?.shipments)) {
+          const sum = quote.shipments.reduce((acc: number, s: any) => {
+            const amount = parseFloat(s?.cost?.amount ?? s?.amount ?? "0");
+            return acc + (Number.isNaN(amount) ? 0 : amount);
+          }, 0);
+          if (quote.shipments.length > 0) {
+            shippingAmountRaw = sum;
+            shippingCurrency = quote.shipments[0]?.cost?.currency;
+          }
+        }
+        if (shippingAmountRaw === undefined || shippingAmountRaw === null) {
+          return { synced: false, error: "Coût de livraison introuvable dans la réponse Prodigi" };
+        }
+        const shippingAmount = parseFloat(String(shippingAmountRaw));
+        if (Number.isNaN(shippingAmount)) {
+          return { synced: false, error: "Coût de livraison illisible dans la réponse Prodigi" };
+        }
+        return {
+          synced: true,
+          shippingCents: Math.round(shippingAmount * 100),
+          currency: shippingCurrency || currencyCode,
+        };
+      }
+
+      if (attempt === 0 && data?.outcome === "ValidationFailed" && data?.failures) {
+        const missingByIndex = extractMissingAttributesByItemIndex(data);
+        if (Object.keys(missingByIndex).length > 0) {
+          items = items.map((it, idx) => {
+            const missing = missingByIndex[idx];
+            if (!missing) return it;
+            const attributes = { ...it.attributes };
+            for (const attr of missing) {
+              if (attr.validValues?.[0]) attributes[attr.name] = attr.validValues[0];
+            }
+            return { ...it, attributes };
+          });
+          continue;
+        }
+      }
+      break;
+    }
+
+    const detail =
+      lastData?.error?.message || lastData?.message || (lastData?.outcome ? `outcome: ${lastData.outcome}` : null);
+    return {
+      synced: false,
+      error: `Prodigi a répondu ${lastStatus}${detail ? ` — ${detail}` : ""}${
+        lastData ? ` (${JSON.stringify(lastData).slice(0, 300)})` : ""
+      }`,
+    };
+  } catch (e) {
+    console.error("Échec du devis de livraison Prodigi", e);
+    return { synced: false, error: e instanceof Error ? e.message : "Erreur inconnue" };
+  }
+}
+
 export interface ProdigiProductDetailsResult {
   synced: boolean;
   /** Attributs sélectionnables du SKU, ex: {"wrap": ["Black","ImageWrap","MirrorWrap","White"]}

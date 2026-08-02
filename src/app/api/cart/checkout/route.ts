@@ -4,6 +4,7 @@ import { getStripe } from "@/lib/stripe";
 import { checkGalleryAccess } from "@/lib/access";
 import { getActivePrintCatalogItemsByIds } from "@/lib/printCatalog";
 import { isShippingAddressComplete, type ShippingAddress } from "@/lib/shippingAddress";
+import { getProdigiShippingQuote } from "@/lib/prodigiSync";
 
 interface CartItem {
   productId: string;
@@ -74,10 +75,43 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Adresse de livraison incomplète" }, { status: 400 });
   }
 
-  const totalCents = items.reduce((sum, item) => {
+  const itemsTotalCents = items.reduce((sum, item) => {
     const product = products.find((p) => p.id === item.productId)!;
     return sum + product.priceCents * item.quantity;
   }, 0);
+
+  // Devis de livraison RECALCULÉ ici côté serveur (chantier "shipping dynamique", 02/08/2026,
+  // demande d'Adriel : "un vrai calcul de shipping dynamique au moment du checkout [...] affiché
+  // comme ligne Livraison séparée dans le panier") — jamais fait confiance à un montant transmis
+  // par le client (voir /api/cart/shipping-quote, purement informatif côté UI). Fail-CLOSED
+  // volontairement (contrairement à getProdigiQuote/submitProdigiOrder qui dégradent en
+  // continuant sans bloquer) : ici il s'agit d'un montant réellement facturé au client, un échec
+  // silencieux ferait payer le port par pixleh sur chaque commande plutôt que par le client.
+  let shippingCents = 0;
+  if (needsShipping) {
+    const printItems = items
+      .map((item) => {
+        const product = printCatalogItems.find((p) => p.id === item.productId);
+        if (!product?.sku) return null;
+        return { sku: product.sku, copies: item.quantity, attributes: item.attributes ?? undefined };
+      })
+      .filter((i): i is { sku: string; copies: number; attributes: Record<string, string> | undefined } => i !== null);
+
+    const quote = await getProdigiShippingQuote({
+      items: printItems,
+      destinationCountryCode: (shippingAddress as ShippingAddress).countryCode,
+    });
+    if (!quote.synced || quote.shippingCents === undefined) {
+      console.error("Devis de livraison Prodigi indisponible au checkout :", quote.error);
+      return NextResponse.json(
+        { error: "Livraison temporairement indisponible, merci de réessayer dans quelques instants." },
+        { status: 503 }
+      );
+    }
+    shippingCents = quote.shippingCents;
+  }
+
+  const totalCents = itemsTotalCents + shippingCents;
 
   const order = await prisma.order.create({
     data: {
@@ -102,6 +136,12 @@ export async function POST(req: Request) {
       },
     },
   });
+
+  // Order.shippingCents n'existe pas encore dans le Prisma Client généré du sandbox (tâche
+  // #254) — même workaround $executeRaw que le reste des champs récents du catalogue impression.
+  if (needsShipping) {
+    await prisma.$executeRaw`UPDATE "Order" SET "shippingCents" = ${shippingCents} WHERE "id" = ${order.id}`;
+  }
 
   // Persiste les attributs Prodigi choisis par le client (ex: {"wrap":"White"}) — chantier
   // "sélection d'attribut au moment de l'achat" (02/08/2026, demande d'Adriel). OrderItem.
@@ -145,17 +185,35 @@ export async function POST(req: Request) {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       customer_email: customerEmail,
-      line_items: items.map((item) => {
-        const product = products.find((p) => p.id === item.productId)!;
-        return {
-          quantity: item.quantity,
-          price_data: {
-            currency: (product.currency || "eur").toLowerCase(),
-            unit_amount: product.priceCents,
-            product_data: { name: product.name },
-          },
-        };
-      }),
+      line_items: [
+        ...items.map((item) => {
+          const product = products.find((p) => p.id === item.productId)!;
+          return {
+            quantity: item.quantity,
+            price_data: {
+              currency: (product.currency || "eur").toLowerCase(),
+              unit_amount: product.priceCents,
+              product_data: { name: product.name },
+            },
+          };
+        }),
+        // Ligne "Livraison" SÉPARÉE (chantier "shipping dynamique", 02/08/2026, demande
+        // d'Adriel : "affiché comme ligne Livraison séparée dans le panier [plutôt que] noyé
+        // dans le prix produit") — un seul montant pour le panier complet (shippingCents
+        // recalculé ci-dessus), pas une ligne par article.
+        ...(shippingCents > 0
+          ? [
+              {
+                quantity: 1,
+                price_data: {
+                  currency: (products[0]?.currency || "eur").toLowerCase(),
+                  unit_amount: shippingCents,
+                  product_data: { name: "Livraison" },
+                },
+              },
+            ]
+          : []),
+      ],
       success_url: `${process.env.APP_URL}/g/${gallery.slug}/store?success=1`,
       cancel_url: `${process.env.APP_URL}/g/${gallery.slug}/store?canceled=1`,
       metadata: { orderId: order.id },
