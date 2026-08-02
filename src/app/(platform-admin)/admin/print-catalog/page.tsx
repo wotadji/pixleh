@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { LOCALES, LOCALE_LABELS, DEFAULT_LOCALE, type Locale } from "@/lib/i18n/locales";
+import { useLanguage } from "@/lib/i18n/LanguageProvider";
 
 /** Langues traduisibles pour le nom/la description d'un groupe ou produit — toutes les langues
  * du SaaS SAUF le français, qui reste dans les colonnes de base name/description (source de
@@ -101,6 +102,26 @@ function buildTranslationsPayload(
     result[loc] = description ? { name, description } : { name };
   }
   return Object.keys(result).length ? result : undefined;
+}
+
+/** Résout le nom/la description affichés dans la LISTE du catalogue (CatalogRow/GridCard) selon
+ * la langue active du panel admin — corrige le bug remonté par Adriel le 02/08/2026 ("j'ai pris
+ * le temps de traduire le titre et la description des groupe de produite sauf que quand je
+ * change la langue le titre et la description ne change pas") : la liste affichait jusqu'ici
+ * toujours item.name/item.description (colonnes source, toujours en français), sans jamais
+ * regarder item.translations ni la langue active du sélecteur ajouté dans le sidebar admin.
+ * Repli sur le français si la langue active n'a pas (encore) de traduction pour CET item —
+ * même logique que useProductText() côté galerie cliente (PrintSelectionPageView.tsx). */
+function resolveCatalogText(
+  item: PrintCatalogItemDTO,
+  locale: Locale
+): { name: string; description: string | null } {
+  if (locale === DEFAULT_LOCALE) return { name: item.name, description: item.description };
+  const entry = parseTranslations(item.translations)[locale];
+  return {
+    name: entry?.name.trim() ? entry.name : item.name,
+    description: entry?.description.trim() ? entry.description : item.description,
+  };
 }
 
 /** Parse prodigiAttributeOptions en toute sécurité — utilisé aussi bien dans la liste que dans
@@ -228,6 +249,7 @@ function marginTone(marginCents: number, priceCents: number): { bg: string; text
  * arrondies, avatar carré, liste divide-y) pour rester cohérent avec le reste de pixleh.
  */
 export default function AdminPrintCatalogPage() {
+  const { t } = useLanguage();
   const [items, setItems] = useState<PrintCatalogItemDTO[] | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<FormState>(() => ({ ...EMPTY_FORM_FIELDS, id: makeId(), persisted: false }));
@@ -401,17 +423,17 @@ export default function AdminPrintCatalogPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data?.error?.formErrors?.[0] || data?.error || "Erreur lors de l'enregistrement.");
+        setError(data?.error?.formErrors?.[0] || data?.error || t("admin.printCatalog.saveError"));
         setSaving(false);
         return;
       }
       if (data.prodigiSync && data.prodigiSync.synced === false) {
-        setProdigiWarning(data.prodigiSync.error || "Synchronisation Prodigi indisponible.");
+        setProdigiWarning(data.prodigiSync.error || t("admin.printCatalog.prodigiSyncUnavailable"));
       }
       setModalOpen(false);
       await loadItems();
     } catch {
-      setError("Erreur réseau.");
+      setError(t("admin.printCatalog.networkError"));
     }
     setSaving(false);
   }
@@ -435,14 +457,14 @@ export default function AdminPrintCatalogPage() {
       const res = await fetch(`/api/admin/print-catalog/${form.id}/image`, { method: "POST", body: fd });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data?.error || "Échec de l'upload de l'image.");
+        setError(data?.error || t("admin.printCatalog.uploadError"));
         setUploadingImage(false);
         return;
       }
       setForm((f) => ({ ...f, imageUrl: data.imageUrl }));
       await loadItems();
     } catch {
-      setError("Erreur réseau lors de l'upload.");
+      setError(t("admin.printCatalog.uploadNetworkError"));
     }
     setUploadingImage(false);
   }
@@ -470,7 +492,7 @@ export default function AdminPrintCatalogPage() {
     const res = await fetch(`/api/admin/print-catalog/${item.id}/quote`, { method: "POST" });
     const data = await res.json().catch(() => ({}));
     if (data.prodigiSync && data.prodigiSync.synced === false) {
-      setProdigiWarning(data.prodigiSync.error || "Synchronisation Prodigi indisponible.");
+      setProdigiWarning(data.prodigiSync.error || t("admin.printCatalog.prodigiSyncUnavailable"));
     } else {
       setProdigiWarning(null);
     }
@@ -492,11 +514,12 @@ export default function AdminPrintCatalogPage() {
   }
 
   async function remove(item: PrintCatalogItemDTO) {
-    if (!confirm(`Supprimer "${item.name}" ? Cette action est irréversible.`)) return;
+    if (!confirm(`${t("admin.printCatalog.confirmDelete")} "${item.name}" ${t("admin.printCatalog.confirmDeleteSuffix")}`))
+      return;
     const res = await fetch(`/api/admin/print-catalog/${item.id}`, { method: "DELETE" });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      alert(data?.error || "Suppression impossible.");
+      alert(data?.error || t("admin.printCatalog.deleteImpossible"));
       return;
     }
     await loadItems();
@@ -593,12 +616,8 @@ export default function AdminPrintCatalogPage() {
             <IconPrinter />
           </div>
           <div>
-            <h1 className="font-serif text-2xl font-semibold text-gray-900">Catalogue impression</h1>
-            <p className="mt-1 max-w-2xl text-sm text-gray-500">
-              Produits d&apos;impression physique (tirages, toiles...) proposés dans toutes les galeries.
-              Fulfillment via Prodigi — le paiement va directement à pixleh, les studios n&apos;en gèrent
-              plus le prix.
-            </p>
+            <h1 className="font-serif text-2xl font-semibold text-gray-900">{t("admin.printCatalog.title")}</h1>
+            <p className="mt-1 max-w-2xl text-sm text-gray-500">{t("admin.printCatalog.subtitle")}</p>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -608,42 +627,42 @@ export default function AdminPrintCatalogPage() {
               Prodigi (ex: 12x16 et 20x30, deux SKU distincts chez Prodigi) sous un même produit
               côté client, qui choisit sa taille au moment de l'achat. */}
           <button type="button" className="btn-secondary inline-flex items-center gap-1.5" onClick={openCreateGroup}>
-            <IconFolder small /> Nouveau groupe
+            <IconFolder small /> {t("admin.printCatalog.newGroup")}
           </button>
           <button type="button" className="btn-primary inline-flex items-center gap-1.5" onClick={openCreate}>
-            <IconPlus /> Nouveau produit
+            <IconPlus /> {t("admin.printCatalog.newProduct")}
           </button>
         </div>
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <StatCard
-          label="Groupes actifs"
+          label={t("admin.printCatalog.statGroupsActive")}
           value={`${stats.groupsActive} / ${stats.groupsTotal}`}
           icon={<IconFolder small />}
           accent="indigo"
         />
         <StatCard
-          label="Produits actifs"
+          label={t("admin.printCatalog.statProductsActive")}
           value={`${stats.productsActive} / ${stats.productsTotal}`}
           icon={<IconPrinter small />}
           accent="brand"
         />
         <StatCard
-          label="Prix de vente moyen"
+          label={t("admin.printCatalog.statAvgPrice")}
           value={formatMoney(stats.avgPrice)}
           icon={<IconTag small />}
           accent="gray"
         />
         <StatCard
-          label="Marge moyenne"
+          label={t("admin.printCatalog.statAvgMargin")}
           value={stats.avgMarginPct != null ? `${Math.round(stats.avgMarginPct)} %` : "—"}
           icon={<IconPercent small />}
           tone={stats.avgMarginPct == null ? undefined : stats.avgMarginPct < 20 ? "amber" : "green"}
           accent={stats.avgMarginPct == null ? "gray" : stats.avgMarginPct < 20 ? "amber" : "green"}
         />
         <StatCard
-          label="Sans SKU Prodigi"
+          label={t("admin.printCatalog.statNoSku")}
           value={String(stats.noSku)}
           icon={<IconAlert small />}
           tone={stats.noSku > 0 ? "amber" : undefined}
@@ -655,16 +674,14 @@ export default function AdminPrintCatalogPage() {
         <span className="mt-0.5 shrink-0 text-gray-400">
           <IconInfo />
         </span>
-        <span>
-          Le SKU correspond au SKU Prodigi (ex: <code>GLOBAL-CAN-10x10</code>) — renseigne-le pour pouvoir
-          resynchroniser le coût de revient réel. Le prix de vente reste toujours fixé ici à la main, avec
-          ta marge par-dessus.
-        </span>
+        <span>{t("admin.printCatalog.skuInfoBanner")}</span>
       </div>
 
       {prodigiWarning && (
         <div className="mt-4 flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <span className="break-words">Synchronisation Prodigi : {prodigiWarning}</span>
+          <span className="break-words">
+            {t("admin.printCatalog.prodigiSyncPrefix")} {prodigiWarning}
+          </span>
           <button onClick={() => setProdigiWarning(null)} className="shrink-0 text-amber-500 hover:text-amber-700">
             ✕
           </button>
@@ -681,7 +698,7 @@ export default function AdminPrintCatalogPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher (nom, SKU)"
+              placeholder={t("admin.printCatalog.searchPlaceholder")}
               className="input pl-8"
             />
           </div>
@@ -691,10 +708,10 @@ export default function AdminPrintCatalogPage() {
               onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
               className="input"
             >
-              <option value="ALL">Tous les statuts</option>
-              <option value="ACTIVE">Actifs</option>
-              <option value="INACTIVE">Désactivés</option>
-              <option value="NO_SKU">Sans SKU Prodigi</option>
+              <option value="ALL">{t("admin.printCatalog.filterAll")}</option>
+              <option value="ACTIVE">{t("admin.printCatalog.filterActive")}</option>
+              <option value="INACTIVE">{t("admin.printCatalog.filterInactive")}</option>
+              <option value="NO_SKU">{t("admin.printCatalog.badgeNoSkuProdigi")}</option>
             </select>
           </div>
         </div>
@@ -706,8 +723,8 @@ export default function AdminPrintCatalogPage() {
           <button
             type="button"
             onClick={() => setView("list")}
-            aria-label="Vue liste"
-            title="Vue liste"
+            aria-label={t("admin.printCatalog.viewList")}
+            title={t("admin.printCatalog.viewList")}
             className={`flex h-7 w-7 items-center justify-center rounded ${
               view === "list" ? "bg-gray-800 text-white" : "text-gray-400 hover:text-gray-700"
             }`}
@@ -717,8 +734,8 @@ export default function AdminPrintCatalogPage() {
           <button
             type="button"
             onClick={() => setView("grid")}
-            aria-label="Vue grille"
-            title="Vue grille"
+            aria-label={t("admin.printCatalog.viewGrid")}
+            title={t("admin.printCatalog.viewGrid")}
             className={`flex h-7 w-7 items-center justify-center rounded ${
               view === "grid" ? "bg-gray-800 text-white" : "text-gray-400 hover:text-gray-700"
             }`}
@@ -730,8 +747,7 @@ export default function AdminPrintCatalogPage() {
 
       {!canReorderRoot && (
         <p className="mt-2 flex items-center gap-1.5 text-xs text-gray-400">
-          <IconGrip small /> Vide la recherche et remets le filtre sur « Tous les statuts » pour réordonner
-          les groupes/produits par glisser-déposer.
+          <IconGrip small /> {t("admin.printCatalog.reorderHint")}
         </p>
       )}
 
@@ -752,9 +768,7 @@ export default function AdminPrintCatalogPage() {
               <IconPrinter />
             </div>
             <p className="text-sm text-gray-500">
-              {items.length === 0
-                ? "Aucun produit pour le moment — crée le premier."
-                : "Aucun produit ne correspond à ta recherche."}
+              {items.length === 0 ? t("admin.printCatalog.emptyNone") : t("admin.printCatalog.emptyNoMatch")}
             </p>
           </div>
         )}
@@ -813,7 +827,7 @@ export default function AdminPrintCatalogPage() {
               {item.isProductGroup && !collapsedGroups.has(item.id) && (
                 <div className="divide-y divide-gray-100 border-t border-gray-100 bg-gray-50/60 pl-6">
                   {(variantsByGroup.get(item.id) ?? []).length === 0 && (
-                    <p className="p-4 text-sm text-gray-400">Aucun SKU dans ce groupe pour le moment.</p>
+                    <p className="p-4 text-sm text-gray-400">{t("admin.printCatalog.emptyGroupSku")}</p>
                   )}
                   {(variantsByGroup.get(item.id) ?? []).map((variant) => (
                     <CatalogRow
@@ -836,7 +850,7 @@ export default function AdminPrintCatalogPage() {
                       className="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-brand-700 shadow-sm ring-1 ring-brand-200 hover:bg-brand-50"
                       onClick={() => openAddVariant(item)}
                     >
-                      + Ajouter un SKU dans ce groupe
+                      {t("admin.printCatalog.addSkuInGroup")}
                     </button>
                   </div>
                 </div>
@@ -956,9 +970,11 @@ function GridCard({
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }) {
+  const { t, locale } = useLanguage();
   const marginCents = item.wholesaleCostCents != null ? item.priceCents - item.wholesaleCostCents : null;
   const tone = marginCents != null ? marginTone(marginCents, item.priceCents) : null;
   const attributeOptions = parseAttributeOptions(item.prodigiAttributeOptions);
+  const displayText = resolveCatalogText(item, locale);
 
   return (
     <div
@@ -995,7 +1011,7 @@ function GridCard({
         {reorderEnabled && (
           <span
             className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-white/85 text-gray-500 backdrop-blur-sm"
-            title="Glisser pour réordonner"
+            title={t("admin.printCatalog.dragToReorder")}
           >
             <IconGrip />
           </span>
@@ -1003,7 +1019,7 @@ function GridCard({
         <div className="absolute left-2 top-2 flex flex-wrap gap-1">
           {item.isProductGroup && (
             <span className="rounded-full bg-indigo-600/90 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
-              Groupe
+              {t("admin.printCatalog.badgeGroup")}
             </span>
           )}
           {/* Bulle "N produits" (02/08/2026, demande d'Adriel : "pouvons nous avoir une bulle qui
@@ -1015,22 +1031,22 @@ function GridCard({
                 variants.length > 0 ? "bg-gray-700/85" : "bg-amber-500/90"
               }`}
             >
-              {variants.length} produit{variants.length > 1 ? "s" : ""}
+              {variants.length} {t("admin.printCatalog.productsUnit")}
             </span>
           )}
           {!item.active && (
             <span className="rounded-full bg-gray-800/85 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
-              Désactivé
+              {t("admin.printCatalog.badgeDisabled")}
             </span>
           )}
           {!item.sku && !item.isProductGroup && (
             <span className="rounded-full bg-amber-500/90 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
-              Sans SKU
+              {t("admin.printCatalog.badgeNoSku")}
             </span>
           )}
           {Object.keys(attributeOptions).length > 0 && (
             <span className="rounded-full bg-brand-600/90 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
-              {Object.keys(attributeOptions).length} attribut{Object.keys(attributeOptions).length > 1 ? "s" : ""}
+              {Object.keys(attributeOptions).length} {t("admin.printCatalog.attributeUnit")}
             </span>
           )}
           {/* Badge "Bordure" — 02/08/2026, demande d'Adriel : toggle admin borderOptionEnabled
@@ -1038,23 +1054,23 @@ function GridCard({
           {item.borderOptionEnabled && (
             <span
               className="rounded-full bg-teal-600/90 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm"
-              title="Marge blanche appliquée automatiquement à l'aperçu client (indicatif, non transmis à Prodigi)"
+              title={t("admin.printCatalog.borderTooltip")}
             >
-              Bordure
+              {t("admin.printCatalog.badgeBorder")}
             </span>
           )}
         </div>
       </div>
 
       <div className="flex flex-1 flex-col p-4">
-        <p className="truncate font-medium text-gray-900">{item.name}</p>
+        <p className="truncate font-medium text-gray-900">{displayText.name}</p>
         <p className="mt-0.5 truncate text-xs text-gray-500">
           {item.sku ? (
             <code className="text-gray-600">{item.sku}</code>
           ) : item.isProductGroup ? (
-            "Conteneur de tailles/SKU"
+            t("admin.printCatalog.containerSizes")
           ) : (
-            item.description || "—"
+            displayText.description || "—"
           )}
         </p>
 
@@ -1063,7 +1079,7 @@ function GridCard({
             <p className="font-semibold text-gray-900">
               {item.isProductGroup
                 ? groupDisplayPriceCents != null
-                  ? `dès ${formatMoney(groupDisplayPriceCents)}`
+                  ? `${t("admin.printCatalog.fromPrice")} ${formatMoney(groupDisplayPriceCents)}`
                   : "—"
                 : formatMoney(item.priceCents)}
             </p>
@@ -1074,7 +1090,9 @@ function GridCard({
               </span>
             ) : (
               <p className="mt-1 text-xs text-gray-400">
-                {item.isProductGroup ? "prix le plus bas" : "coût inconnu"}
+                {item.isProductGroup
+                  ? t("admin.printCatalog.lowestVariantPrice")
+                  : t("admin.printCatalog.unknownCost")}
               </p>
             )}
           </div>
@@ -1084,7 +1102,7 @@ function GridCard({
             aria-checked={item.active}
             disabled={toggling === item.id}
             onClick={() => onToggleActive(item)}
-            title={item.active ? "Désactiver" : "Activer"}
+            title={item.active ? t("admin.printCatalog.toggleDeactivate") : t("admin.printCatalog.toggleActivate")}
             className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:opacity-50 ${
               item.active ? "bg-green-600" : "bg-gray-300"
             }`}
@@ -1109,14 +1127,14 @@ function GridCard({
             className="flex w-full items-center justify-between px-4 py-2.5 text-xs font-medium text-gray-600 hover:bg-gray-100/80"
           >
             <span>
-              {variants.length} produit{variants.length > 1 ? "s" : ""}
+              {variants.length} {t("admin.printCatalog.productsUnit")}
             </span>
             <IconChevronDown className={`transition-transform ${collapsed ? "-rotate-90" : ""}`} />
           </button>
           {!collapsed && (
             <div className="px-4 pb-3">
               {variants.length === 0 ? (
-                <p className="text-xs text-gray-400">Aucun SKU dans ce groupe pour le moment.</p>
+                <p className="text-xs text-gray-400">{t("admin.printCatalog.emptyGroupSku")}</p>
               ) : (
                 <ul className="space-y-1.5">
                   {variants.map((v) => (
@@ -1150,7 +1168,7 @@ function GridCard({
                         chargé les attributs (couleur, verre...) sans avoir à ouvrir la modale. */}
                     {Object.keys(parseAttributeOptions(v.prodigiAttributeOptions)).length > 0 && (
                       <span className="shrink-0 rounded-full bg-brand-50 px-1.5 py-0.5 text-[10px] font-medium text-brand-700">
-                        {Object.keys(parseAttributeOptions(v.prodigiAttributeOptions)).length} attr.
+                        {Object.keys(parseAttributeOptions(v.prodigiAttributeOptions)).length} {t("admin.printCatalog.attributeUnit")}
                       </span>
                     )}
                   </span>
@@ -1169,7 +1187,7 @@ function GridCard({
                     {v.sku && (
                       <button
                         type="button"
-                        title="Resynchroniser"
+                        title={t("admin.printCatalog.resync")}
                         disabled={resyncing === v.id}
                         onClick={() => onResync(v)}
                         className="text-gray-300 hover:text-gray-600 disabled:opacity-50"
@@ -1179,7 +1197,7 @@ function GridCard({
                     )}
                     <button
                       type="button"
-                      title="Modifier"
+                      title={t("admin.printCatalog.edit")}
                       onClick={() => onEdit(v)}
                       className="text-gray-300 hover:text-gray-600"
                     >
@@ -1187,7 +1205,7 @@ function GridCard({
                     </button>
                     <button
                       type="button"
-                      title="Supprimer"
+                      title={t("admin.printCatalog.delete")}
                       onClick={() => onRemove(v)}
                       className="text-gray-300 hover:text-red-600"
                     >
@@ -1203,7 +1221,7 @@ function GridCard({
                 className="mt-2.5 w-full rounded-full bg-white px-3 py-1.5 text-xs font-medium text-brand-700 shadow-sm ring-1 ring-brand-200 hover:bg-brand-50"
                 onClick={() => onAddVariant(item)}
               >
-                + Ajouter un SKU
+                {t("admin.printCatalog.addSku")}
               </button>
             </div>
           )}
@@ -1216,7 +1234,7 @@ function GridCard({
             type="button"
             disabled={resyncing === item.id}
             onClick={() => onResync(item)}
-            title="Resynchroniser"
+            title={t("admin.printCatalog.resync")}
             className="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-gray-50 hover:text-gray-700 disabled:opacity-50"
           >
             {resyncing === item.id ? <IconSpinner /> : <IconRefresh />}
@@ -1224,7 +1242,7 @@ function GridCard({
         )}
         <button
           type="button"
-          title="Modifier"
+          title={t("admin.printCatalog.edit")}
           onClick={() => onEdit(item)}
           className="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-gray-50 hover:text-gray-700"
         >
@@ -1232,7 +1250,7 @@ function GridCard({
         </button>
         <button
           type="button"
-          title="Supprimer"
+          title={t("admin.printCatalog.delete")}
           onClick={() => onRemove(item)}
           className="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-red-50 hover:text-red-600"
         >
@@ -1296,9 +1314,11 @@ function CatalogRow({
    * section variantes en vue grille, masqué tant que la carte n'a jamais été dépliée). */
   variantCount?: number;
 }) {
+  const { t, locale } = useLanguage();
   const marginCents = item.wholesaleCostCents != null ? item.priceCents - item.wholesaleCostCents : null;
   const tone = marginCents != null ? marginTone(marginCents, item.priceCents) : null;
   const attributeOptions = parseAttributeOptions(item.prodigiAttributeOptions);
+  const displayText = resolveCatalogText(item, locale);
 
   return (
     <div
@@ -1326,15 +1346,15 @@ function CatalogRow({
           <button
             type="button"
             onClick={onToggleCollapse}
-            aria-label={collapsed ? "Déplier le groupe" : "Replier le groupe"}
-            title={collapsed ? "Déplier le groupe" : "Replier le groupe"}
+            aria-label={collapsed ? t("admin.printCatalog.expandGroup") : t("admin.printCatalog.collapseGroup")}
+            title={collapsed ? t("admin.printCatalog.expandGroup") : t("admin.printCatalog.collapseGroup")}
             className="shrink-0 text-gray-400 hover:text-gray-700"
           >
             <IconChevronDown className={`transition-transform ${collapsed ? "-rotate-90" : ""}`} />
           </button>
         )}
         {reorderEnabled && (
-          <span className="shrink-0 text-gray-300" title="Glisser pour réordonner">
+          <span className="shrink-0 text-gray-300" title={t("admin.printCatalog.dragToReorder")}>
             <IconGrip />
           </span>
         )}
@@ -1353,10 +1373,10 @@ function CatalogRow({
         <div className="min-w-0">
           <p className="flex flex-wrap items-center gap-1.5 truncate font-medium text-gray-900">
             {isVariant && <span className="text-gray-300">↳</span>}
-            {item.name}
+            {displayText.name}
             {item.isProductGroup && (
               <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
-                Groupe
+                {t("admin.printCatalog.badgeGroup")}
               </span>
             )}
             {/* Bulle "N produits" (02/08/2026, demande d'Adriel : "pouvons nous avoir une bulle
@@ -1368,17 +1388,17 @@ function CatalogRow({
                   variantCount > 0 ? "bg-gray-100 text-gray-600" : "bg-amber-100 text-amber-700"
                 }`}
               >
-                {variantCount} produit{variantCount > 1 ? "s" : ""}
+                {variantCount} {t("admin.printCatalog.productsUnit")}
               </span>
             )}
             {!item.active && (
               <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
-                Désactivé
+                {t("admin.printCatalog.badgeDisabled")}
               </span>
             )}
             {!item.sku && !item.isProductGroup && (
               <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                Sans SKU Prodigi
+                {t("admin.printCatalog.badgeNoSkuProdigi")}
               </span>
             )}
             {/* Badge attributs sélectionnables (demande d'Adriel, 02/08/2026 : "je veux
@@ -1392,8 +1412,7 @@ function CatalogRow({
                   .map(([name, values]) => `${name}: ${values.join(", ")}`)
                   .join(" · ")}
               >
-                {Object.keys(attributeOptions).length} attribut
-                {Object.keys(attributeOptions).length > 1 ? "s" : ""}
+                {Object.keys(attributeOptions).length} {t("admin.printCatalog.attributeUnit")}
               </span>
             )}
             {/* Badge "Bordure" — 02/08/2026, demande d'Adriel : toggle admin borderOptionEnabled,
@@ -1401,9 +1420,9 @@ function CatalogRow({
             {item.borderOptionEnabled && (
               <span
                 className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-medium text-teal-700"
-                title="Marge blanche appliquée automatiquement à l'aperçu client (indicatif, non transmis à Prodigi)"
+                title={t("admin.printCatalog.borderTooltip")}
               >
-                Bordure
+                {t("admin.printCatalog.badgeBorder")}
               </span>
             )}
           </p>
@@ -1411,9 +1430,9 @@ function CatalogRow({
             {item.sku ? (
               <code className="text-gray-600">{item.sku}</code>
             ) : item.isProductGroup ? (
-              "Conteneur de tailles/SKU — le client choisit à l'achat"
+              t("admin.printCatalog.containerSizesLong")
             ) : (
-              item.description || "—"
+              displayText.description || "—"
             )}
           </p>
         </div>
@@ -1424,16 +1443,16 @@ function CatalogRow({
           <p className="font-medium text-gray-900">
             {item.isProductGroup
               ? groupDisplayPriceCents != null
-                ? `dès ${formatMoney(groupDisplayPriceCents)}`
+                ? `${t("admin.printCatalog.fromPrice")} ${formatMoney(groupDisplayPriceCents)}`
                 : "—"
               : formatMoney(item.priceCents)}
           </p>
           <p className="text-xs text-gray-400">
             {item.isProductGroup
-              ? "prix le plus bas de ses variantes"
+              ? t("admin.printCatalog.lowestVariantPriceLong")
               : item.wholesaleCostCents != null
-                ? `coût ${formatMoney(item.wholesaleCostCents)}`
-                : "coût inconnu"}
+                ? `${t("admin.printCatalog.costPrefix")} ${formatMoney(item.wholesaleCostCents)}`
+                : t("admin.printCatalog.unknownCost")}
           </p>
         </div>
 
@@ -1450,7 +1469,7 @@ function CatalogRow({
           aria-checked={item.active}
           disabled={toggling === item.id}
           onClick={() => onToggleActive(item)}
-          title={item.active ? "Désactiver (masquer des galeries)" : "Activer (afficher dans les galeries)"}
+          title={item.active ? t("admin.printCatalog.toggleDeactivateLong") : t("admin.printCatalog.toggleActivateLong")}
           className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:opacity-50 ${
             item.active ? "bg-green-600" : "bg-gray-300"
           }`}
@@ -1470,7 +1489,7 @@ function CatalogRow({
             className="flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
           >
             {resyncing === item.id ? <IconSpinner /> : <IconRefresh />}
-            {resyncing === item.id ? "Synchronisation..." : "Resynchroniser"}
+            {resyncing === item.id ? t("admin.printCatalog.resyncing") : t("admin.printCatalog.resync")}
           </button>
         )}
         <button
@@ -1478,14 +1497,14 @@ function CatalogRow({
           className="rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
           onClick={() => onEdit(item)}
         >
-          Modifier
+          {t("admin.printCatalog.edit")}
         </button>
         <button
           type="button"
           className="rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-100"
           onClick={() => onRemove(item)}
         >
-          Supprimer
+          {t("admin.printCatalog.delete")}
         </button>
       </div>
     </div>
@@ -1521,6 +1540,7 @@ function ProductModal({
    * produit"). */
   groups: PrintCatalogItemDTO[];
 }) {
+  const { t } = useLanguage();
   // Langue actuellement éditée dans le bloc Nom/Description (02/08/2026, demande d'Adriel : "a
   // l'ajoute d'un groupe et d'un produit, je veux la possibilité de traduire par les différents
   // langues") — état purement local à la modale (pas dans FormState). ProductModal reste monté
@@ -1565,15 +1585,15 @@ function ProductModal({
 
   const modalTitle = form.isProductGroup
     ? form.persisted
-      ? "Modifier le groupe"
-      : "Nouveau groupe"
+      ? t("admin.printCatalog.modalTitleEditGroup")
+      : t("admin.printCatalog.newGroup")
     : form.groupId
       ? form.persisted
-        ? "Modifier le SKU"
-        : "Nouveau SKU dans le groupe"
+        ? t("admin.printCatalog.modalTitleEditSku")
+        : t("admin.printCatalog.modalTitleNewSkuInGroup")
       : form.persisted
-        ? "Modifier le produit"
-        : "Nouveau produit";
+        ? t("admin.printCatalog.modalTitleEditProduct")
+        : t("admin.printCatalog.newProduct");
 
   return (
     <Modal
@@ -1584,10 +1604,10 @@ function ProductModal({
       footer={
         <>
           <button type="button" className="btn-secondary text-sm" onClick={onClose}>
-            Annuler
+            {t("admin.printCatalog.cancel")}
           </button>
           <button type="button" className="btn-primary text-sm" disabled={saving} onClick={onSave}>
-            {saving ? "Enregistrement..." : "Enregistrer"}
+            {saving ? t("admin.printCatalog.saving") : t("admin.printCatalog.save")}
           </button>
         </>
       }
@@ -1598,14 +1618,13 @@ function ProductModal({
             créer un groupe, ajouter un SKU dans un groupe, ou créer un produit autonome. */}
         {form.isProductGroup && (
           <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
-            Ce produit est un <strong>groupe</strong> : pas de SKU/prix propre, c&apos;est un conteneur.
-            Ajoute ensuite ses tailles/SKU depuis la liste (bouton &laquo;&nbsp;+ Ajouter un SKU&nbsp;&raquo;).
+            {t("admin.printCatalog.groupBannerPart1")} <strong>{t("admin.printCatalog.groupBannerWord")}</strong>
+            {t("admin.printCatalog.groupBannerPart2")}
           </div>
         )}
         {form.groupId && (
           <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
-            Ce SKU appartient à un groupe — il ne sera jamais proposé seul, uniquement via le choix de
-            taille sous son groupe.
+            {t("admin.printCatalog.variantBanner")}
           </div>
         )}
 
@@ -1623,8 +1642,9 @@ function ProductModal({
             </div>
           )}
           <p className="min-w-0 flex-1 text-xs text-gray-400">
-            Photo du {form.isProductGroup ? "groupe" : "produit"} — voir le champ Nom ci-dessous
-            (onglets de langue).
+            {form.isProductGroup
+              ? t("admin.printCatalog.photoHintGroup")
+              : t("admin.printCatalog.photoHintProduct")}
           </p>
         </div>
 
@@ -1657,15 +1677,17 @@ function ProductModal({
           </div>
 
           <label className="mb-1 block text-sm font-medium">
-            {activeLang === DEFAULT_LOCALE ? "Nom" : `Nom (${LOCALE_LABELS[activeLang]})`}
+            {activeLang === DEFAULT_LOCALE
+              ? t("admin.printCatalog.labelName")
+              : `${t("admin.printCatalog.labelName")} (${LOCALE_LABELS[activeLang]})`}
           </label>
           <input
             className="input"
             placeholder={
               activeLang === DEFAULT_LOCALE
                 ? form.isProductGroup
-                  ? "Toile photo"
-                  : "Impression 10x15"
+                  ? t("admin.printCatalog.placeholderGroupName")
+                  : t("admin.printCatalog.placeholderProductName")
                 : form.name
             }
             value={currentName()}
@@ -1673,7 +1695,9 @@ function ProductModal({
           />
 
           <label className="mb-1 mt-3 block text-sm font-medium">
-            {activeLang === DEFAULT_LOCALE ? "Description" : `Description (${LOCALE_LABELS[activeLang]})`}
+            {activeLang === DEFAULT_LOCALE
+              ? t("admin.printCatalog.labelDescription")
+              : `${t("admin.printCatalog.labelDescription")} (${LOCALE_LABELS[activeLang]})`}
           </label>
           <input
             className="input"
@@ -1687,7 +1711,7 @@ function ProductModal({
           <div className="rounded-lg border border-gray-200 p-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-sm font-medium">Prix de vente (€)</label>
+                <label className="mb-1 block text-sm font-medium">{t("admin.printCatalog.labelSellPrice")}</label>
                 <input
                   type="number"
                   step="0.01"
@@ -1697,12 +1721,12 @@ function ProductModal({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Coût de revient Prodigi (€)</label>
+                <label className="mb-1 block text-sm font-medium">{t("admin.printCatalog.labelCost")}</label>
                 <input
                   type="number"
                   step="0.01"
                   className="input"
-                  placeholder="auto si SKU renseigné"
+                  placeholder={t("admin.printCatalog.placeholderAutoCost")}
                   value={form.wholesaleCost}
                   onChange={(e) => setForm({ ...form, wholesaleCost: e.target.value })}
                 />
@@ -1711,7 +1735,7 @@ function ProductModal({
             {/* Marge calculée en direct pendant la saisie — évite d'avoir à enregistrer pour
                 découvrir qu'un prix fixé à la va-vite laisse une marge nulle voire négative. */}
             <p className="mt-2 text-sm">
-              Marge :{" "}
+              {t("admin.printCatalog.marginLabel")}{" "}
               {marginCents != null ? (
                 <span
                   className={`font-medium ${
@@ -1726,7 +1750,7 @@ function ProductModal({
                   {formatMoney(marginCents)} {marginPct != null && `(${marginPct} %)`}
                 </span>
               ) : (
-                <span className="text-gray-400">renseigne un coût de revient pour la voir</span>
+                <span className="text-gray-400">{t("admin.printCatalog.marginPlaceholder")}</span>
               )}
             </p>
           </div>
@@ -1734,7 +1758,7 @@ function ProductModal({
 
         {!form.isProductGroup && (
           <div>
-            <label className="mb-1 block text-sm font-medium">SKU Prodigi</label>
+            <label className="mb-1 block text-sm font-medium">{t("admin.printCatalog.labelSku")}</label>
             <input
               className="input"
               placeholder="GLOBAL-CAN-10x10"
@@ -1765,13 +1789,9 @@ function ProductModal({
             />
             <span>
               <span className="block text-sm font-medium text-gray-900">
-                Bordure blanche automatique
+                {t("admin.printCatalog.borderToggleTitle")}
               </span>
-              <span className="mt-0.5 block text-xs text-gray-500">
-                Applique automatiquement une marge blanche autour de la photo dans l&apos;aperçu
-                client — indicatif uniquement, Prodigi ne supporte pas ce réglage via son API (il
-                faudrait intégrer la bordure directement dans le fichier envoyé, non fait ici).
-              </span>
+              <span className="mt-0.5 block text-xs text-gray-500">{t("admin.printCatalog.borderToggleDesc")}</span>
             </span>
           </label>
         )}
@@ -1792,11 +1812,10 @@ function ProductModal({
               onChange={(e) => setForm({ ...form, hasFrame: e.target.checked })}
             />
             <span>
-              <span className="block text-sm font-medium text-gray-900">Cadre</span>
-              <span className="mt-0.5 block text-xs text-gray-500">
-                Affiche un encadrement autour de la photo dans l&apos;aperçu client. À décocher
-                pour un produit sans cadre physique (tirage seul, toile, papier photo...).
+              <span className="block text-sm font-medium text-gray-900">
+                {t("admin.printCatalog.frameToggleTitle")}
               </span>
+              <span className="mt-0.5 block text-xs text-gray-500">{t("admin.printCatalog.frameToggleDesc")}</span>
             </span>
           </label>
         )}
@@ -1807,23 +1826,20 @@ function ProductModal({
             form.isProductGroup), et n'a de sens que s'il existe déjà au moins un groupe créé. */}
         {!form.isProductGroup && groups.length > 0 && (
           <div>
-            <label className="mb-1 block text-sm font-medium">Groupe de produit</label>
+            <label className="mb-1 block text-sm font-medium">{t("admin.printCatalog.labelGroupSelect")}</label>
             <select
               className="input"
               value={form.groupId ?? ""}
               onChange={(e) => setForm({ ...form, groupId: e.target.value || null })}
             >
-              <option value="">Aucun — produit autonome</option>
+              <option value="">{t("admin.printCatalog.optionNoGroup")}</option>
               {groups.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.name}
                 </option>
               ))}
             </select>
-            <p className="mt-1.5 text-xs text-gray-500">
-              Rattache ce produit à un groupe existant pour le proposer comme une taille/variante
-              au moment de l&apos;achat, plutôt que comme un produit indépendant dans le sélecteur.
-            </p>
+            <p className="mt-1.5 text-xs text-gray-500">{t("admin.printCatalog.groupSelectHint")}</p>
           </div>
         )}
 
@@ -1847,7 +1863,7 @@ function ProductModal({
             checked={form.active}
             onChange={(e) => setForm({ ...form, active: e.target.checked })}
           />
-          Actif (visible dans les galeries)
+          {t("admin.printCatalog.activeCheckbox")}
         </label>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
@@ -1874,6 +1890,7 @@ function ImageDropzone({
   onUpload: (file: File) => void;
   onRemove: () => void;
 }) {
+  const { t } = useLanguage();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
 
@@ -1883,7 +1900,7 @@ function ImageDropzone({
 
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium">Image</label>
+      <label className="mb-1 block text-sm font-medium">{t("admin.printCatalog.labelImage")}</label>
       <div
         role="button"
         tabIndex={0}
@@ -1915,7 +1932,7 @@ function ImageDropzone({
             <img src={imageUrl} alt="" className="h-full w-full object-cover" />
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/0 opacity-0 transition-all group-hover:bg-black/55 group-hover:opacity-100">
               <IconUpload className="text-white" />
-              <span className="text-xs font-medium text-white">Remplacer</span>
+              <span className="text-xs font-medium text-white">{t("admin.printCatalog.replaceImage")}</span>
             </div>
             <button
               type="button"
@@ -1923,8 +1940,8 @@ function ImageDropzone({
                 e.stopPropagation();
                 if (!uploading) onRemove();
               }}
-              aria-label="Retirer l'image"
-              title="Retirer l'image"
+              aria-label={t("admin.printCatalog.removeImageAria")}
+              title={t("admin.printCatalog.removeImageAria")}
               className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity hover:bg-black/80 group-hover:opacity-100"
             >
               <IconClose />
@@ -1936,9 +1953,9 @@ function ImageDropzone({
               <IconUpload />
             </span>
             <span className="text-xs font-medium leading-tight text-gray-600">
-              Glisser une image
+              {t("admin.printCatalog.dropHint1")}
               <br />
-              ou cliquer
+              {t("admin.printCatalog.dropHintOr")}
             </span>
           </div>
         )}
@@ -1946,7 +1963,7 @@ function ImageDropzone({
         {uploading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-white/85">
             <IconSpinner />
-            <span className="text-xs font-medium text-gray-600">Envoi...</span>
+            <span className="text-xs font-medium text-gray-600">{t("admin.printCatalog.uploading")}</span>
           </div>
         )}
 
@@ -1962,7 +1979,7 @@ function ImageDropzone({
           }}
         />
       </div>
-      <p className="mt-1.5 text-xs text-gray-500">JPG, PNG ou WEBP — recadrée automatiquement en carré.</p>
+      <p className="mt-1.5 text-xs text-gray-500">{t("admin.printCatalog.imageFormatsHint")}</p>
     </div>
   );
 }
