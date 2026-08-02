@@ -1723,12 +1723,12 @@ function FramePreview({
         className="absolute overflow-hidden rounded-[2px] shadow-md"
         style={{ top: frameTop, left: 0, width: frameW, height: frameH, backgroundColor: frameColor, padding: 8 }}
       >
-        {/* Passe-partout blanc élargi (02/08/2026, demande d'Adriel : "augmente la zone de
-            blanche") — 18px au lieu de 7px, pour que la marge blanche se voie clairement dans
-            l'aperçu quand "Bordure blanche" s'applique automatiquement. */}
+        {/* Passe-partout blanc (02/08/2026, demande d'Adriel : "augmente la zone de blanche",
+            puis précisé "elle doit etre 12px") — 12px, pour que la marge blanche se voie
+            clairement dans l'aperçu quand "Bordure blanche" s'applique automatiquement. */}
         <div
           className="h-full w-full overflow-hidden"
-          style={hasMat ? { padding: 18, backgroundColor: "#ffffff" } : undefined}
+          style={hasMat ? { padding: 12, backgroundColor: "#ffffff" } : undefined}
         >
           {photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
