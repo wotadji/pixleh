@@ -1663,7 +1663,9 @@ function FramePreview({
   // conséquence (48 → 60px).
   const CANVAS = 228;
   const TOP_GUIDE = 23;
-  const RIGHT_GUIDE = 34;
+  // RIGHT_GUIDE relevé (34 → 40) pour laisser assez de place au label "H cm" maintenant que le
+  // repère de hauteur est plus éloigné du cadre (GUIDE_GAP, voir plus bas).
+  const RIGHT_GUIDE = 40;
   const maxW = CANVAS - RIGHT_GUIDE - 8;
   const maxH = CANVAS - TOP_GUIDE - 8;
   const scale = Math.min(maxW / refDims.w, maxH / refDims.h);
@@ -1674,6 +1676,13 @@ function FramePreview({
   // lisible, quitte à ne plus être parfaitement proportionnel au plus grand format du groupe.
   const frameW = Math.max(90, Math.round(dims.w * scale));
   const frameH = Math.max(90, Math.round(dims.h * scale));
+  // Écart visuel entre chaque repère de cote et le cadre — même valeur utilisée en haut (via
+  // frameTop) et à droite (via l'offset du repère de hauteur), pour que les deux paraissent à
+  // la même distance de l'image (02/08/2026, demande d'Adriel : "eloigner le repere vertical
+  // qu'il soit a la meme distance que le repere horizontal (appliquer l'espacement de horizontal
+  // a vertical)") — le repère de hauteur était collé à 4px du cadre alors que le repère de
+  // largeur en était visuellement à ~13px (espace du label + marge + trait).
+  const GUIDE_GAP = 13;
   const frameTop = TOP_GUIDE + 3;
   // Centrage horizontal du cadre dans la zone utile (avant l'espace réservé au repère de
   // hauteur) — demande d'Adriel : "que cela soit centré comme le texte du bas" (le nom/prix
@@ -1721,12 +1730,15 @@ function FramePreview({
       </div>
 
       {/* Repère de hauteur (droite) — positionné juste à droite du cadre RÉEL (left: frameLeft +
-          frameW + 4) plutôt qu'à right:0 du canvas fixe (02/08/2026, demande d'Adriel : "rapproché
-          le repere vertical vers l'objet dans l'aperçu") : à right:0, un cadre plus étroit que
-          l'espace maximal réservé (RIGHT_GUIDE) laissait un vide entre l'image et le repère. */}
+          frameW + GUIDE_GAP) plutôt qu'à right:0 du canvas fixe (02/08/2026, demande d'Adriel :
+          "rapproché le repere vertical vers l'objet dans l'aperçu", puis "eloigner le repere
+          vertical qu'il soit a la meme distance que le repere horizontal") : à right:0, un cadre
+          plus étroit que l'espace maximal réservé (RIGHT_GUIDE) laissait un vide entre l'image et
+          le repère ; GUIDE_GAP aligne cet écart sur celui du repère de largeur, au lieu d'un
+          espacement arbitrairement plus serré. */}
       <div
         className="absolute flex items-center gap-1"
-        style={{ top: frameTop, left: frameLeft + frameW + 4, height: frameH }}
+        style={{ top: frameTop, left: frameLeft + frameW + GUIDE_GAP, height: frameH }}
       >
         <div className="relative h-full w-px bg-gray-300">
           <span className="absolute -left-1 top-0 h-px w-2 bg-gray-300" />
