@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { Spinner } from "@/components/ui/Spinner";
 
 interface PhotoDTO {
   id: string;
@@ -1216,7 +1217,7 @@ export function PrintSelectionPageView({
                     </div>
 
                     <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
-                      <span className="text-sm font-medium text-gray-600">Sous-total</span>
+                      <span className="text-sm font-medium text-gray-600">Tirages</span>
                       <span className="text-lg font-semibold text-gray-900">{formatMoney(totalCents, currency)}</span>
                     </div>
 
@@ -1327,7 +1328,10 @@ export function PrintSelectionPageView({
                       <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-4 text-sm text-gray-600">
                         <span>Livraison</span>
                         {shippingQuoteLoading ? (
-                          <span className="text-xs text-gray-400">Calcul en cours…</span>
+                          <span className="flex items-center gap-1.5 text-xs text-gray-400">
+                            <Spinner size={12} />
+                            Calcul en cours…
+                          </span>
                         ) : shippingQuote ? (
                           <span className="shrink-0 font-medium text-gray-800">
                             {formatMoney(shippingQuote.cents, shippingQuote.currency)}
