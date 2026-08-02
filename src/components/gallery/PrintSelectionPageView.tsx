@@ -471,45 +471,29 @@ export function PrintSelectionPageView({
     });
   }
 
-  // Sélection d'attribut Prodigi au moment de l'achat (chantier 02/08/2026, demande d'Adriel :
-  // "je veux construire une vraie UI de sélection d'attribut au moment de l'achat") — quand le
-  // produit choisi a des options (ex: couleur de cadre), on n'assigne PAS tout de suite : on
-  // ouvre d'abord AttributeSelectionModal pour recueillir le choix, qui appelle lui-même
-  // applyProductToPhotos une fois validé. Un produit sans attribut (attributeOptions vide)
-  // s'assigne toujours immédiatement, comme avant.
-  const [attributePrompt, setAttributePrompt] = useState<{
+  // Choix des options (taille/SKU + attributs Prodigi) au moment de l'achat — chantiers
+  // "groupe de produits" et "sélection d'attribut" (02/08/2026, demande d'Adriel) fusionnés en
+  // UNE SEULE modale (02/08/2026, demande d'Adriel après avoir vu le configurateur Vistaprint en
+  // vidéo : "apres avoir choisist le groupe je ne veux pas deux modal je veux un seul modal a
+  // gauche les images représentatif des choix de parametre choisit du produit") — auparavant,
+  // choisir un groupe ouvrait VariantSelectionModal (taille) PUIS, une fois la taille validée,
+  // AttributeSelectionModal (couleur, cadre...) s'enchaînait dans une deuxième fenêtre. `entry`
+  // porte soit le groupe (entry.variants non vide, la taille reste à choisir), soit directement
+  // une variante/un produit simple (entry.variants vide, ex: bouton "Choisir les options" d'un
+  // groupe déjà assigné) — voir ProductOptionsModal, qui gère les deux cas dans un même écran.
+  const [optionsPrompt, setOptionsPrompt] = useState<{
     ids: string[];
-    product: PrintProductDTO;
+    entry: PrintProductDTO;
     initial?: Record<string, string>;
   } | null>(null);
-
-  // Choix de taille/SKU (chantier "groupe de produits", 02/08/2026, demande d'Adriel : "peux tu
-  // ajouter la possibilité de creer un groupe de produit et a l'intérieur ajouter les SKU
-  // adéquat ?") — s'ouvre AVANT le choix d'attribut quand le produit sélectionné est un groupe :
-  // Prodigi encode la taille dans le SKU, pas dans un attribut choisissable (voir schema.prisma,
-  // doc de Product.isProductGroup), donc ce choix ne peut pas passer par AttributeSelectionModal.
-  const [variantPrompt, setVariantPrompt] = useState<{ ids: string[]; group: PrintProductDTO } | null>(null);
 
   // Aperçu en lecture seule des tailles/SKU d'un groupe (demande d'Adriel, 01/08/2026 : "j'ai
   // ajouté les produits dans un groupe, sauf que j'ai pas la possibilité de voir les produits.
   // peux tu mettre un bouton et avec un modal on peux lister les produits du groupe ?") —
-  // distinct de variantPrompt : celui-ci s'ouvre depuis le catalogue en haut de page, AVANT
+  // distinct de optionsPrompt : celui-ci s'ouvre depuis le catalogue en haut de page, AVANT
   // toute sélection de photo, juste pour consulter ce que propose un groupe (image, nom,
   // description, prix de chaque taille), sans assigner quoi que ce soit.
   const [previewGroup, setPreviewGroup] = useState<PrintProductDTO | null>(null);
-
-  // Une fois la variante (taille/SKU réel) choisie, on enchaîne sur le choix d'attribut si cette
-  // variante en a (ex: une toile 12x16 qui propose aussi la couleur de bordure), sinon on assigne
-  // directement — c'est TOUJOURS l'id de la variante, jamais celui du groupe, qui finit dans
-  // Selection.productId (voir applyProductToPhotos).
-  function chooseVariant(ids: string[], variant: PrintProductDTO, initial?: Record<string, string>) {
-    setVariantPrompt(null);
-    if (Object.keys(variant.attributeOptions).length > 0) {
-      setAttributePrompt({ ids, product: variant, initial });
-      return;
-    }
-    applyProductToPhotos(ids, variant.id, null);
-  }
 
   function promptOrApply(ids: string[], value: string, initial?: Record<string, string>) {
     if (value === "") {
@@ -517,12 +501,11 @@ export function PrintSelectionPageView({
       return;
     }
     const product = printProducts.find((p) => p.id === value);
-    if (product?.variants && product.variants.length > 0) {
-      setVariantPrompt({ ids, group: product });
-      return;
-    }
-    if (product && Object.keys(product.attributeOptions).length > 0) {
-      setAttributePrompt({ ids, product, initial });
+    if (!product) return;
+    const hasVariants = (product.variants?.length ?? 0) > 0;
+    const hasAttributes = Object.keys(product.attributeOptions).length > 0;
+    if (hasVariants || hasAttributes) {
+      setOptionsPrompt({ ids, entry: product, initial });
       return;
     }
     applyProductToPhotos(ids, value, null);
@@ -963,9 +946,9 @@ export function PrintSelectionPageView({
                           <button
                             type="button"
                             onClick={() =>
-                              setAttributePrompt({
+                              setOptionsPrompt({
                                 ids: groupIds,
-                                product: g.product!,
+                                entry: g.product!,
                                 initial: groupAttributesUniform ? (groupAttributesSample ?? undefined) : undefined,
                               })
                             }
@@ -1290,33 +1273,22 @@ export function PrintSelectionPageView({
         />
       )}
 
-      {/* Sélection d'attribut Prodigi au moment de l'achat (chantier 02/08/2026, demande
-          d'Adriel : "je veux construire une vraie UI de sélection d'attribut au moment de
-          l'achat") — s'ouvre avant d'assigner un produit qui a des options (couleur de cadre,
-          bordure de toile...), ou pour modifier le choix d'un groupe déjà assigné. */}
-      {attributePrompt && (
-        <AttributeSelectionModal
-          product={attributePrompt.product}
-          count={attributePrompt.ids.length}
-          initial={attributePrompt.initial}
-          onCancel={() => setAttributePrompt(null)}
-          onConfirm={(values) => {
-            applyProductToPhotos(attributePrompt.ids, attributePrompt.product.id, values);
-            setAttributePrompt(null);
+      {/* Choix des options (taille/SKU + attributs Prodigi) au moment de l'achat — chantiers
+          02/08/2026, demande d'Adriel, fusionnés en une seule modale ("je ne veux pas deux modal
+          je veux un seul modal a gauche les images représentatif des choix de parametre choisit
+          du produit") : s'ouvre avant d'assigner un produit-groupe (taille à choisir) et/ou un
+          produit à attributs (couleur, cadre...), ou pour modifier le choix d'un groupe déjà
+          assigné. Voir ProductOptionsModal. */}
+      {optionsPrompt && (
+        <ProductOptionsModal
+          entry={optionsPrompt.entry}
+          count={optionsPrompt.ids.length}
+          initial={optionsPrompt.initial}
+          onCancel={() => setOptionsPrompt(null)}
+          onConfirm={(variantId, attributes) => {
+            applyProductToPhotos(optionsPrompt.ids, variantId, attributes);
+            setOptionsPrompt(null);
           }}
-        />
-      )}
-
-      {/* Choix de taille/SKU (chantier "groupe de produits", 02/08/2026, demande d'Adriel : "peux
-          tu ajouter la possibilité de creer un groupe de produit et a l'intérieur ajouter les
-          SKU adéquat ?") — s'ouvre avant toute autre étape quand le produit choisi est un
-          groupe : la taille encode un SKU Prodigi différent, ce n'est pas un simple attribut. */}
-      {variantPrompt && (
-        <VariantSelectionModal
-          group={variantPrompt.group}
-          count={variantPrompt.ids.length}
-          onCancel={() => setVariantPrompt(null)}
-          onConfirm={(variant) => chooseVariant(variantPrompt.ids, variant)}
         />
       )}
 
@@ -1330,34 +1302,56 @@ export function PrintSelectionPageView({
 }
 
 /**
- * Modale de sélection d'attribut(s) Prodigi (couleur de cadre, bordure de toile, finition...) —
- * chantier 02/08/2026, demande d'Adriel : "je veux construire une vraie UI de sélection
- * d'attribut au moment de l'achat". Un menu déroulant par attribut du produit (product.
- * attributeOptions), pré-rempli avec le choix déjà fait pour ce groupe (`initial`) si disponible
- * et toujours valide, sinon la première valeur proposée par Prodigi.
+ * Modale unique de choix du format (taille/SKU) ET des attributs Prodigi (couleur de cadre,
+ * bordure de toile...) — fusion de deux modales enchaînées (02/08/2026, demande d'Adriel après
+ * avoir envoyé une vidéo du configurateur "Posters encadrés" de Vistaprint : "apres avoir
+ * choisist le groupe je ne veux pas deux modal je veux un seul modal a gauche les images
+ * représentatif des choix de parametre choisit du produit"). Reprend la structure du
+ * configurateur Vistaprint : panneau gauche fixe avec l'image du produit correspondant à la
+ * combinaison actuellement choisie (elle change quand on change de format, puisque chaque taille
+ * a sa propre photo), panneau droit défilant avec les sélecteurs.
+ *
+ * `entry` porte soit un produit-GROUPE (entry.variants non vide → un sélecteur de format est
+ * affiché en premier, la variante par défaut étant la première proposée), soit directement un
+ * produit/une variante déjà déterminée (entry.variants vide → pas de sélecteur de format, on va
+ * droit aux attributs, cas du bouton "Choisir les options" sur un groupe déjà assigné). Changer
+ * de format réinitialise les attributs sur leurs valeurs par défaut, chaque taille pouvant
+ * proposer un jeu d'attributs différent chez Prodigi.
  */
-function AttributeSelectionModal({
-  product,
+function ProductOptionsModal({
+  entry,
   count,
   initial,
   onCancel,
   onConfirm,
 }: {
-  product: PrintProductDTO;
+  entry: PrintProductDTO;
   count: number;
   initial?: Record<string, string>;
   onCancel: () => void;
-  onConfirm: (values: Record<string, string>) => void;
+  onConfirm: (variantId: string, attributes: Record<string, string> | null) => void;
 }) {
-  const [values, setValues] = useState<Record<string, string>>(() => {
+  const variants = entry.variants && entry.variants.length > 0 ? entry.variants : [entry];
+  const showSizePicker = variants.length > 1;
+
+  function defaultValuesFor(variant: PrintProductDTO, seed?: Record<string, string>) {
     const v: Record<string, string> = {};
-    for (const [name, options] of Object.entries(product.attributeOptions)) {
-      v[name] = initial?.[name] && options.includes(initial[name]) ? initial[name] : options[0];
+    for (const [name, options] of Object.entries(variant.attributeOptions)) {
+      v[name] = seed?.[name] && options.includes(seed[name]) ? seed[name] : options[0];
     }
     return v;
-  });
+  }
 
-  const attributeEntries = Object.entries(product.attributeOptions);
+  const [selectedVariantId, setSelectedVariantId] = useState(variants[0].id);
+  const selectedVariant = variants.find((v) => v.id === selectedVariantId) ?? variants[0];
+  const [values, setValues] = useState<Record<string, string>>(() => defaultValuesFor(selectedVariant, initial));
+
+  function selectVariant(variant: PrintProductDTO) {
+    setSelectedVariantId(variant.id);
+    setValues(defaultValuesFor(variant));
+  }
+
+  const attributeEntries = Object.entries(selectedVariant.attributeOptions);
 
   return (
     <div
@@ -1365,28 +1359,26 @@ function AttributeSelectionModal({
       onClick={onCancel}
       role="presentation"
     >
-      {/* Redesign "pro" (02/08/2026, demande d'Adriel : "tu es expert en ux, ui et expert en web
-          design, je veux que tu me proposes un design pro de ce modal") — même vocabulaire visuel
-          que GroupProductsPreviewModal/VariantSelectionModal juste avant : en-tête avec icône +
-          fourchette d'attributs en sous-titre, champs en grille 2 colonnes (au lieu d'empilés en
-          1 colonne, ce qui rendait la modale inutilement longue dès 4-5 attributs), pied de
-          modale séparé par une bordure. */}
       <div
-        className="flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        className="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label={`Options pour ${product.name}`}
+        aria-label={`Options pour ${entry.name}`}
       >
         <div className="flex items-start gap-4 border-b border-gray-100 px-8 py-6">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
             <IconSliders />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-lg font-semibold text-gray-900">Options — {product.name}</h3>
+            <h3 className="truncate text-lg font-semibold text-gray-900">Options — {entry.name}</h3>
             <p className="mt-1 text-sm text-gray-500">
-              Choisissez les {attributeEntries.length} option{attributeEntries.length > 1 ? "s" : ""} avant
-              d&apos;assigner {count > 1 ? `ces ${count} photos` : "cette photo"}.
+              {showSizePicker && attributeEntries.length > 0
+                ? "Choisissez le format et les options"
+                : showSizePicker
+                  ? "Choisissez le format"
+                  : `Choisissez les ${attributeEntries.length} option${attributeEntries.length > 1 ? "s" : ""}`}{" "}
+              avant d&apos;assigner {count > 1 ? `ces ${count} photos` : "cette photo"}.
             </p>
           </div>
           <button
@@ -1399,53 +1391,114 @@ function AttributeSelectionModal({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
-          {/* Sélecteur en cartes cliquables plutôt qu'en <select> (02/08/2026, demande d'Adriel,
-              inspirée du configurateur "Posters encadrés" de Vistaprint envoyé en vidéo :
-              "pouvons nous nous inspiré de ceci ?") — chaque option est un bouton visible d'un
-              coup d'œil (pas besoin d'ouvrir un menu pour comparer), état sélectionné marqué par
-              une bordure bleue + fond teinté, et une pastille de couleur pour les attributs de
-              type couleur/finition (cadre, verre...) plutôt qu'un simple libellé texte. */}
-          <div className="space-y-6">
-            {attributeEntries.map(([name, options]) => (
-              <div key={name}>
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
-                  {attributeLabel(name)}
-                </p>
-                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-                  {options.map((option) => {
-                    const selected = values[name] === option;
-                    const swatch = colorSwatchFor(name, option);
-                    return (
-                      <button
-                        key={option}
-                        type="button"
-                        onClick={() => setValues((v) => ({ ...v, [name]: option }))}
-                        aria-pressed={selected}
-                        className={`flex items-center gap-2.5 rounded-lg border-2 px-3 py-2.5 text-left text-sm transition-colors ${
-                          selected
-                            ? "border-brand-600 bg-brand-50 text-brand-700"
-                            : "border-gray-200 text-gray-700 hover:border-gray-300"
-                        }`}
-                      >
-                        {swatch && (
-                          <span
-                            className="h-6 w-6 shrink-0 rounded-full border border-black/10"
-                            style={{ backgroundColor: swatch }}
-                          />
-                        )}
-                        <span className="min-w-0 flex-1 truncate font-medium">{option}</span>
-                        {selected && (
-                          <span className="shrink-0 text-brand-600">
-                            <IconCheck />
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          {/* Panneau gauche — aperçu visuel de la combinaison actuellement choisie (image + nom +
+              prix de la variante sélectionnée), inspiré du panneau produit fixe à gauche du
+              configurateur Vistaprint. Masqué sur mobile (pas la place), la sélection reste
+              possible sans lui. */}
+          <div className="hidden w-56 shrink-0 flex-col items-center gap-4 border-r border-gray-100 bg-gray-50/60 p-6 sm:flex">
+            <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-white">
+              {selectedVariant.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={selectedVariant.imageUrl}
+                  alt={selectedVariant.name}
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <span className="text-gray-300">
+                  <IconPrinterEmpty />
+                </span>
+              )}
+            </div>
+            <div className="w-full text-center">
+              <p className="line-clamp-2 text-sm font-medium leading-snug text-gray-900">{selectedVariant.name}</p>
+              <p className="mt-1 text-base font-semibold text-gray-800">
+                {formatMoney(selectedVariant.priceCents, selectedVariant.currency)}
+              </p>
+            </div>
+          </div>
+
+          <div className="min-w-0 flex-1 overflow-y-auto px-8 py-6">
+            <div className="space-y-6">
+              {/* Sélecteur de format — uniquement si `entry` est un vrai groupe (plusieurs
+                  tailles/SKU). Cartes façon "choix de forfait" : le prix est l'info la plus
+                  importante à comparer entre tailles. */}
+              {showSizePicker && (
+                <div>
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Format</p>
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                    {variants.map((variant) => {
+                      const selected = variant.id === selectedVariantId;
+                      return (
+                        <button
+                          key={variant.id}
+                          type="button"
+                          onClick={() => selectVariant(variant)}
+                          aria-pressed={selected}
+                          className={`flex items-center justify-between gap-3 rounded-lg border-2 px-3.5 py-3 text-left text-sm transition-colors ${
+                            selected
+                              ? "border-brand-600 bg-brand-50 text-brand-700"
+                              : "border-gray-200 text-gray-700 hover:border-gray-300"
+                          }`}
+                        >
+                          <span className="min-w-0 flex-1 truncate font-medium">{variant.name}</span>
+                          <span className="shrink-0 text-sm font-semibold">
+                            {formatMoney(variant.priceCents, variant.currency)}
                           </span>
-                        )}
-                      </button>
-                    );
-                  })}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )}
+
+              {/* Sélecteur d'attributs en cartes cliquables plutôt qu'en <select> (02/08/2026,
+                  demande d'Adriel, inspirée du configurateur Vistaprint : "pouvons nous nous
+                  inspiré de ceci ?") — chaque option est un bouton visible d'un coup d'œil, état
+                  sélectionné marqué par une bordure bleue + fond teinté, pastille de couleur pour
+                  les attributs de type couleur/finition. Se réinitialise sur les valeurs par
+                  défaut de la variante quand on change de format ci-dessus. */}
+              {attributeEntries.map(([name, options]) => (
+                <div key={name}>
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
+                    {attributeLabel(name)}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                    {options.map((option) => {
+                      const selected = values[name] === option;
+                      const swatch = colorSwatchFor(name, option);
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => setValues((v) => ({ ...v, [name]: option }))}
+                          aria-pressed={selected}
+                          className={`flex items-center gap-2.5 rounded-lg border-2 px-3 py-2.5 text-left text-sm transition-colors ${
+                            selected
+                              ? "border-brand-600 bg-brand-50 text-brand-700"
+                              : "border-gray-200 text-gray-700 hover:border-gray-300"
+                          }`}
+                        >
+                          {swatch && (
+                            <span
+                              className="h-6 w-6 shrink-0 rounded-full border border-black/10"
+                              style={{ backgroundColor: swatch }}
+                            />
+                          )}
+                          <span className="min-w-0 flex-1 truncate font-medium">{option}</span>
+                          {selected && (
+                            <span className="shrink-0 text-brand-600">
+                              <IconCheck />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -1453,87 +1506,12 @@ function AttributeSelectionModal({
           <button type="button" className="btn-secondary text-sm" onClick={onCancel}>
             Annuler
           </button>
-          <button type="button" className="btn-primary text-sm" onClick={() => onConfirm(values)}>
+          <button
+            type="button"
+            className="btn-primary text-sm"
+            onClick={() => onConfirm(selectedVariant.id, attributeEntries.length > 0 ? values : null)}
+          >
             Valider
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Modale de choix de taille/SKU sous un produit-GROUPE (ex: "Toile photo" → 12x16, 20x30...) —
- * chantier "groupe de produits" (02/08/2026, demande d'Adriel : "peux tu ajouter la possibilité
- * de creer un groupe de produit et a l'intérieur ajouter les SKU adéquat ?"). Contrairement à
- * AttributeSelectionModal (des `<select>` pour des attributs Prodigi), ici chaque taille EST un
- * produit distinct avec son propre prix — rendu en cartes cliquables façon "choix de forfait"
- * plutôt qu'un menu déroulant, le prix étant l'information la plus importante à comparer.
- */
-function VariantSelectionModal({
-  group,
-  count,
-  onCancel,
-  onConfirm,
-}: {
-  group: PrintProductDTO;
-  count: number;
-  onCancel: () => void;
-  onConfirm: (variant: PrintProductDTO) => void;
-}) {
-  const variants = group.variants ?? [];
-  return (
-    <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 px-4"
-      onClick={onCancel}
-      role="presentation"
-    >
-      {/* Agrandi (02/08/2026, demande d'Adriel : "agrandir ce modal") — même traitement que
-          GroupProductsPreviewModal juste avant : largeur et paddings augmentés, description en
-          line-clamp-2 au lieu de "truncate" 1 ligne (coupait au milieu d'un mot). */}
-      <div
-        className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Choisir une taille pour ${group.name}`}
-      >
-        <div className="border-b border-gray-100 px-8 py-6">
-          <h3 className="text-lg font-semibold text-gray-900">Choisir une taille — {group.name}</h3>
-          <p className="mt-1 text-sm text-gray-500">
-            Sélectionnez le format avant d&apos;assigner {count > 1 ? `ces ${count} photos` : "cette photo"}.
-          </p>
-        </div>
-
-        <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-8 py-6">
-          {variants.map((variant) => (
-            <button
-              key={variant.id}
-              type="button"
-              onClick={() => onConfirm(variant)}
-              className="flex w-full items-center justify-between gap-4 rounded-xl border border-gray-200 px-5 py-4 text-left hover:border-brand-400 hover:bg-brand-50/40"
-            >
-              <span className="min-w-0">
-                <span className="block text-sm font-medium leading-snug text-gray-900">{variant.name}</span>
-                {variant.description && (
-                  <span className="mt-0.5 line-clamp-2 block text-xs leading-snug text-gray-500">
-                    {variant.description}
-                  </span>
-                )}
-              </span>
-              <span className="shrink-0 text-base font-semibold text-gray-800">
-                {formatMoney(variant.priceCents, variant.currency)}
-              </span>
-            </button>
-          ))}
-          {variants.length === 0 && (
-            <p className="text-sm text-gray-400">Aucune taille disponible pour ce groupe pour le moment.</p>
-          )}
-        </div>
-
-        <div className="flex justify-end border-t border-gray-100 bg-gray-50/60 px-8 py-5">
-          <button type="button" className="btn-secondary text-sm" onClick={onCancel}>
-            Annuler
           </button>
         </div>
       </div>
