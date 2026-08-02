@@ -1706,10 +1706,13 @@ function FramePreview({
         </div>
       </div>
 
-      {/* Repère de hauteur (droite) */}
+      {/* Repère de hauteur (droite) — positionné juste à droite du cadre RÉEL (left: frameW + 4)
+          plutôt qu'à right:0 du canvas fixe (02/08/2026, demande d'Adriel : "rapproché le repere
+          vertical vers l'objet dans l'aperçu") : à right:0, un cadre plus étroit que l'espace
+          maximal réservé (RIGHT_GUIDE) laissait un vide entre l'image et le repère. */}
       <div
         className="absolute flex items-center gap-1"
-        style={{ top: frameTop, right: 0, height: frameH }}
+        style={{ top: frameTop, left: frameW + 4, height: frameH }}
       >
         <div className="relative h-full w-px bg-gray-300">
           <span className="absolute -left-1 top-0 h-px w-2 bg-gray-300" />
