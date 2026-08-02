@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getStudioSession } from "@/lib/access";
-import { AdminSidebarNav } from "@/components/admin/AdminSidebarNav";
+import { AdminSidebarNav, AdminBadgeLabel, AdminBackToStudioLabel } from "@/components/admin/AdminSidebarNav";
 import { PixlehLogo } from "@/components/marketing/PixlehLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
@@ -45,7 +45,7 @@ export default async function PlatformAdminLayout({ children }: { children: Reac
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-white">
             <IconShield />
           </div>
-          <p className="truncate text-sm font-medium text-white">Admin plateforme</p>
+          <p className="truncate text-sm font-medium text-white"><AdminBadgeLabel /></p>
         </div>
 
         <div className="flex-1">
@@ -58,7 +58,7 @@ export default async function PlatformAdminLayout({ children }: { children: Reac
             className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
           >
             <IconArrowLeft />
-            Retour au dashboard studio
+            <AdminBackToStudioLabel />
           </Link>
         </div>
 

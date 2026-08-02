@@ -780,6 +780,18 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "settings.deleteModalConfirmWord": "SUPPRIMER",
     "settings.deleteModalConfirmButton": "Supprimer définitivement",
     "settings.deleteModalDeleting": "Suppression...",
+
+    // Panel admin plateforme (02/08/2026, demande d'Adriel : "je veux dans panel admin avoir
+    // le choix de langue aussi") — namespace admin.* distinct de nav.* (dashboard studio).
+    "admin.badge": "Admin plateforme",
+    "admin.backToStudio": "Retour au dashboard studio",
+    "admin.nav.overview": "Vue d'ensemble",
+    "admin.nav.studios": "Studios",
+    "admin.nav.orders": "Commandes",
+    "admin.nav.site": "Contenu du site",
+    "admin.nav.plans": "Plans tarifaires",
+    "admin.nav.printCatalog": "Catalogue impression",
+    "admin.nav.features": "Fonctionnalités",
   },
 
   en: {
@@ -1555,6 +1567,16 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "settings.deleteModalConfirmWord": "DELETE",
     "settings.deleteModalConfirmButton": "Permanently delete",
     "settings.deleteModalDeleting": "Deleting...",
+
+    "admin.badge": "Platform admin",
+    "admin.backToStudio": "Back to studio dashboard",
+    "admin.nav.overview": "Overview",
+    "admin.nav.studios": "Studios",
+    "admin.nav.orders": "Orders",
+    "admin.nav.site": "Site content",
+    "admin.nav.plans": "Pricing plans",
+    "admin.nav.printCatalog": "Print catalog",
+    "admin.nav.features": "Features",
   },
 
   es: {
@@ -2330,6 +2352,16 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "settings.deleteModalConfirmWord": "ELIMINAR",
     "settings.deleteModalConfirmButton": "Eliminar definitivamente",
     "settings.deleteModalDeleting": "Eliminando...",
+
+    "admin.badge": "Administración de la plataforma",
+    "admin.backToStudio": "Volver al panel del estudio",
+    "admin.nav.overview": "Resumen",
+    "admin.nav.studios": "Estudios",
+    "admin.nav.orders": "Pedidos",
+    "admin.nav.site": "Contenido del sitio",
+    "admin.nav.plans": "Planes de precios",
+    "admin.nav.printCatalog": "Catálogo de impresión",
+    "admin.nav.features": "Funcionalidades",
   },
 
   pt: {
@@ -3105,6 +3137,16 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "settings.deleteModalConfirmWord": "EXCLUIR",
     "settings.deleteModalConfirmButton": "Excluir definitivamente",
     "settings.deleteModalDeleting": "Excluindo...",
+
+    "admin.badge": "Administração da plataforma",
+    "admin.backToStudio": "Voltar ao painel do estúdio",
+    "admin.nav.overview": "Visão geral",
+    "admin.nav.studios": "Estúdios",
+    "admin.nav.orders": "Pedidos",
+    "admin.nav.site": "Conteúdo do site",
+    "admin.nav.plans": "Planos de preços",
+    "admin.nav.printCatalog": "Catálogo de impressão",
+    "admin.nav.features": "Funcionalidades",
   },
 
   zh: {
@@ -3879,6 +3921,16 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "settings.deleteModalConfirmWord": "删除",
     "settings.deleteModalConfirmButton": "永久删除",
     "settings.deleteModalDeleting": "删除中...",
+
+    "admin.badge": "平台管理",
+    "admin.backToStudio": "返回工作室后台",
+    "admin.nav.overview": "概览",
+    "admin.nav.studios": "工作室",
+    "admin.nav.orders": "订单",
+    "admin.nav.site": "网站内容",
+    "admin.nav.plans": "价格方案",
+    "admin.nav.printCatalog": "印刷目录",
+    "admin.nav.features": "功能",
   },
 
   ar: {
@@ -4654,5 +4706,15 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "settings.deleteModalConfirmWord": "حذف",
     "settings.deleteModalConfirmButton": "حذف نهائيًا",
     "settings.deleteModalDeleting": "جارٍ الحذف...",
+
+    "admin.badge": "إدارة المنصة",
+    "admin.backToStudio": "العودة إلى لوحة الاستوديو",
+    "admin.nav.overview": "نظرة عامة",
+    "admin.nav.studios": "الاستوديوهات",
+    "admin.nav.orders": "الطلبات",
+    "admin.nav.site": "محتوى الموقع",
+    "admin.nav.plans": "خطط الأسعار",
+    "admin.nav.printCatalog": "كتالوج الطباعة",
+    "admin.nav.features": "الميزات",
   },
 };

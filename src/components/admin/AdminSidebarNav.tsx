@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useLanguage } from "@/lib/i18n/LanguageProvider";
 
 // Une icône par route admin, choisie par href plutôt que passée en prop depuis le layout
 // (Server Component) — évite de fabriquer des éléments JSX côté serveur juste pour les
@@ -16,8 +17,36 @@ const ICONS: Record<string, JSX.Element> = {
   "/admin/features": <IconToggle />,
 };
 
+// Clé de traduction par route (02/08/2026, demande d'Adriel : "je veux dans panel admin
+// avoir le choix de langue aussi") — le layout (Server Component, voir admin/layout.tsx)
+// ne peut pas appeler useLanguage() lui-même, donc on résout le libellé traduit ICI plutôt
+// que de recevoir un `label` déjà figé en français depuis les props.
+const LABEL_KEYS: Record<string, string> = {
+  "/admin": "admin.nav.overview",
+  "/admin/studios": "admin.nav.studios",
+  "/admin/orders": "admin.nav.orders",
+  "/admin/site": "admin.nav.site",
+  "/admin/plans": "admin.nav.plans",
+  "/admin/print-catalog": "admin.nav.printCatalog",
+  "/admin/features": "admin.nav.features",
+};
+
+/** Petits wrappers client pour les 2 libellés statiques du sidebar admin (badge "Admin
+ * plateforme" + lien "Retour au dashboard studio") — admin/layout.tsx est un Server
+ * Component et ne peut pas appeler useLanguage() lui-même. */
+export function AdminBadgeLabel() {
+  const { t } = useLanguage();
+  return <>{t("admin.badge")}</>;
+}
+
+export function AdminBackToStudioLabel() {
+  const { t } = useLanguage();
+  return <>{t("admin.backToStudio")}</>;
+}
+
 export function AdminSidebarNav({ items }: { items: { href: string; label: string }[] }) {
   const pathname = usePathname();
+  const { t } = useLanguage();
 
   // "/admin" (Vue d'ensemble) ne doit s'allumer que sur la page exacte, sinon il
   // resterait actif sur toutes les sous-pages (/admin/plans, /admin/features...).
@@ -41,7 +70,7 @@ export function AdminSidebarNav({ items }: { items: { href: string; label: strin
           <span className={isActive(item.href) ? "text-brand-600" : "text-gray-400"}>
             {ICONS[item.href] ?? <IconDot />}
           </span>
-          <span className="truncate">{item.label}</span>
+          <span className="truncate">{LABEL_KEYS[item.href] ? t(LABEL_KEYS[item.href]) : item.label}</span>
         </Link>
       ))}
     </nav>
