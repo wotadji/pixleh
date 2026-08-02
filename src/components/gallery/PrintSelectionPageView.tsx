@@ -1663,10 +1663,20 @@ function FramePreview({
   // conséquence (48 → 60px).
   const CANVAS = 228;
   const TOP_GUIDE = 23;
-  // RIGHT_GUIDE relevé (34 → 40) pour laisser assez de place au label "H cm" maintenant que le
-  // repère de hauteur est plus éloigné du cadre (GUIDE_GAP, voir plus bas).
-  const RIGHT_GUIDE = 40;
-  const maxW = CANVAS - RIGHT_GUIDE - 8;
+  // Écart visuel entre chaque repère de cote et le cadre — même valeur utilisée en haut (via
+  // frameTop) et à droite (via l'offset du repère de hauteur), pour que les deux paraissent à
+  // la même distance de l'image (02/08/2026, demande d'Adriel : "eloigner le repere vertical
+  // qu'il soit a la meme distance que le repere horizontal (appliquer l'espacement de horizontal
+  // a vertical)").
+  const GUIDE_GAP = 13;
+  // Espace total requis À DROITE du cadre pour le repère de hauteur (trait + espacement interne
+  // + label "H cm") — utilisé aussi comme marge de GAUCHE symétrique pour un vrai centrage du
+  // cadre dans le canvas (02/08/2026, demande d'Adriel : "bien aligner le contenu (l'image dois
+  // etre bien centré)"). Avant ce correctif, le cadre était centré uniquement dans la largeur
+  // "utile" (hors espace du repère), ce qui le décalait visuellement vers la gauche du canvas
+  // complet une fois cet espace ajouté à droite — exactement le décalage remonté par Adriel.
+  const SIDE_RESERVE = 45;
+  const maxW = CANVAS - SIDE_RESERVE * 2;
   const maxH = CANVAS - TOP_GUIDE - 8;
   const scale = Math.min(maxW / refDims.w, maxH / refDims.h);
   // Taille minimale relevée à nouveau (60 → 90px) — demande d'Adriel : "je veux que le petit
@@ -1676,18 +1686,18 @@ function FramePreview({
   // lisible, quitte à ne plus être parfaitement proportionnel au plus grand format du groupe.
   const frameW = Math.max(90, Math.round(dims.w * scale));
   const frameH = Math.max(90, Math.round(dims.h * scale));
-  // Écart visuel entre chaque repère de cote et le cadre — même valeur utilisée en haut (via
-  // frameTop) et à droite (via l'offset du repère de hauteur), pour que les deux paraissent à
-  // la même distance de l'image (02/08/2026, demande d'Adriel : "eloigner le repere vertical
-  // qu'il soit a la meme distance que le repere horizontal (appliquer l'espacement de horizontal
-  // a vertical)") — le repère de hauteur était collé à 4px du cadre alors que le repère de
-  // largeur en était visuellement à ~13px (espace du label + marge + trait).
-  const GUIDE_GAP = 13;
   const frameTop = TOP_GUIDE + 3;
-  // Centrage horizontal du cadre dans la zone utile (avant l'espace réservé au repère de
-  // hauteur) — demande d'Adriel : "que cela soit centré comme le texte du bas" (le nom/prix
-  // affichés sous l'aperçu sont centrés dans le panneau ; le cadre était lui plaqué à gauche).
-  const frameLeft = Math.max(0, Math.round((maxW - frameW) / 2));
+  // Centrage horizontal du cadre dans le canvas COMPLET (pas juste la zone "utile" hors repère) —
+  // grâce à SIDE_RESERVE réservé symétriquement des deux côtés lors du calcul de l'échelle
+  // ci-dessus, la marge de droite (occupée par le repère de hauteur) et la marge de gauche sont
+  // garanties égales : le cadre tombe pile au centre du canvas, aligné avec le texte du bas
+  // (nom/prix), qui lui est centré dans tout le panneau.
+  const frameLeft = Math.max(0, Math.round((CANVAS - frameW) / 2));
+  // Hauteur du canvas resserrée sur le contenu réellement dessiné (frameTop + frameH + petite
+  // marge), au lieu d'un carré fixe CANVAS×CANVAS qui laissait un grand vide sous les formats
+  // moins hauts que le plus grand du groupe (02/08/2026, demande d'Adriel : "le texte dois etre
+  // bien approché de l'image").
+  const canvasHeight = frameTop + frameH + 6;
 
   // Couleur du cadre = attribut de COULEUR choisi (voir colorSwatchFor, déjà utilisé pour les
   // pastilles des cartes d'attribut) — gris neutre par défaut si le produit n'a pas d'attribut
@@ -1718,7 +1728,7 @@ function FramePreview({
     ) || borderType === "Bordure blanche";
 
   return (
-    <div className="relative" style={{ width: CANVAS, height: CANVAS }}>
+    <div className="relative" style={{ width: CANVAS, height: canvasHeight }}>
       {/* Repère de largeur (haut) — décalé de frameLeft pour rester aligné au-dessus du cadre
           désormais centré (voir frameLeft ci-dessus). */}
       <div className="absolute top-0 flex flex-col items-center" style={{ left: frameLeft, width: frameW }}>
