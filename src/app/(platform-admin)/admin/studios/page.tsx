@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PageSpinner } from "@/components/ui/Spinner";
+import { useLanguage } from "@/lib/i18n/LanguageProvider";
 
 interface StudioListItem {
   id: string;
@@ -19,6 +20,7 @@ interface StudioListItem {
 
 export default function AdminStudiosPage() {
   const [studios, setStudios] = useState<StudioListItem[] | null>(null);
+  const { t, locale } = useLanguage();
 
   useEffect(() => {
     fetch("/api/admin/studios")
@@ -31,12 +33,10 @@ export default function AdminStudiosPage() {
   return (
     <div>
       <h1 className="font-serif text-2xl font-semibold">Studios</h1>
-      <p className="mt-1 text-sm text-gray-500">
-        Tous les studios inscrits sur pixleh, tous propriétaires confondus — mode support.
-      </p>
+      <p className="mt-1 text-sm text-gray-500">{t("admin.studios.subtitle")}</p>
 
       <div className="mt-6 space-y-2">
-        {studios.length === 0 && <p className="text-sm text-gray-500">Aucun studio pour le moment.</p>}
+        {studios.length === 0 && <p className="text-sm text-gray-500">{t("admin.studios.empty")}</p>}
         {studios.map((studio) => (
           <Link
             key={studio.id}
@@ -47,7 +47,7 @@ export default function AdminStudiosPage() {
               <div className="flex items-center gap-2">
                 <p className="font-medium">{studio.name}</p>
                 <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-                  {studio.plan ? studio.plan.name : "Aucun plan"}
+                  {studio.plan ? studio.plan.name : t("admin.studios.noPlan")}
                 </span>
                 {studio.subscriptionStatus && (
                   <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
@@ -56,12 +56,12 @@ export default function AdminStudiosPage() {
                 )}
               </div>
               <p className="mt-1 text-sm text-gray-500">
-                {studio.ownerName || "—"} · {studio.ownerEmail || "—"} · {studio.galleryCount} galerie(s) ·{" "}
-                {studio.clientCount} client(s)
+                {studio.ownerName || "—"} · {studio.ownerEmail || "—"} · {studio.galleryCount}{" "}
+                {t("admin.studios.galleryUnit")} · {studio.clientCount} {t("admin.studios.clientUnit")}
               </p>
             </div>
             <p className="shrink-0 text-xs text-gray-400">
-              Inscrit le {new Date(studio.createdAt).toLocaleDateString("fr-FR")}
+              {t("admin.studios.registeredOn")} {new Date(studio.createdAt).toLocaleDateString(locale)}
             </p>
           </Link>
         ))}

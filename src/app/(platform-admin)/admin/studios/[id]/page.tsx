@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PageSpinner } from "@/components/ui/Spinner";
+import { useLanguage } from "@/lib/i18n/LanguageProvider";
 
 interface StudioUser {
   id: string;
@@ -44,6 +45,7 @@ export default function AdminStudioDetailPage({ params }: { params: { id: string
   const [savingPlan, setSavingPlan] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingUserId, setPendingUserId] = useState<string | null>(null);
+  const { t, locale } = useLanguage();
 
   async function load() {
     const [studioRes, plansRes] = await Promise.all([
@@ -76,7 +78,7 @@ export default function AdminStudioDetailPage({ params }: { params: { id: string
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setError(data?.error || "Impossible de changer le plan.");
+      setError(data?.error || t("admin.studios.errorChangePlan"));
     } else {
       setStudio((prev) => (prev ? { ...prev, planId: data.studio.planId, plan: data.studio.plan } : prev));
     }
@@ -93,7 +95,7 @@ export default function AdminStudioDetailPage({ params }: { params: { id: string
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setError(data?.error || "Impossible de modifier cet accès.");
+      setError(data?.error || t("admin.studios.errorToggleAccess"));
     } else {
       setStudio((prev) =>
         prev
@@ -110,30 +112,30 @@ export default function AdminStudioDetailPage({ params }: { params: { id: string
   if (!studio) return <PageSpinner />;
 
   const stats = [
-    { label: "Galeries", value: studio._count.galleries },
-    { label: "Clients", value: studio._count.clients },
-    { label: "Commandes", value: studio._count.orders },
-    { label: "Réservations", value: studio._count.bookings },
-    { label: "Contrats", value: studio._count.contracts },
-    { label: "Factures", value: studio._count.invoices },
+    { label: t("admin.studios.statGalleries"), value: studio._count.galleries },
+    { label: t("admin.studios.statClients"), value: studio._count.clients },
+    { label: t("admin.studios.statOrders"), value: studio._count.orders },
+    { label: t("admin.studios.statBookings"), value: studio._count.bookings },
+    { label: t("admin.studios.statContracts"), value: studio._count.contracts },
+    { label: t("admin.studios.statInvoices"), value: studio._count.invoices },
   ];
 
   return (
     <div>
       <Link href="/admin/studios" className="text-sm text-brand-600 hover:underline">
-        ← Tous les studios
+        ← {t("admin.studios.backToList")}
       </Link>
 
       <div className="mt-3 flex items-center justify-between">
         <div>
           <h1 className="font-serif text-2xl font-semibold">{studio.name}</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Inscrit le {new Date(studio.createdAt).toLocaleDateString("fr-FR")}
-            {studio.subscriptionStatus && ` · Abonnement ${studio.subscriptionStatus}`}
+            {t("admin.studios.registeredOn")} {new Date(studio.createdAt).toLocaleDateString(locale)}
+            {studio.subscriptionStatus && ` · ${t("admin.studios.subscriptionPrefix")} ${studio.subscriptionStatus}`}
           </p>
         </div>
         <a href={`/s/${studio.slug}`} target="_blank" rel="noreferrer" className="btn-secondary text-sm">
-          Voir le site public
+          {t("admin.studios.viewPublicSite")}
         </a>
       </div>
 
@@ -149,17 +151,15 @@ export default function AdminStudioDetailPage({ params }: { params: { id: string
       </div>
 
       <div className="mt-6 card">
-        <h2 className="font-medium">Plan tarifaire</h2>
-        <p className="mt-1 text-sm text-gray-500">
-          Affectation manuelle, ne touche pas à Stripe (ne crée ni n'annule d'abonnement).
-        </p>
+        <h2 className="font-medium">{t("admin.studios.planTitle")}</h2>
+        <p className="mt-1 text-sm text-gray-500">{t("admin.studios.planDesc")}</p>
         <select
           className="input mt-3 max-w-xs"
           value={studio.planId || ""}
           disabled={savingPlan}
           onChange={(e) => changePlan(e.target.value)}
         >
-          <option value="">Aucun plan</option>
+          <option value="">{t("admin.studios.noPlan")}</option>
           {plans.map((plan) => (
             <option key={plan.id} value={plan.id}>
               {plan.name}
@@ -169,7 +169,7 @@ export default function AdminStudioDetailPage({ params }: { params: { id: string
       </div>
 
       <div className="mt-6 card">
-        <h2 className="font-medium">Utilisateurs</h2>
+        <h2 className="font-medium">{t("admin.studios.usersTitle")}</h2>
         <div className="mt-3 space-y-2">
           {studio.users.map((user) => (
             <div key={user.id} className="flex items-center justify-between border-t border-gray-100 pt-2 first:border-t-0 first:pt-0">
@@ -186,7 +186,7 @@ export default function AdminStudioDetailPage({ params }: { params: { id: string
                   disabled={pendingUserId === user.id}
                   onChange={() => toggleAdmin(user)}
                 />
-                Accès admin plateforme
+                {t("admin.studios.adminAccessLabel")}
               </label>
             </div>
           ))}
