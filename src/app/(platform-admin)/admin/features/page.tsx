@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PageSpinner } from "@/components/ui/Spinner";
+import { useLanguage } from "@/lib/i18n/LanguageProvider";
 
 interface FeatureDTO {
   id: string;
@@ -15,6 +16,7 @@ export default function AdminFeaturesPage() {
   const [features, setFeatures] = useState<FeatureDTO[] | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   async function load() {
     const res = await fetch("/api/admin/features");
@@ -44,7 +46,7 @@ export default function AdminFeaturesPage() {
       setFeatures((prev) =>
         prev ? prev.map((f) => (f.key === feature.key ? { ...f, enabled: feature.enabled } : f)) : prev
       );
-      setError("Impossible de mettre à jour cette fonctionnalité.");
+      setError(t("admin.features.errorToggle"));
     }
     setPending(null);
   }
@@ -53,16 +55,12 @@ export default function AdminFeaturesPage() {
 
   return (
     <div>
-      <h1 className="font-serif text-2xl font-semibold">Fonctionnalités</h1>
-      <p className="mt-1 text-sm text-gray-500">
-        Interrupteur global, indépendant des plans : une fonctionnalité désactivée ici reste
-        invisible partout (page tarifs, quotas appliqués) même si elle est cochée sur un plan.
-        Bascule-la une fois développée — pas besoin de repasser sur chaque plan.
-      </p>
+      <h1 className="font-serif text-2xl font-semibold">{t("admin.features.title")}</h1>
+      <p className="mt-1 text-sm text-gray-500">{t("admin.features.subtitle")}</p>
 
       {features.length === 0 && (
         <p className="mt-6 text-sm text-gray-500">
-          Aucune fonctionnalité en base — lance <code>npm run prisma:seed-features</code>.
+          {t("admin.features.emptyPrefix")} <code>npm run prisma:seed-features</code>.
         </p>
       )}
 

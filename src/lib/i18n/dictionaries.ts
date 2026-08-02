@@ -1097,6 +1097,10 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "admin.plans.checkFreeDefault": "Plan gratuit par défaut (attribué à l'inscription)",
     "admin.plans.checkActive": "Actif (visible sur la page tarifs)",
     "admin.plans.fieldSortOrder": "Ordre d'affichage",
+    "admin.features.title": "Fonctionnalités",
+    "admin.features.subtitle": "Interrupteur global, indépendant des plans : une fonctionnalité désactivée ici reste invisible partout (page tarifs, quotas appliqués) même si elle est cochée sur un plan. Bascule-la une fois développée — pas besoin de repasser sur chaque plan.",
+    "admin.features.emptyPrefix": "Aucune fonctionnalité en base — lance",
+    "admin.features.errorToggle": "Impossible de mettre à jour cette fonctionnalité.",
   },
 
   en: {
@@ -2185,6 +2189,10 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "admin.plans.checkFreeDefault": "Default free plan (assigned at signup)",
     "admin.plans.checkActive": "Active (visible on the pricing page)",
     "admin.plans.fieldSortOrder": "Display order",
+    "admin.features.title": "Features",
+    "admin.features.subtitle": "Global switch, independent of plans: a feature disabled here stays invisible everywhere (pricing page, applied quotas) even if it's checked on a plan. Toggle it on once developed — no need to go back over each plan.",
+    "admin.features.emptyPrefix": "No features in the database — run",
+    "admin.features.errorToggle": "Could not update this feature.",
   },
 
   es: {
@@ -3273,6 +3281,10 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "admin.plans.checkFreeDefault": "Plan gratuito por defecto (asignado al registrarse)",
     "admin.plans.checkActive": "Activo (visible en la página de precios)",
     "admin.plans.fieldSortOrder": "Orden de visualización",
+    "admin.features.title": "Funcionalidades",
+    "admin.features.subtitle": "Interruptor global, independiente de los planes: una funcionalidad desactivada aquí permanece invisible en todas partes (página de precios, cuotas aplicadas) aunque esté marcada en un plan. Actívala una vez desarrollada — no hace falta repetirlo en cada plan.",
+    "admin.features.emptyPrefix": "No hay funcionalidades en la base de datos — ejecuta",
+    "admin.features.errorToggle": "No se pudo actualizar esta funcionalidad.",
   },
 
   pt: {
@@ -4361,6 +4373,10 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "admin.plans.checkFreeDefault": "Plano gratuito padrão (atribuído no cadastro)",
     "admin.plans.checkActive": "Ativo (visível na página de preços)",
     "admin.plans.fieldSortOrder": "Ordem de exibição",
+    "admin.features.title": "Funcionalidades",
+    "admin.features.subtitle": "Interruptor global, independente dos planos: uma funcionalidade desativada aqui permanece invisível em todos os lugares (página de preços, cotas aplicadas) mesmo que esteja marcada em um plano. Ative-a assim que estiver desenvolvida — sem necessidade de repetir em cada plano.",
+    "admin.features.emptyPrefix": "Nenhuma funcionalidade no banco — execute",
+    "admin.features.errorToggle": "Não foi possível atualizar esta funcionalidade.",
   },
 
   zh: {
@@ -5448,6 +5464,10 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "admin.plans.checkFreeDefault": "默认免费套餐（注册时分配）",
     "admin.plans.checkActive": "启用（在价格页面可见）",
     "admin.plans.fieldSortOrder": "显示顺序",
+    "admin.features.title": "功能",
+    "admin.features.subtitle": "全局开关，独立于套餐：此处禁用的功能在任何地方（价格页面、已应用的配额）都将不可见，即使它在某个套餐中被勾选。开发完成后再启用它——无需回到每个套餐重复设置。",
+    "admin.features.emptyPrefix": "数据库中没有任何功能——运行",
+    "admin.features.errorToggle": "无法更新此功能。",
   },
 
   ar: {
@@ -6536,5 +6556,9 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "admin.plans.checkFreeDefault": "خطة مجانية افتراضية (تُمنح عند التسجيل)",
     "admin.plans.checkActive": "نشطة (مرئية في صفحة الأسعار)",
     "admin.plans.fieldSortOrder": "ترتيب العرض",
+    "admin.features.title": "الميزات",
+    "admin.features.subtitle": "مفتاح عام، مستقل عن الخطط: الميزة المعطّلة هنا تبقى غير مرئية في كل مكان (صفحة الأسعار، الحصص المطبَّقة) حتى لو كانت محددة في إحدى الخطط. فعّلها بمجرد تطويرها — دون الحاجة للعودة إلى كل خطة على حدة.",
+    "admin.features.emptyPrefix": "لا توجد أي ميزة في قاعدة البيانات — نفّذ",
+    "admin.features.errorToggle": "تعذّر تحديث هذه الميزة.",
   },
 };
