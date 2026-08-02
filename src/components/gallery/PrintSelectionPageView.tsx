@@ -1653,31 +1653,38 @@ function FramePreview({
   // cadre selon son ratio largeur/hauteur réel. L'échelle se calcule à partir de `refDims` (le
   // plus grand format du groupe, cf. ci-dessus), PAS de `dims` (la variante affichée) : c'est ce
   // qui garantit qu'un plus grand format occupe plus de place, jamais moins.
+  // Repères resserrés contre l'image (02/08/2026, demande d'Adriel : "rapproché les reperes a
+  // coté de l'image") — moins d'espace réservé en haut/à droite (TOP_GUIDE/RIGHT_GUIDE réduits)
+  // et frameTop ramené juste sous le repère de largeur, pour que cotes et cadre soient visuellement
+  // collés plutôt que séparés par une grande marge.
   const CANVAS = 176;
-  const TOP_GUIDE = 26;
-  const RIGHT_GUIDE = 36;
-  const maxW = CANVAS - RIGHT_GUIDE - 10;
-  const maxH = CANVAS - TOP_GUIDE - 10;
+  const TOP_GUIDE = 18;
+  const RIGHT_GUIDE = 26;
+  const maxW = CANVAS - RIGHT_GUIDE - 8;
+  const maxH = CANVAS - TOP_GUIDE - 8;
   const scale = Math.min(maxW / refDims.w, maxH / refDims.h);
   const frameW = Math.max(48, Math.round(dims.w * scale));
   const frameH = Math.max(48, Math.round(dims.h * scale));
-  const frameTop = TOP_GUIDE + 6;
+  const frameTop = TOP_GUIDE + 3;
 
-  // Couleur du cadre = premier attribut choisi dont le nom évoque une couleur/un cadre (voir
-  // colorSwatchFor, déjà utilisé pour les pastilles des cartes d'attribut) — gris neutre par
-  // défaut si le produit n'a pas d'attribut couleur (rien à représenter) ou si l'option choisie
-  // ne correspond à aucun mot-clé connu.
+  // Couleur du cadre = attribut de COULEUR choisi (voir colorSwatchFor, déjà utilisé pour les
+  // pastilles des cartes d'attribut) — gris neutre par défaut si le produit n'a pas d'attribut
+  // couleur (rien à représenter) ou si l'option choisie ne correspond à aucun mot-clé connu.
   // "colour" (orthographe Prodigi, voir ATTRIBUTE_LABELS et le correctif sur colorSwatchFor
   // ci-dessus) ajouté au même titre que "color" — sans lui, la couleur du cadre ne suivait
   // jamais la sélection (02/08/2026, bug remonté par Adriel : "quand je clique sur couleur rien
-  // ne change"). "mountColour" (couleur du passe-partout) matche aussi /couleur|colour|color/,
-  // donc on cherche d'abord une correspondance EXACTE ("colour"/"color"/"frame"/"cadre") avant de
-  // retomber sur une correspondance large en excluant explicitement "mount" — pour ne pas piocher
-  // par erreur la couleur du passe-partout comme couleur de cadre.
+  // ne change"). IMPORTANT : "frame"/"cadre" ne sont PAS des noms d'attribut de couleur chez
+  // Prodigi — c'est le TYPE/matériau de cadre (ex: "Box", voir ATTRIBUTE_LABELS : frame →
+  // "Cadre"), une notion différente de la vraie couleur ("colour"/"COULEUR"). Les inclure dans
+  // cette recherche faisait piocher par erreur l'attribut matériau à la place de l'attribut
+  // couleur dès qu'un produit avait les deux (02/08/2026, bug remonté par Adriel : "j'ai choisit
+  // couleur blanche mais je vois la couleur grise sur l'image") — recherche donc restreinte à
+  // "colour"/"color" uniquement, avec priorité à une correspondance EXACTE pour ne pas piocher
+  // "mountColour" (couleur du passe-partout, exclu explicitement) à la place.
   const attributeEntries = Object.entries(attributes);
   const frameColorEntry =
-    attributeEntries.find(([name]) => /^(colour|color|frame|cadre)$/i.test(name)) ??
-    attributeEntries.find(([name]) => /couleur|colour|color|frame|cadre/i.test(name) && !/mount/i.test(name));
+    attributeEntries.find(([name]) => /^(colour|color)$/i.test(name)) ??
+    attributeEntries.find(([name]) => /couleur|colour|color/i.test(name) && !/mount/i.test(name));
   const frameColor = (frameColorEntry && colorSwatchFor(frameColorEntry[0], frameColorEntry[1])) || "#9ca3af";
 
   // Passe-partout blanc = un attribut mount/passe-partout choisi avec une valeur autre que
@@ -1692,7 +1699,7 @@ function FramePreview({
     <div className="relative" style={{ width: CANVAS, height: CANVAS }}>
       {/* Repère de largeur (haut) */}
       <div className="absolute left-0 top-0 flex flex-col items-center" style={{ width: frameW }}>
-        <span className="mb-1 text-[10px] leading-none text-gray-400">{dims.w} cm</span>
+        <span className="mb-0.5 text-[10px] leading-none text-gray-400">{dims.w} cm</span>
         <div className="relative h-px w-full bg-gray-300">
           <span className="absolute -top-1 left-0 h-2 w-px bg-gray-300" />
           <span className="absolute -top-1 right-0 h-2 w-px bg-gray-300" />
@@ -1701,7 +1708,7 @@ function FramePreview({
 
       {/* Repère de hauteur (droite) */}
       <div
-        className="absolute flex items-center gap-1.5"
+        className="absolute flex items-center gap-1"
         style={{ top: frameTop, right: 0, height: frameH }}
       >
         <div className="relative h-full w-px bg-gray-300">
