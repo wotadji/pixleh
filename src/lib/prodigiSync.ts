@@ -209,7 +209,19 @@ export interface ProdigiShippingQuoteResult {
  * fois avec la première valeur valide de chaque attribut manquant si Prodigi répond
  * "ValidationFailed" (même mécanique multi-items que submitProdigiOrder, via
  * extractMissingAttributesByItemIndex).
+ *
+ * Retry supplémentaire sur 5xx (02/08/2026, bug remonté par Adriel : capture d'écran du panier
+ * affichant "Livraison — Prodigi a répondu 503" sans aucun détail JSON) — un 5xx SANS corps JSON
+ * exploitable (voir `data` toujours null dans ce cas) trahit une erreur de PASSERELLE/infra côté
+ * Prodigi (gateway timeout, service indisponible), pas un rejet applicatif de notre requête
+ * (qui, lui, renvoie un corps JSON avec un `outcome`) — le sandbox Prodigi (api.sandbox.prodigi.com)
+ * est connu pour être ponctuellement moins stable que leur API de production. Jusqu'ici SEULE
+ * l'erreur "ValidationFailed" déclenchait une nouvelle tentative : le moindre hoquet transitoire
+ * du sandbox bloquait tout le checkout (fail-closed volontaire, voir doc plus haut). Ajout d'un
+ * court backoff (400ms, 800ms) sur les réponses 5xx, jusqu'à MAX_ATTEMPTS tentatives au total.
  */
+const MAX_ATTEMPTS = 3;
+
 export async function getProdigiShippingQuote(params: {
   items: Array<{ sku: string; copies: number; attributes?: Record<string, string> | null }>;
   destinationCountryCode: string;
@@ -234,9 +246,10 @@ export async function getProdigiShippingQuote(params: {
   }));
   let lastData: any = null;
   let lastStatus = 0;
+  let attributeRetryUsed = false;
 
   try {
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       const res = await fetch(`${baseUrl}/quotes`, {
         method: "POST",
         headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
@@ -285,7 +298,7 @@ export async function getProdigiShippingQuote(params: {
         };
       }
 
-      if (attempt === 0 && data?.outcome === "ValidationFailed" && data?.failures) {
+      if (!attributeRetryUsed && data?.outcome === "ValidationFailed" && data?.failures) {
         const missingByIndex = extractMissingAttributesByItemIndex(data);
         if (Object.keys(missingByIndex).length > 0) {
           items = items.map((it, idx) => {
@@ -297,8 +310,16 @@ export async function getProdigiShippingQuote(params: {
             }
             return { ...it, attributes };
           });
+          attributeRetryUsed = true;
           continue;
         }
+      }
+
+      // Retry sur 5xx transitoire (voir doc ci-dessus) — jamais sur 4xx (erreur définitive : clé
+      // invalide, SKU inconnu, etc., que réessayer ne résoudra pas).
+      if (res.status >= 500 && attempt < MAX_ATTEMPTS - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+        continue;
       }
       break;
     }
