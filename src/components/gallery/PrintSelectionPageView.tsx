@@ -1667,9 +1667,18 @@ function FramePreview({
   const maxW = CANVAS - RIGHT_GUIDE - 8;
   const maxH = CANVAS - TOP_GUIDE - 8;
   const scale = Math.min(maxW / refDims.w, maxH / refDims.h);
-  const frameW = Math.max(60, Math.round(dims.w * scale));
-  const frameH = Math.max(60, Math.round(dims.h * scale));
+  // Taille minimale relevée à nouveau (60 → 90px) — demande d'Adriel : "je veux que le petit
+  // format soit plus grand". L'échelle commune au groupe (référence = plus grand format, voir
+  // referenceDims/task précédente) fait qu'un petit format (ex: 40x50 face à un 60x90) reste
+  // proportionnellement plus petit ; ce plancher garantit qu'il reste malgré tout confortablement
+  // lisible, quitte à ne plus être parfaitement proportionnel au plus grand format du groupe.
+  const frameW = Math.max(90, Math.round(dims.w * scale));
+  const frameH = Math.max(90, Math.round(dims.h * scale));
   const frameTop = TOP_GUIDE + 3;
+  // Centrage horizontal du cadre dans la zone utile (avant l'espace réservé au repère de
+  // hauteur) — demande d'Adriel : "que cela soit centré comme le texte du bas" (le nom/prix
+  // affichés sous l'aperçu sont centrés dans le panneau ; le cadre était lui plaqué à gauche).
+  const frameLeft = Math.max(0, Math.round((maxW - frameW) / 2));
 
   // Couleur du cadre = attribut de COULEUR choisi (voir colorSwatchFor, déjà utilisé pour les
   // pastilles des cartes d'attribut) — gris neutre par défaut si le produit n'a pas d'attribut
@@ -1701,8 +1710,9 @@ function FramePreview({
 
   return (
     <div className="relative" style={{ width: CANVAS, height: CANVAS }}>
-      {/* Repère de largeur (haut) */}
-      <div className="absolute left-0 top-0 flex flex-col items-center" style={{ width: frameW }}>
+      {/* Repère de largeur (haut) — décalé de frameLeft pour rester aligné au-dessus du cadre
+          désormais centré (voir frameLeft ci-dessus). */}
+      <div className="absolute top-0 flex flex-col items-center" style={{ left: frameLeft, width: frameW }}>
         <span className="mb-0.5 text-[10px] leading-none text-gray-400">{dims.w} cm</span>
         <div className="relative h-px w-full bg-gray-300">
           <span className="absolute -top-1 left-0 h-2 w-px bg-gray-300" />
@@ -1710,13 +1720,13 @@ function FramePreview({
         </div>
       </div>
 
-      {/* Repère de hauteur (droite) — positionné juste à droite du cadre RÉEL (left: frameW + 4)
-          plutôt qu'à right:0 du canvas fixe (02/08/2026, demande d'Adriel : "rapproché le repere
-          vertical vers l'objet dans l'aperçu") : à right:0, un cadre plus étroit que l'espace
-          maximal réservé (RIGHT_GUIDE) laissait un vide entre l'image et le repère. */}
+      {/* Repère de hauteur (droite) — positionné juste à droite du cadre RÉEL (left: frameLeft +
+          frameW + 4) plutôt qu'à right:0 du canvas fixe (02/08/2026, demande d'Adriel : "rapproché
+          le repere vertical vers l'objet dans l'aperçu") : à right:0, un cadre plus étroit que
+          l'espace maximal réservé (RIGHT_GUIDE) laissait un vide entre l'image et le repère. */}
       <div
         className="absolute flex items-center gap-1"
-        style={{ top: frameTop, left: frameW + 4, height: frameH }}
+        style={{ top: frameTop, left: frameLeft + frameW + 4, height: frameH }}
       >
         <div className="relative h-full w-px bg-gray-300">
           <span className="absolute -left-1 top-0 h-px w-2 bg-gray-300" />
@@ -1728,7 +1738,14 @@ function FramePreview({
       {/* Cadre — couleur = attribut choisi, épaisseur fixe façon bordure de cadre photo */}
       <div
         className="absolute overflow-hidden rounded-[2px] shadow-md"
-        style={{ top: frameTop, left: 0, width: frameW, height: frameH, backgroundColor: frameColor, padding: 8 }}
+        style={{
+          top: frameTop,
+          left: frameLeft,
+          width: frameW,
+          height: frameH,
+          backgroundColor: frameColor,
+          padding: 8,
+        }}
       >
         {/* Passe-partout blanc (02/08/2026, demande d'Adriel : "augmente la zone de blanche",
             puis précisé "elle doit etre 12px") — 12px, pour que la marge blanche se voie
