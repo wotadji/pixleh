@@ -2003,8 +2003,9 @@ function FramePreview({
  * Photo Classiques", son imageUrl/description propres, distincts de ceux de chaque variante) ;
  * colonne de droite : la liste des variantes (tailles/SKU), inchangée. Empilées verticalement sur
  * mobile (photo/description au-dessus de la liste, pas assez de place pour deux colonnes),
- * côte à côte à partir de sm — modale élargie (max-w-2xl → max-w-3xl) pour laisser respirer les
- * deux colonnes.
+ * côte à côte à partir de sm — modale élargie (max-w-2xl → max-w-4xl) pour laisser respirer les
+ * deux colonnes. Colonne gauche encore agrandie (02/08/2026, demande d'Adriel : "agrandire la
+ * partie ou on a la photo du groupe et le texte") : w-64 → w-96.
  */
 function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO; onClose: () => void }) {
   const variants = group.variants ?? [];
@@ -2019,7 +2020,7 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
       role="presentation"
     >
       <div
-        className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        className="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -2065,7 +2066,7 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
               variante) : c'est le texte que le photographe a saisi pour présenter le service
               dans son ensemble (ex: "Tirages Photo Classiques"). Fond légèrement teinté pour la
               distinguer visuellement de la liste des produits à droite. */}
-          <div className="flex shrink-0 flex-col gap-4 border-b border-gray-100 bg-gray-50/60 p-8 sm:w-64 sm:overflow-y-auto sm:border-b-0 sm:border-r">
+          <div className="flex shrink-0 flex-col gap-4 border-b border-gray-100 bg-gray-50/60 p-8 sm:w-96 sm:overflow-y-auto sm:border-b-0 sm:border-r">
             <div className="aspect-square w-full shrink-0 overflow-hidden rounded-xl border border-gray-100 bg-white">
               {group.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
