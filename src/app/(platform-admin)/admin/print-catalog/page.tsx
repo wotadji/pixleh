@@ -719,6 +719,7 @@ export default function AdminPrintCatalogPage() {
                 collapsible={item.isProductGroup}
                 collapsed={collapsedGroups.has(item.id)}
                 onToggleCollapse={() => toggleGroupCollapse(item.id)}
+                variantCount={item.isProductGroup ? (variantsByGroup.get(item.id) ?? []).length : undefined}
               />
               {item.isProductGroup && !collapsedGroups.has(item.id) && (
                 <div className="divide-y divide-gray-100 border-t border-gray-100 bg-gray-50/60 pl-6">
@@ -914,6 +915,18 @@ function GridCard({
           {item.isProductGroup && (
             <span className="rounded-full bg-indigo-600/90 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
               Groupe
+            </span>
+          )}
+          {/* Bulle "N produits" (02/08/2026, demande d'Adriel : "pouvons nous avoir une bulle qui
+              informe le nombre de produit par groupe de produit ?") — visible directement sur la
+              carte, sans avoir à déplier la section variantes en bas. */}
+          {item.isProductGroup && (
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm ${
+                variants.length > 0 ? "bg-gray-700/85" : "bg-amber-500/90"
+              }`}
+            >
+              {variants.length} produit{variants.length > 1 ? "s" : ""}
             </span>
           )}
           {!item.active && (
@@ -1126,6 +1139,7 @@ function CatalogRow({
   collapsible,
   collapsed,
   onToggleCollapse,
+  variantCount,
 }: {
   item: PrintCatalogItemDTO;
   isVariant?: boolean;
@@ -1148,6 +1162,11 @@ function CatalogRow({
   collapsible?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  /** Nombre de SKU dans ce groupe (02/08/2026, demande d'Adriel : "pouvons nous avoir une bulle
+   * qui informe le nombre de produit par groupe de produit ?") — affiché en bulle à côté du
+   * badge "Groupe", visible même replié (contrairement au décompte affiché dans l'en-tête de la
+   * section variantes en vue grille, masqué tant que la carte n'a jamais été dépliée). */
+  variantCount?: number;
 }) {
   const marginCents = item.wholesaleCostCents != null ? item.priceCents - item.wholesaleCostCents : null;
   const tone = marginCents != null ? marginTone(marginCents, item.priceCents) : null;
@@ -1210,6 +1229,18 @@ function CatalogRow({
             {item.isProductGroup && (
               <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
                 Groupe
+              </span>
+            )}
+            {/* Bulle "N produits" (02/08/2026, demande d'Adriel : "pouvons nous avoir une bulle
+                qui informe le nombre de produit par groupe de produit ?") — visible même quand le
+                groupe est replié, contrairement au décompte de l'en-tête de section variantes. */}
+            {item.isProductGroup && variantCount != null && (
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                  variantCount > 0 ? "bg-gray-100 text-gray-600" : "bg-amber-100 text-amber-700"
+                }`}
+              >
+                {variantCount} produit{variantCount > 1 ? "s" : ""}
               </span>
             )}
             {!item.active && (
