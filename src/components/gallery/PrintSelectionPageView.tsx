@@ -57,6 +57,48 @@ function attributeLabel(name: string) {
   return ATTRIBUTE_LABELS[name] || name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, " $1");
 }
 
+/** Table de correspondance mot-clé → couleur CSS pour la pastille des options de type "couleur"
+ * (cadre, verre teinté...) dans AttributeSelectionModal — inspiré du sélecteur Vistaprint
+ * "Posters encadrés" (02/08/2026, demande d'Adriel : vidéo d'écran, "pouvons nous nous inspiré
+ * de ceci ?") où chaque option de couleur affiche un aperçu visuel plutôt qu'un simple texte
+ * dans un <select>. Recherche par sous-chaîne insensible à la casse/accents ; premier match
+ * trouvé gagne (ordre volontairement des plus spécifiques aux plus génériques). */
+const COLOR_SWATCHES: [string, string][] = [
+  ["noir", "#18181b"],
+  ["black", "#18181b"],
+  ["blanc", "#ffffff"],
+  ["white", "#ffffff"],
+  ["naturel", "#d9c7a8"],
+  ["chene", "#b98a55"],
+  ["oak", "#b98a55"],
+  ["noyer", "#5c3a21"],
+  ["walnut", "#5c3a21"],
+  ["argent", "#c0c0c8"],
+  ["silver", "#c0c0c8"],
+  ["or ", "#cfa53d"],
+  ["gold", "#cfa53d"],
+  ["dore", "#cfa53d"],
+  ["gris", "#9ca3af"],
+  ["grey", "#9ca3af"],
+  ["gray", "#9ca3af"],
+  ["marron", "#78350f"],
+  ["brown", "#78350f"],
+  ["beige", "#e8dcc8"],
+  ["ivoire", "#f4f0e6"],
+  ["transparent", "#e5e7eb"],
+];
+
+function colorSwatchFor(attributeName: string, option: string): string | null {
+  const isColorAttribute = /couleur|color|glaze|verre|finish|finition/i.test(attributeName);
+  if (!isColorAttribute) return null;
+  const normalized = option
+    .normalize("NFD")
+    .replace(new RegExp("[\\u0300-\\u036f]", "g"), "")
+    .toLowerCase();
+  const match = COLOR_SWATCHES.find(([keyword]) => normalized.includes(keyword));
+  return match ? match[1] : null;
+}
+
 interface ProductGroup {
   product: PrintProductDTO | null;
   photos: PhotoDTO[];
@@ -1358,27 +1400,49 @@ function AttributeSelectionModal({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {/* Sélecteur en cartes cliquables plutôt qu'en <select> (02/08/2026, demande d'Adriel,
+              inspirée du configurateur "Posters encadrés" de Vistaprint envoyé en vidéo :
+              "pouvons nous nous inspiré de ceci ?") — chaque option est un bouton visible d'un
+              coup d'œil (pas besoin d'ouvrir un menu pour comparer), état sélectionné marqué par
+              une bordure bleue + fond teinté, et une pastille de couleur pour les attributs de
+              type couleur/finition (cadre, verre...) plutôt qu'un simple libellé texte. */}
+          <div className="space-y-6">
             {attributeEntries.map(([name, options]) => (
               <div key={name}>
-                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-gray-500">
+                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
                   {attributeLabel(name)}
-                </label>
-                <div className="relative">
-                  <select
-                    className="input appearance-none pr-9"
-                    value={values[name]}
-                    onChange={(e) => setValues((v) => ({ ...v, [name]: e.target.value }))}
-                  >
-                    {options.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                    <IconChevronDown />
-                  </span>
+                </p>
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                  {options.map((option) => {
+                    const selected = values[name] === option;
+                    const swatch = colorSwatchFor(name, option);
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => setValues((v) => ({ ...v, [name]: option }))}
+                        aria-pressed={selected}
+                        className={`flex items-center gap-2.5 rounded-lg border-2 px-3 py-2.5 text-left text-sm transition-colors ${
+                          selected
+                            ? "border-brand-600 bg-brand-50 text-brand-700"
+                            : "border-gray-200 text-gray-700 hover:border-gray-300"
+                        }`}
+                      >
+                        {swatch && (
+                          <span
+                            className="h-6 w-6 shrink-0 rounded-full border border-black/10"
+                            style={{ backgroundColor: swatch }}
+                          />
+                        )}
+                        <span className="min-w-0 flex-1 truncate font-medium">{option}</span>
+                        {selected && (
+                          <span className="shrink-0 text-brand-600">
+                            <IconCheck />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -1697,6 +1761,16 @@ function IconChevronDown({ className = "" }: { className?: string }) {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
       <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Coche affichée sur l'option sélectionnée des cartes d'attribut Prodigi (AttributeSelectionModal,
+ * 02/08/2026, redesign inspiré du configurateur Vistaprint envoyé par Adriel en vidéo). */
+function IconCheck() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+      <path d="m5 13 4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
