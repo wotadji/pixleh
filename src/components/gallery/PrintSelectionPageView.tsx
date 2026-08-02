@@ -99,6 +99,21 @@ function colorSwatchFor(attributeName: string, option: string): string | null {
   return match ? match[1] : null;
 }
 
+/** Extrait des dimensions "L x H cm" d'un nom/description de produit (ex: "Poster encadré 40 x
+ * 50 cm", "60×90cm") pour dessiner les repères de dimension de FramePreview (02/08/2026, demande
+ * d'Adriel : "peux tu mettres les reperes de dimension"). Accepte "x" et "×" comme séparateur,
+ * espaces optionnels. Retourne null si le texte ne contient pas ce motif — FramePreview retombe
+ * alors sur un format 30×40 par défaut plutôt que de ne rien afficher. */
+function parseDimensionsCm(text: string | null | undefined): { w: number; h: number } | null {
+  if (!text) return null;
+  const match = text.match(/(\d+)\s*[x×]\s*(\d+)\s*cm/i);
+  if (!match) return null;
+  const w = parseInt(match[1], 10);
+  const h = parseInt(match[2], 10);
+  if (!w || !h) return null;
+  return { w, h };
+}
+
 interface ProductGroup {
   product: PrintProductDTO | null;
   photos: PhotoDTO[];
@@ -1284,6 +1299,12 @@ export function PrintSelectionPageView({
           entry={optionsPrompt.entry}
           count={optionsPrompt.ids.length}
           initial={optionsPrompt.initial}
+          // Aperçu dessiné par le code plutôt qu'une photo produit figée (02/08/2026, demande
+          // d'Adriel : "peux tu mettres les reperes de dimension et changer les couleurs de
+          // cadre ? si cela n'est pas possible sur une image me proposé un design faite par le
+          // code") — voir FramePreview, qui a besoin d'une des photos réellement sélectionnées
+          // pour l'afficher "dans" le cadre simulé plutôt qu'un rectangle vide.
+          photoUrl={photos.find((p) => optionsPrompt.ids.includes(p.id))?.previewUrl}
           onCancel={() => setOptionsPrompt(null)}
           onConfirm={(variantId, attributes) => {
             applyProductToPhotos(optionsPrompt.ids, variantId, attributes);
@@ -1322,12 +1343,17 @@ function ProductOptionsModal({
   entry,
   count,
   initial,
+  photoUrl,
   onCancel,
   onConfirm,
 }: {
   entry: PrintProductDTO;
   count: number;
   initial?: Record<string, string>;
+  /** Une des photos réellement sélectionnées par le client, à afficher "dans" l'aperçu dessiné
+   * (FramePreview) plutôt que la photo produit générique — undefined si la sélection est vide
+   * (ne devrait pas arriver en pratique) ou si les photos n'ont pas encore d'aperçu généré. */
+  photoUrl?: string;
   onCancel: () => void;
   onConfirm: (variantId: string, attributes: Record<string, string> | null) => void;
 }) {
@@ -1392,25 +1418,18 @@ function ProductOptionsModal({
         </div>
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
-          {/* Panneau gauche — aperçu visuel de la combinaison actuellement choisie (image + nom +
-              prix de la variante sélectionnée), inspiré du panneau produit fixe à gauche du
-              configurateur Vistaprint. Masqué sur mobile (pas la place), la sélection reste
-              possible sans lui. */}
-          <div className="hidden w-56 shrink-0 flex-col items-center gap-4 border-r border-gray-100 bg-gray-50/60 p-6 sm:flex">
-            <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-white">
-              {selectedVariant.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={selectedVariant.imageUrl}
-                  alt={selectedVariant.name}
-                  className="h-full w-full object-contain"
-                />
-              ) : (
-                <span className="text-gray-300">
-                  <IconPrinterEmpty />
-                </span>
-              )}
-            </div>
+          {/* Panneau gauche — aperçu DESSINÉ PAR LE CODE de la combinaison actuellement choisie,
+              avec repères de dimension et couleur de cadre qui suivent les sélections (02/08/2026,
+              demande d'Adriel, après le panneau Vistaprint : "peux tu mettres les reperes de
+              dimension et changer les couleurs de cadre ? si cela n'est pas possible sur une
+              image me proposé un design faite par le code") — impossible de reproduire une vraie
+              photo produit par couleur puisque le catalogue Prodigi n'a qu'UNE photo par SKU
+              (pas une par couleur), donc FramePreview simule le cadre en CSS pur : couleur de
+              bordure = attribut couleur/cadre choisi, présence d'un passe-partout blanc = attribut
+              mount choisi, avec la photo réellement sélectionnée par le client à l'intérieur.
+              Masqué sur mobile (pas la place), la sélection reste possible sans lui. */}
+          <div className="hidden w-60 shrink-0 flex-col items-center gap-4 border-r border-gray-100 bg-gray-50/60 p-6 sm:flex">
+            <FramePreview variant={selectedVariant} attributes={values} photoUrl={photoUrl} />
             <div className="w-full text-center">
               <p className="line-clamp-2 text-sm font-medium leading-snug text-gray-900">{selectedVariant.name}</p>
               <p className="mt-1 text-base font-semibold text-gray-800">
@@ -1513,6 +1532,99 @@ function ProductOptionsModal({
           >
             Valider
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Aperçu dessiné en CSS pur d'un tirage encadré, AVEC repères de dimension (haut/droite, façon
+ * plan technique) et couleur de cadre qui suit l'attribut couleur/cadre choisi — remplace une
+ * vraie photo produit (02/08/2026, demande d'Adriel, après un panneau Vistaprint où le cadre
+ * change réellement de couleur en photo : "peux tu mettres les reperes de dimension et changer
+ * les couleurs de cadre ? si cela n'est pas possible sur une image me proposé un design faite
+ * par le code"). Impossible de reproduire cet effet avec de vraies photos ici : le catalogue
+ * Prodigi ne fournit qu'UNE photo par SKU, pas une déclinaison par couleur — cette maquette
+ * calculée réagit donc en direct aux sélections (format via `variant`, couleur/passe-partout via
+ * `attributes`) sans dépendre d'assets externes.
+ */
+function FramePreview({
+  variant,
+  attributes,
+  photoUrl,
+}: {
+  variant: PrintProductDTO;
+  attributes: Record<string, string>;
+  photoUrl?: string;
+}) {
+  const dims = parseDimensionsCm(variant.name) ?? parseDimensionsCm(variant.description) ?? { w: 30, h: 40 };
+
+  // Zone de dessin fixe (indépendante de la largeur réelle du panneau, en pixels) — la place
+  // réservée en haut/à droite pour les repères de cote laisse le reste à la mise à l'échelle du
+  // cadre selon son ratio largeur/hauteur réel.
+  const CANVAS = 176;
+  const TOP_GUIDE = 26;
+  const RIGHT_GUIDE = 36;
+  const maxW = CANVAS - RIGHT_GUIDE - 10;
+  const maxH = CANVAS - TOP_GUIDE - 10;
+  const scale = Math.min(maxW / dims.w, maxH / dims.h);
+  const frameW = Math.max(48, Math.round(dims.w * scale));
+  const frameH = Math.max(48, Math.round(dims.h * scale));
+  const frameTop = TOP_GUIDE + 6;
+
+  // Couleur du cadre = premier attribut choisi dont le nom évoque une couleur/un cadre (voir
+  // colorSwatchFor, déjà utilisé pour les pastilles des cartes d'attribut) — gris neutre par
+  // défaut si le produit n'a pas d'attribut couleur (rien à représenter) ou si l'option choisie
+  // ne correspond à aucun mot-clé connu.
+  const frameColorEntry = Object.entries(attributes).find(([name]) => /couleur|color|frame|cadre/i.test(name));
+  const frameColor = (frameColorEntry && colorSwatchFor(frameColorEntry[0], frameColorEntry[1])) || "#9ca3af";
+
+  // Passe-partout blanc = un attribut mount/passe-partout choisi avec une valeur autre que
+  // "aucun/none/sans" — approximation raisonnable puisque Prodigi encode ces valeurs en texte
+  // libre plutôt qu'un simple booléen.
+  const hasMat = Object.entries(attributes).some(
+    ([name, value]) => /mount|passe.?partout|mat\b/i.test(name) && !/^(none|aucun|sans|no)\b/i.test(value)
+  );
+
+  return (
+    <div className="relative" style={{ width: CANVAS, height: CANVAS }}>
+      {/* Repère de largeur (haut) */}
+      <div className="absolute left-0 top-0 flex flex-col items-center" style={{ width: frameW }}>
+        <span className="mb-1 text-[10px] leading-none text-gray-400">{dims.w} cm</span>
+        <div className="relative h-px w-full bg-gray-300">
+          <span className="absolute -top-1 left-0 h-2 w-px bg-gray-300" />
+          <span className="absolute -top-1 right-0 h-2 w-px bg-gray-300" />
+        </div>
+      </div>
+
+      {/* Repère de hauteur (droite) */}
+      <div
+        className="absolute flex items-center gap-1.5"
+        style={{ top: frameTop, right: 0, height: frameH }}
+      >
+        <div className="relative h-full w-px bg-gray-300">
+          <span className="absolute -left-1 top-0 h-px w-2 bg-gray-300" />
+          <span className="absolute -left-1 bottom-0 h-px w-2 bg-gray-300" />
+        </div>
+        <span className="whitespace-nowrap text-[10px] leading-none text-gray-400">{dims.h} cm</span>
+      </div>
+
+      {/* Cadre — couleur = attribut choisi, épaisseur fixe façon bordure de cadre photo */}
+      <div
+        className="absolute overflow-hidden rounded-[2px] shadow-md"
+        style={{ top: frameTop, left: 0, width: frameW, height: frameH, backgroundColor: frameColor, padding: 8 }}
+      >
+        <div
+          className="h-full w-full overflow-hidden"
+          style={hasMat ? { padding: 7, backgroundColor: "#ffffff" } : undefined}
+        >
+          {photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="h-full w-full bg-gradient-to-br from-gray-600 via-gray-400 to-gray-200" />
+          )}
         </div>
       </div>
     </div>
