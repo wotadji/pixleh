@@ -135,6 +135,7 @@ export default async function PrintSelectionPage({ params }: { params: { gallery
         imageUrl: p.imageUrl,
         attributeOptions: parseJsonRecord<Record<string, string[]>>(p.prodigiAttributeOptions, {}),
         borderOptionEnabled: p.borderOptionEnabled,
+        hasFrame: p.hasFrame,
         variants: p.isProductGroup
           ? (variantsByGroupId.get(p.id) ?? []).map((v) => ({
               id: v.id,
@@ -145,6 +146,7 @@ export default async function PrintSelectionPage({ params }: { params: { gallery
               imageUrl: v.imageUrl,
               attributeOptions: parseJsonRecord<Record<string, string[]>>(v.prodigiAttributeOptions, {}),
               borderOptionEnabled: v.borderOptionEnabled,
+              hasFrame: v.hasFrame,
             }))
           : undefined,
       }))}

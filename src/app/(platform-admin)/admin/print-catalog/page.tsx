@@ -37,6 +37,12 @@ interface PrintCatalogItemDTO {
    * visuel") — LOCAL à pixleh, Prodigi ne supporte pas ce choix via son API (leur doc : les
    * bordures doivent être incluses dans le fichier envoyé, pas passées en attribut). */
   borderOptionEnabled: boolean;
+  /** Checkbox admin "Cadre" (02/08/2026, demande d'Adriel : "ajouter un checkbox [...] pour
+   * valider si on dois mettre un Cadre sur la photo [...] pour le moment toute les produits on
+   * un cadre avec couleur grise") — true = FramePreview (PrintSelectionPageView.tsx) dessine un
+   * encadrement autour de l'aperçu du tirage pour ce produit. LOCAL à pixleh, jamais transmis à
+   * Prodigi. */
+  hasFrame: boolean;
 }
 
 /** Parse prodigiAttributeOptions en toute sécurité — utilisé aussi bien dans la liste que dans
@@ -75,6 +81,8 @@ interface FormState {
   groupId: string | null;
   /** Voir doc PrintCatalogItemDTO.borderOptionEnabled — LOCAL, jamais transmis à Prodigi. */
   borderOptionEnabled: boolean;
+  /** Voir doc PrintCatalogItemDTO.hasFrame — LOCAL, jamais transmis à Prodigi. */
+  hasFrame: boolean;
 }
 
 /** Génère un id côté client pour un nouveau produit (même patron que makeSlideId dans
@@ -96,6 +104,7 @@ const EMPTY_FORM_FIELDS = {
   isProductGroup: false,
   groupId: null as string | null,
   borderOptionEnabled: false,
+  hasFrame: true,
 };
 
 type StatusFilter = "ALL" | "ACTIVE" | "INACTIVE" | "NO_SKU";
@@ -126,6 +135,7 @@ function itemToForm(item: PrintCatalogItemDTO): FormState {
     isProductGroup: item.isProductGroup,
     groupId: item.groupId,
     borderOptionEnabled: item.borderOptionEnabled,
+    hasFrame: item.hasFrame,
   };
 }
 
@@ -313,6 +323,7 @@ export default function AdminPrintCatalogPage() {
       isProductGroup: form.isProductGroup,
       groupId: form.groupId,
       borderOptionEnabled: form.borderOptionEnabled,
+      hasFrame: form.hasFrame,
     };
 
     try {
@@ -1615,6 +1626,31 @@ function ProductModal({
                 Applique automatiquement une marge blanche autour de la photo dans l&apos;aperçu
                 client — indicatif uniquement, Prodigi ne supporte pas ce réglage via son API (il
                 faudrait intégrer la bordure directement dans le fichier envoyé, non fait ici).
+              </span>
+            </span>
+          </label>
+        )}
+
+        {/* Cadre — LOCAL à pixleh, jamais transmis à Prodigi (02/08/2026, demande d'Adriel :
+            "ajouter un checkbox (pour valider si on dois mettre un Cadre sur la photo) dans
+            l'ajout et modifier d'un produit. pour le moment toute les produits on un cadre avec
+            couleur grise") — contrôle si FramePreview dessine un encadrement (fond coloré +
+            marge) autour de l'aperçu du tirage pour ce produit. Coché par défaut pour préserver
+            le rendu actuel de tous les produits déjà créés ; à décocher pour un produit qui n'a
+            pas de cadre physique (tirage seul, toile, papier photo...). */}
+        {!form.isProductGroup && (
+          <label className="flex items-start gap-2.5 rounded-lg border border-gray-200 p-3">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+              checked={form.hasFrame}
+              onChange={(e) => setForm({ ...form, hasFrame: e.target.checked })}
+            />
+            <span>
+              <span className="block text-sm font-medium text-gray-900">Cadre</span>
+              <span className="mt-0.5 block text-xs text-gray-500">
+                Affiche un encadrement autour de la photo dans l&apos;aperçu client. À décocher
+                pour un produit sans cadre physique (tirage seul, toile, papier photo...).
               </span>
             </span>
           </label>

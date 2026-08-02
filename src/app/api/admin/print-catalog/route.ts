@@ -69,6 +69,7 @@ export async function POST(req: Request) {
       isProductGroup,
       groupId,
       borderOptionEnabled: parsed.data.borderOptionEnabled ?? false,
+      hasFrame: parsed.data.hasFrame ?? true,
     });
 
     return NextResponse.json({ item, prodigiSync }, { status: 201 });

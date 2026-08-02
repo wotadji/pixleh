@@ -840,6 +840,16 @@ model Product {
   /// l'assignation (voir Selection.borderType ci-dessous, ProductOptionsModal/FramePreview dans
   /// PrintSelectionPageView.tsx), purement informatif/visuel, jamais envoyé à submitProdigiOrder.
   borderOptionEnabled Boolean @default(false)
+  /// Checkbox admin "Cadre" (02/08/2026, demande d'Adriel : "ajouter un checkbox [...] pour
+  /// valider si on dois mettre un Cadre sur la photo [...] pour le moment toute les produits on
+  /// un cadre avec couleur grise") — contrôle si FramePreview (PrintSelectionPageView.tsx)
+  /// dessine un encadrement (fond coloré + marge) autour de l'aperçu du tirage. Purement
+  /// visuel/local à pixleh, jamais transmis à Prodigi (même famille que borderOptionEnabled
+  /// ci-dessus). @default(true) pour préserver le rendu actuel de tous les produits existants
+  /// (qui affichaient tous un cadre gris par défaut) tant que le studio ne décoche pas
+  /// explicitement cette case pour un produit qui n'a pas de cadre physique (ex: tirage seul,
+  /// toile, papier photo).
+  hasFrame Boolean @default(true)
   galleries   Gallery[]   @relation("GalleryProducts")
   orderItems  OrderItem[]
   selections  Selection[]

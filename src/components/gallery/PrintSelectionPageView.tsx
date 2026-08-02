@@ -42,6 +42,12 @@ interface PrintProductDTO {
    * API (leur doc : la bordure doit être incluse dans le fichier envoyé, pas transmise en
    * attribut), donc purement indicatif/visuel dans FramePreview, jamais envoyé à Prodigi. */
   borderOptionEnabled: boolean;
+  /** Checkbox admin "Cadre" (02/08/2026, demande d'Adriel : "ajouter un checkbox [...] pour
+   * valider si on dois mettre un Cadre sur la photo [...] pour le moment toute les produits on
+   * un cadre avec couleur grise") — true = FramePreview ci-dessous dessine un encadrement (fond
+   * coloré + marge) autour de l'aperçu ; false = seule la photo est affichée, sans cadre. LOCAL
+   * à pixleh, jamais transmis à Prodigi. */
+  hasFrame: boolean;
   /** Chantier "groupe de produits" (02/08/2026, demande d'Adriel : "peux tu ajouter la
    * possibilité de creer un groupe de produit et a l'intérieur ajouter les SKU adéquat ?") —
    * non-vide UNIQUEMENT sur un produit-GROUPE (ex: "Toile photo") : ses tailles/SKU réels
@@ -1902,6 +1908,15 @@ function FramePreview({
       ([name, value]) => /mount|passe.?partout|mat\b/i.test(name) && !/^(none|aucun|sans|no)\b/i.test(value)
     ) || borderType === "Bordure blanche";
 
+  // Checkbox admin "Cadre" (02/08/2026, demande d'Adriel : "ajouter un checkbox [...] pour
+  // valider si on dois mettre un Cadre sur la photo [...] pour le moment toute les produits on
+  // un cadre avec couleur grise") — jusqu'ici le cadre coloré ci-dessous était dessiné
+  // INCONDITIONNELLEMENT (fond gris #9ca3af par défaut) même pour un produit sans cadre
+  // physique réel (tirage seul, toile, papier photo...). variant.hasFrame permet au studio de
+  // désactiver ce fond/marge colorés par produit : seule la photo reste affichée, sans
+  // encadrement trompeur.
+  const hasFrame = variant.hasFrame;
+
   return (
     <div className="relative" style={{ width: CANVAS, height: canvasHeight }}>
       {/* Repère de largeur (haut) — décalé de frameLeft pour rester aligné au-dessus du cadre
@@ -1932,7 +1947,10 @@ function FramePreview({
         <span className="whitespace-nowrap text-[10px] leading-none text-gray-400">{dims.h} cm</span>
       </div>
 
-      {/* Cadre — couleur = attribut choisi, épaisseur fixe façon bordure de cadre photo */}
+      {/* Cadre — couleur = attribut choisi, épaisseur fixe façon bordure de cadre photo.
+          Fond coloré + marge de 8px dessinés UNIQUEMENT si hasFrame (voir doc ci-dessus) : sinon
+          ce div sert juste de conteneur (ombre légère, coins arrondis) sans simuler un cadre
+          physique qui n'existe pas pour ce produit. */}
       <div
         className="absolute overflow-hidden rounded-[2px] shadow-md"
         style={{
@@ -1940,8 +1958,7 @@ function FramePreview({
           left: frameLeft,
           width: frameW,
           height: frameH,
-          backgroundColor: frameColor,
-          padding: 8,
+          ...(hasFrame ? { backgroundColor: frameColor, padding: 8 } : {}),
         }}
       >
         {/* Passe-partout blanc (02/08/2026, demande d'Adriel : "augmente la zone de blanche",

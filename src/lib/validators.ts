@@ -101,6 +101,10 @@ export const printCatalogItemSchema = z.object({
    * représentation visuel") — Prodigi ne supporte pas ce choix comme attribut API, voir
    * Product.borderOptionEnabled dans schema.prisma : purement local/informatif. */
   borderOptionEnabled: z.boolean().optional(),
+  /** Checkbox admin "Cadre" (02/08/2026, demande d'Adriel : "ajouter un checkbox [...] pour
+   * valider si on dois mettre un Cadre sur la photo [...] pour le moment toute les produits on
+   * un cadre avec couleur grise") — voir doc Product.hasFrame dans schema.prisma. */
+  hasFrame: z.boolean().optional(),
 });
 
 export const bookingRequestSchema = z.object({

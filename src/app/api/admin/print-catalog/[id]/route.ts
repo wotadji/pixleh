@@ -54,6 +54,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       ...(parsed.data.borderOptionEnabled !== undefined && {
         borderOptionEnabled: parsed.data.borderOptionEnabled,
       }),
+      ...(parsed.data.hasFrame !== undefined && { hasFrame: parsed.data.hasFrame }),
     });
 
     return NextResponse.json({ item });
