@@ -721,6 +721,14 @@ model Selection {
   /// la source de vérité une fois la commande passée (cette colonne peut continuer à changer
   /// tant que le panier n'est pas commandé).
   selectedAttributes String? @db.Text
+  /// Choix du client "Photo pleine page" / "Bordure blanche" (02/08/2026, demande d'Adriel) —
+  /// volontairement SÉPARÉ de selectedAttributes ci-dessus : Prodigi ne supporte pas ce choix
+  /// via son API (voir doc Product.borderOptionEnabled), donc cette colonne n'est jamais
+  /// mélangée aux attributs Prodigi ni copiée dans OrderItem.attributes — seulement dans
+  /// OrderItem.borderType, à titre informatif pour pixleh/le studio, jamais lu par
+  /// submitProdigiOrder (src/lib/prodigiOrder.ts). Toujours null si le produit assigné n'a pas
+  /// borderOptionEnabled=true.
+  borderType String? @db.Text
   createdAt DateTime      @default(now())
 
   @@unique([photoId, clientRef, type])
@@ -821,6 +829,17 @@ model Product {
   /// nouveau produit prend systématiquement la valeur la plus haute de ses frères + 1 (ajouté
   /// en fin de liste), voir createPrintCatalogItem.
   sortOrder   Int         @default(0)
+  /// Type de bordure (photo pleine page / bordure blanche) — toggle admin (02/08/2026, demande
+  /// d'Adriel : "On dois ajouter dans panel admin type de bordure pour que nous puisson
+  /// l'utilisé pour le client qui imprime meme si nous ne mettons pas cela dans le visuel [le
+  /// fichier envoyé à Prodigi] (juste pour la représentation visuel)"). Prodigi ne supporte PAS
+  /// ce choix comme attribut transmissible via son API (leur doc : "borders must be included in
+  /// the uploaded image rather than being applied as a product attribute like on the
+  /// dashboard") — contrairement à prodigiAttributeOptions, ce champ est donc entièrement LOCAL
+  /// à pixleh : true = le client voit un choix "Photo pleine page"/"Bordure blanche" à
+  /// l'assignation (voir Selection.borderType ci-dessous, ProductOptionsModal/FramePreview dans
+  /// PrintSelectionPageView.tsx), purement informatif/visuel, jamais envoyé à submitProdigiOrder.
+  borderOptionEnabled Boolean @default(false)
   galleries   Gallery[]   @relation("GalleryProducts")
   orderItems  OrderItem[]
   selections  Selection[]
@@ -899,6 +918,12 @@ model OrderItem {
   /// exister ou avoir changé) : c'est la valeur envoyée à Prodigi par submitProdigiOrder, en
   /// priorité sur Product.prodigiAttributes (fallback pour toute clé absente ici).
   attributes String? @db.Text
+  /// Copie figée de Selection.borderType au moment de la commande (02/08/2026, demande
+  /// d'Adriel) — comme `attributes` ci-dessus, mais dans une colonne SÉPARÉE et jamais lue par
+  /// submitProdigiOrder (src/lib/prodigiOrder.ts SELECT explicitement "attributes", pas
+  /// "borderType") : Prodigi n'accepte pas ce choix via son API, voir Product.borderOptionEnabled.
+  /// Sert uniquement de repère visuel/informatif pour pixleh au moment de préparer la commande.
+  borderType String? @db.Text
 
   @@index([orderId])
 }

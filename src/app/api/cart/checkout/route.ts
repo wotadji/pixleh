@@ -14,6 +14,13 @@ interface CartItem {
    * construire une vraie UI de sélection d'attribut au moment de l'achat"). Optionnel : absent
    * ou vide pour un article dont le produit n'a aucun attribut sélectionnable. */
   attributes?: Record<string, string> | null;
+  /** Type de bordure choisi ("Photo pleine page"/"Bordure blanche") — chantier "type de
+   * bordure" (02/08/2026, demande d'Adriel : "On dois ajouter dans panel admin type de bordure
+   * [...] meme si nous ne mettons pas cela dans le visuel [transmis à Prodigi], juste pour la
+   * représentation visuel"). Copié vers une colonne OrderItem.borderType SÉPARÉE de
+   * `attributes` ci-dessous — jamais lu par submitProdigiOrder (voir src/lib/prodigiOrder.ts et
+   * la doc sur Product.borderOptionEnabled dans schema.prisma). */
+  borderType?: string | null;
 }
 
 /**
@@ -112,6 +119,24 @@ export async function POST(req: Request) {
       const match = createdItems.find((ci) => ci.photoId === item.photoId && ci.productId === item.productId);
       if (!match) continue;
       await prisma.$executeRaw`UPDATE "OrderItem" SET "attributes" = ${JSON.stringify(item.attributes)} WHERE "id" = ${match.id}`;
+    }
+  }
+
+  // Copie borderType (choix LOCAL, chantier "type de bordure", 02/08/2026) vers OrderItem —
+  // requête $executeRaw SÉPARÉE de celle des attributs Prodigi ci-dessus, volontairement : elle
+  // écrit une colonne différente ("borderType", pas "attributes") pour garantir qu'aucun code ne
+  // puisse confondre les deux. submitProdigiOrder (src/lib/prodigiOrder.ts) ne sélectionne que
+  // la colonne "attributes" et ignore totalement "borderType".
+  const itemsWithBorderType = items.filter((item) => typeof item.borderType === "string" && item.borderType);
+  if (itemsWithBorderType.length > 0) {
+    const createdItems = await prisma.orderItem.findMany({
+      where: { orderId: order.id },
+      select: { id: true, photoId: true, productId: true },
+    });
+    for (const item of itemsWithBorderType) {
+      const match = createdItems.find((ci) => ci.photoId === item.photoId && ci.productId === item.productId);
+      if (!match) continue;
+      await prisma.$executeRaw`UPDATE "OrderItem" SET "borderType" = ${item.borderType} WHERE "id" = ${match.id}`;
     }
   }
 

@@ -58,12 +58,27 @@ export async function POST(req: Request) {
  * (colonne Selection.selectedAttributes pas encore dans le Prisma Client généré du sandbox,
  * tâche #254, même workaround que le reste du catalogue impression) au lieu de
  * prisma.selection.updateMany, qui ne connaît pas cette colonne.
+ *
+ * `borderType` (chaîne ou null) — chantier "type de bordure" (02/08/2026, demande d'Adriel :
+ * "On dois ajouter dans panel admin type de bordure [...] meme si nous ne mettons pas cela dans
+ * le visuel [transmis à Prodigi], juste pour la représentation visuel") : choix LOCAL du client
+ * ("Photo pleine page"/"Bordure blanche"), écrit dans une colonne SÉPARÉE de
+ * "selectedAttributes" — jamais lu par submitProdigiOrder (voir doc sur
+ * Product.borderOptionEnabled dans schema.prisma).
  */
 export async function PATCH(req: Request) {
-  const { galleryId, photoIds, productId, attributes } = await req.json();
+  const { galleryId, photoIds, productId, attributes, borderType } = await req.json();
   const validProductId = productId === null || typeof productId === "string";
   const validAttributes = attributes === undefined || attributes === null || typeof attributes === "object";
-  if (!galleryId || !Array.isArray(photoIds) || photoIds.length === 0 || !validProductId || !validAttributes) {
+  const validBorderType = borderType === undefined || borderType === null || typeof borderType === "string";
+  if (
+    !galleryId ||
+    !Array.isArray(photoIds) ||
+    photoIds.length === 0 ||
+    !validProductId ||
+    !validAttributes ||
+    !validBorderType
+  ) {
     return NextResponse.json({ error: "Paramètres manquants" }, { status: 400 });
   }
 
@@ -75,9 +90,10 @@ export async function PATCH(req: Request) {
 
   const clientRef = access.clientRef || "anonymous";
   const attributesJson = attributes && Object.keys(attributes).length > 0 ? JSON.stringify(attributes) : null;
+  const borderTypeValue = typeof borderType === "string" ? borderType : null;
   await prisma.$executeRaw`
     UPDATE "Selection"
-    SET "productId" = ${productId}, "selectedAttributes" = ${attributesJson}
+    SET "productId" = ${productId}, "selectedAttributes" = ${attributesJson}, "borderType" = ${borderTypeValue}
     WHERE "galleryId" = ${galleryId} AND "clientRef" = ${clientRef} AND "type" = 'PRINT'
       AND "photoId" IN (${Prisma.join(photoIds)})
   `;

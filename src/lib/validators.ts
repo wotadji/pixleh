@@ -95,6 +95,12 @@ export const printCatalogItemSchema = z.object({
   /** Id du groupe parent si ce produit est une VARIANTE créée à l'intérieur d'un groupe
    * existant — null/absent pour un produit autonome ou un groupe. */
   groupId: z.string().optional().nullable(),
+  /** Propose au client un choix "Photo pleine page"/"Bordure blanche" à l'assignation
+   * (02/08/2026, demande d'Adriel : "On dois ajouter dans panel admin type de bordure [...]
+   * meme si nous ne mettons pas cela dans le visuel [transmis à Prodigi], juste pour la
+   * représentation visuel") — Prodigi ne supporte pas ce choix comme attribut API, voir
+   * Product.borderOptionEnabled dans schema.prisma : purement local/informatif. */
+  borderOptionEnabled: z.boolean().optional(),
 });
 
 export const bookingRequestSchema = z.object({

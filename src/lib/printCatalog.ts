@@ -39,12 +39,15 @@ export interface PrintCatalogItem {
   /** Ordre d'affichage manuel — voir schema.prisma. Comparé séparément par "niveau" (lignes
    * racine entre elles, variantes d'un même groupe entre elles), jamais mélangé entre niveaux. */
   sortOrder: number;
+  /** Choix "Photo pleine page"/"Bordure blanche" proposé au client — LOCAL à pixleh, jamais
+   * transmis à Prodigi (voir doc Product.borderOptionEnabled dans schema.prisma). */
+  borderOptionEnabled: boolean;
   createdAt: Date;
 }
 
 const SELECT_COLUMNS = `"id", "name", "description", "priceCents", "currency", "sku", "imageUrl",
        "active", "wholesaleCostCents", "prodigiAttributeOptions", "isProductGroup", "groupId",
-       "sortOrder", "createdAt"`;
+       "sortOrder", "borderOptionEnabled", "createdAt"`;
 
 export async function listPrintCatalog(): Promise<PrintCatalogItem[]> {
   return prisma.$queryRaw<PrintCatalogItem[]>`
@@ -144,6 +147,9 @@ export async function createPrintCatalogItem(data: {
   /** Id du groupe parent si ce produit est une VARIANTE (taille/SKU) à l'intérieur d'un groupe
    * existant — mutuellement exclusif avec isProductGroup (validé côté route API). */
   groupId?: string | null;
+  /** Propose au client un choix "Photo pleine page"/"Bordure blanche" (02/08/2026, demande
+   * d'Adriel) — LOCAL, jamais transmis à Prodigi, voir doc dans schema.prisma. */
+  borderOptionEnabled?: boolean;
 }): Promise<PrintCatalogItem> {
   const id = data.id || randomUUID();
   // Nouveau produit ajouté en fin de son "niveau" d'affichage (racine ou variantes du même
@@ -158,11 +164,12 @@ export async function createPrintCatalogItem(data: {
     INSERT INTO "Product"
       ("id", "studioId", "type", "name", "description", "priceCents", "currency", "sku",
        "imageUrl", "active", "platformManaged", "wholesaleCostCents", "isProductGroup", "groupId",
-       "sortOrder", "createdAt")
+       "sortOrder", "borderOptionEnabled", "createdAt")
     VALUES
       (${id}, NULL, 'PRINT', ${data.name}, ${data.description}, ${data.priceCents},
        ${data.currency}, ${data.sku}, ${data.imageUrl}, ${data.active}, true,
-       ${data.wholesaleCostCents}, ${data.isProductGroup ?? false}, ${groupId}, ${sortOrder}, NOW())
+       ${data.wholesaleCostCents}, ${data.isProductGroup ?? false}, ${groupId}, ${sortOrder},
+       ${data.borderOptionEnabled ?? false}, NOW())
   `;
   const created = await getPrintCatalogItem(id);
   if (!created) throw new Error("Échec de la création du produit catalogue.");
@@ -183,6 +190,8 @@ export async function updatePrintCatalogItem(
     prodigiAttributeOptions: string | null;
     isProductGroup: boolean;
     groupId: string | null;
+    /** Voir doc createPrintCatalogItem — LOCAL, jamais transmis à Prodigi. */
+    borderOptionEnabled: boolean;
   }>
 ): Promise<PrintCatalogItem | null> {
   const existing = await getPrintCatalogItem(id);
@@ -201,7 +210,8 @@ export async function updatePrintCatalogItem(
         "wholesaleCostCents" = ${merged.wholesaleCostCents},
         "prodigiAttributeOptions" = ${merged.prodigiAttributeOptions},
         "isProductGroup" = ${merged.isProductGroup},
-        "groupId" = ${merged.groupId}
+        "groupId" = ${merged.groupId},
+        "borderOptionEnabled" = ${merged.borderOptionEnabled}
     WHERE "id" = ${id} AND "platformManaged" = true
   `;
   return getPrintCatalogItem(id);

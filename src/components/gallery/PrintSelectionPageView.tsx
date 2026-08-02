@@ -15,6 +15,14 @@ interface PhotoDTO {
    * construire une vraie UI de sélection d'attribut au moment de l'achat"). null si le produit
    * assigné n'a aucun attribut sélectionnable, ou si aucun choix n'a encore été fait. */
   selectedAttributes: Record<string, string> | null;
+  /** Choix "Photo pleine page"/"Bordure blanche" du client pour CETTE photo (02/08/2026,
+   * demande d'Adriel : "On dois ajouter dans panel admin type de bordure [...] meme si nous ne
+   * mettons pas cela dans le visuel [transmis à Prodigi], juste pour la représentation
+   * visuel") — volontairement SÉPARÉ de selectedAttributes : Prodigi ne supporte pas ce choix
+   * comme attribut API (voir doc PrintProductDTO.borderOptionEnabled), donc jamais mélangé aux
+   * attributs Prodigi envoyés à la commande. null si le produit assigné n'a pas
+   * borderOptionEnabled, ou si aucun choix n'a encore été fait. */
+  borderType: string | null;
 }
 
 interface PrintProductDTO {
@@ -28,6 +36,11 @@ interface PrintProductDTO {
    * côté admin via "Resynchroniser" (voir getProdigiProductDetails). Objet vide = aucun
    * attribut : le produit s'assigne directement, sans étape de choix intermédiaire. */
   attributeOptions: Record<string, string[]>;
+  /** true = l'admin propose un choix "Photo pleine page"/"Bordure blanche" pour ce produit
+   * (02/08/2026, demande d'Adriel) — LOCAL à pixleh, Prodigi ne supporte pas ce choix via son
+   * API (leur doc : la bordure doit être incluse dans le fichier envoyé, pas transmise en
+   * attribut), donc purement indicatif/visuel dans FramePreview, jamais envoyé à Prodigi. */
+  borderOptionEnabled: boolean;
   /** Chantier "groupe de produits" (02/08/2026, demande d'Adriel : "peux tu ajouter la
    * possibilité de creer un groupe de produit et a l'intérieur ajouter les SKU adéquat ?") —
    * non-vide UNIQUEMENT sur un produit-GROUPE (ex: "Toile photo") : ses tailles/SKU réels
@@ -37,6 +50,11 @@ interface PrintProductDTO {
    * choisie qui finit dans Selection.productId, pas celui du groupe. */
   variants?: PrintProductDTO[];
 }
+
+/** Les deux seules valeurs possibles du choix de bordure — fixes plutôt que configurables par
+ * l'admin (contrairement aux attributeOptions Prodigi) : il n'y a que ces deux présentations
+ * possibles pour un tirage, l'admin active/désactive juste la proposition du choix. */
+const BORDER_TYPE_OPTIONS = ["Photo pleine page", "Bordure blanche"] as const;
 
 /** Libellés FR des noms d'attributs Prodigi les plus courants (voir doc Product Details) —
  * dégrade proprement sur le nom brut (mis en forme) pour tout attribut moins fréquent. */
@@ -458,11 +476,18 @@ export function PrintSelectionPageView({
   async function applyProductToPhotos(
     ids: string[],
     productId: string | null,
-    attributes?: Record<string, string> | null
+    attributes?: Record<string, string> | null,
+    // Choix "Photo pleine page"/"Bordure blanche" (02/08/2026, demande d'Adriel) — SÉPARÉ de
+    // `attributes` : voir doc PhotoDTO.borderType, jamais mélangé aux attributs Prodigi.
+    borderType?: string | null
   ) {
     if (ids.length === 0) return;
     setPhotos((prev) =>
-      prev.map((p) => (ids.includes(p.id) ? { ...p, productId, selectedAttributes: attributes ?? null } : p))
+      prev.map((p) =>
+        ids.includes(p.id)
+          ? { ...p, productId, selectedAttributes: attributes ?? null, borderType: borderType ?? null }
+          : p
+      )
     );
     setChecked((prev) => {
       const next = new Set(prev);
@@ -482,7 +507,13 @@ export function PrintSelectionPageView({
     await fetch("/api/selections", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ galleryId, photoIds: ids, productId, attributes: attributes ?? null }),
+      body: JSON.stringify({
+        galleryId,
+        photoIds: ids,
+        productId,
+        attributes: attributes ?? null,
+        borderType: borderType ?? null,
+      }),
     });
   }
 
@@ -500,6 +531,9 @@ export function PrintSelectionPageView({
     ids: string[];
     entry: PrintProductDTO;
     initial?: Record<string, string>;
+    /** Choix de bordure LOCAL déjà fait pour ce lot, s'il est uniforme — voir doc
+     * PhotoDTO.borderType (02/08/2026, demande d'Adriel). */
+    initialBorderType?: string | null;
   } | null>(null);
 
   // Aperçu en lecture seule des tailles/SKU d'un groupe (demande d'Adriel, 01/08/2026 : "j'ai
@@ -567,12 +601,16 @@ export function PrintSelectionPageView({
     }
     // attributes transmis au panier — chantier "sélection d'attribut au moment de l'achat"
     // (02/08/2026, demande d'Adriel), propagé jusqu'à OrderItem.attributes par /api/cart/checkout
-    // puis lu en priorité par submitProdigiOrder (voir src/lib/prodigiOrder.ts).
+    // puis lu en priorité par submitProdigiOrder (voir src/lib/prodigiOrder.ts). borderType est
+    // transmis SÉPARÉMENT (chantier "type de bordure", même date) : /api/cart/checkout le copie
+    // vers une colonne OrderItem.borderType distincte, jamais lue par submitProdigiOrder — voir
+    // doc sur Product.borderOptionEnabled dans schema.prisma.
     const items = photos.map((p) => ({
       productId: p.productId as string,
       quantity: 1,
       photoId: p.id,
       attributes: p.selectedAttributes,
+      borderType: p.borderType,
     }));
     setLoading(true);
     const res = await fetch("/api/cart/checkout", {
@@ -859,6 +897,12 @@ export function PrintSelectionPageView({
                     g.photos.every(
                       (p) => JSON.stringify(p.selectedAttributes) === JSON.stringify(groupAttributesSample)
                     );
+                  // Même patron pour le choix de bordure LOCAL (02/08/2026, demande d'Adriel) —
+                  // voir doc PhotoDTO.borderType : jamais mélangé à groupAttributesSample.
+                  const hasBorderOption = g.product?.borderOptionEnabled ?? false;
+                  const groupBorderTypeSample = g.photos[0]?.borderType ?? null;
+                  const groupBorderTypeUniform =
+                    hasBorderOption && g.photos.every((p) => p.borderType === groupBorderTypeSample);
                   return (
                     <div key={key} className="py-2">
                       {/* Accordéon par service (demande d'Adriel, 01/08/2026 : "a chaque
@@ -954,10 +998,11 @@ export function PrintSelectionPageView({
                           </div>
                         )}
                         {/* Choisir/modifier les attributs Prodigi du groupe (couleur de cadre,
-                            bordure de toile...) — visible dès que le produit assigné a des
-                            options (voir attributeOptions), même après assignation initiale, le
-                            client peut revenir changer son choix. */}
-                        {hasAttributeOptions && g.product && (
+                            bordure de toile...) et/ou le type de bordure LOCAL — visible dès que
+                            le produit assigné a des options (voir attributeOptions) ou propose le
+                            choix de bordure (borderOptionEnabled), même après assignation
+                            initiale, le client peut revenir changer son choix. */}
+                        {(hasAttributeOptions || hasBorderOption) && g.product && (
                           <button
                             type="button"
                             onClick={() =>
@@ -965,9 +1010,12 @@ export function PrintSelectionPageView({
                                 ids: groupIds,
                                 entry: g.product!,
                                 initial: groupAttributesUniform ? (groupAttributesSample ?? undefined) : undefined,
+                                initialBorderType: groupBorderTypeUniform
+                                  ? (groupBorderTypeSample ?? undefined)
+                                  : undefined,
                               })
                             }
-                            title="Choisir les options (couleur, cadre...) de ce groupe"
+                            title="Choisir les options (couleur, cadre, bordure...) de ce groupe"
                             className="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200"
                           >
                             {groupAttributesUniform && groupAttributesSample
@@ -1299,6 +1347,7 @@ export function PrintSelectionPageView({
           entry={optionsPrompt.entry}
           count={optionsPrompt.ids.length}
           initial={optionsPrompt.initial}
+          initialBorderType={optionsPrompt.initialBorderType}
           // Aperçu dessiné par le code plutôt qu'une photo produit figée (02/08/2026, demande
           // d'Adriel : "peux tu mettres les reperes de dimension et changer les couleurs de
           // cadre ? si cela n'est pas possible sur une image me proposé un design faite par le
@@ -1306,8 +1355,8 @@ export function PrintSelectionPageView({
           // pour l'afficher "dans" le cadre simulé plutôt qu'un rectangle vide.
           photoUrl={photos.find((p) => optionsPrompt.ids.includes(p.id))?.previewUrl}
           onCancel={() => setOptionsPrompt(null)}
-          onConfirm={(variantId, attributes) => {
-            applyProductToPhotos(optionsPrompt.ids, variantId, attributes);
+          onConfirm={(variantId, attributes, borderType) => {
+            applyProductToPhotos(optionsPrompt.ids, variantId, attributes, borderType);
             setOptionsPrompt(null);
           }}
         />
@@ -1343,6 +1392,7 @@ function ProductOptionsModal({
   entry,
   count,
   initial,
+  initialBorderType,
   photoUrl,
   onCancel,
   onConfirm,
@@ -1350,12 +1400,16 @@ function ProductOptionsModal({
   entry: PrintProductDTO;
   count: number;
   initial?: Record<string, string>;
+  /** Type de bordure ("Photo pleine page"/"Bordure blanche") déjà choisi si on rouvre le
+   * sélecteur d'un groupe déjà assigné (02/08/2026, chantier "type de bordure") — état LOCAL,
+   * séparé de `initial` (attributs Prodigi), jamais transmis à Prodigi. */
+  initialBorderType?: string | null;
   /** Une des photos réellement sélectionnées par le client, à afficher "dans" l'aperçu dessiné
    * (FramePreview) plutôt que la photo produit générique — undefined si la sélection est vide
    * (ne devrait pas arriver en pratique) ou si les photos n'ont pas encore d'aperçu généré. */
   photoUrl?: string;
   onCancel: () => void;
-  onConfirm: (variantId: string, attributes: Record<string, string> | null) => void;
+  onConfirm: (variantId: string, attributes: Record<string, string> | null, borderType: string | null) => void;
 }) {
   const variants = entry.variants && entry.variants.length > 0 ? entry.variants : [entry];
   const showSizePicker = variants.length > 1;
@@ -1371,10 +1425,23 @@ function ProductOptionsModal({
   const [selectedVariantId, setSelectedVariantId] = useState(variants[0].id);
   const selectedVariant = variants.find((v) => v.id === selectedVariantId) ?? variants[0];
   const [values, setValues] = useState<Record<string, string>>(() => defaultValuesFor(selectedVariant, initial));
+  // Type de bordure — état LOCAL séparé de `values` (attributs Prodigi), voir doc au-dessus de
+  // BORDER_TYPE_OPTIONS et Product.borderOptionEnabled dans schema.prisma (02/08/2026, demande
+  // d'Adriel : "meme si nous ne mettons pas cela dans le visuel, juste pour la représentation
+  // visuel"). Se réinitialise sur la première option quand on change de format ci-dessous, comme
+  // les attributs Prodigi.
+  const [borderType, setBorderType] = useState<string | null>(
+    initialBorderType && (BORDER_TYPE_OPTIONS as readonly string[]).includes(initialBorderType)
+      ? initialBorderType
+      : selectedVariant.borderOptionEnabled
+        ? BORDER_TYPE_OPTIONS[0]
+        : null
+  );
 
   function selectVariant(variant: PrintProductDTO) {
     setSelectedVariantId(variant.id);
     setValues(defaultValuesFor(variant));
+    setBorderType(variant.borderOptionEnabled ? BORDER_TYPE_OPTIONS[0] : null);
   }
 
   const attributeEntries = Object.entries(selectedVariant.attributeOptions);
@@ -1429,7 +1496,7 @@ function ProductOptionsModal({
               mount choisi, avec la photo réellement sélectionnée par le client à l'intérieur.
               Masqué sur mobile (pas la place), la sélection reste possible sans lui. */}
           <div className="hidden w-60 shrink-0 flex-col items-center gap-4 border-r border-gray-100 bg-gray-50/60 p-6 sm:flex">
-            <FramePreview variant={selectedVariant} attributes={values} photoUrl={photoUrl} />
+            <FramePreview variant={selectedVariant} attributes={values} photoUrl={photoUrl} borderType={borderType} />
             <div className="w-full text-center">
               <p className="line-clamp-2 text-sm font-medium leading-snug text-gray-900">{selectedVariant.name}</p>
               <p className="mt-1 text-base font-semibold text-gray-800">
@@ -1517,6 +1584,50 @@ function ProductOptionsModal({
                   </div>
                 </div>
               ))}
+
+              {/* Type de bordure — LOCAL uniquement, jamais transmis à Prodigi (02/08/2026,
+                  demande d'Adriel : "On dois ajouter dans panel admin type de bordure pour que
+                  nous puisson l'utilisé pour le client qui imprime meme si nous ne mettons pas
+                  cela dans le visuel [...] juste pour la représentation visuel"). Affiché
+                  uniquement si le produit/la variante l'active (Product.borderOptionEnabled,
+                  panel admin). Même style de cartes que les attributs Prodigi ci-dessus, mais
+                  état séparé (`borderType`, pas `values`) — jamais mélangé aux attributs envoyés
+                  à Prodigi (voir doc sur `values`/attributeOptions). */}
+              {selectedVariant.borderOptionEnabled && (
+                <div>
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Type de bordure
+                  </p>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {BORDER_TYPE_OPTIONS.map((option) => {
+                      const selected = borderType === option;
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => setBorderType(option)}
+                          aria-pressed={selected}
+                          className={`flex items-center gap-2.5 rounded-lg border-2 px-3 py-2.5 text-left text-sm transition-colors ${
+                            selected
+                              ? "border-brand-600 bg-brand-50 text-brand-700"
+                              : "border-gray-200 text-gray-700 hover:border-gray-300"
+                          }`}
+                        >
+                          <span className="min-w-0 flex-1 truncate font-medium">{option}</span>
+                          {selected && (
+                            <span className="shrink-0 text-brand-600">
+                              <IconCheck />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-1.5 text-xs text-gray-400">
+                    Indicatif uniquement — non transmis à l&apos;impression.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1528,7 +1639,7 @@ function ProductOptionsModal({
           <button
             type="button"
             className="btn-primary text-sm"
-            onClick={() => onConfirm(selectedVariant.id, attributeEntries.length > 0 ? values : null)}
+            onClick={() => onConfirm(selectedVariant.id, attributeEntries.length > 0 ? values : null, borderType)}
           >
             Valider
           </button>
@@ -1553,10 +1664,15 @@ function FramePreview({
   variant,
   attributes,
   photoUrl,
+  borderType,
 }: {
   variant: PrintProductDTO;
   attributes: Record<string, string>;
   photoUrl?: string;
+  /** Type de bordure choisi ("Photo pleine page"/"Bordure blanche") — LOCAL, purement indicatif
+   * (02/08/2026, chantier "type de bordure"), influence uniquement l'affichage d'un passe-partout
+   * blanc dans cette maquette, comme le ferait un vrai attribut mount Prodigi. */
+  borderType?: string | null;
 }) {
   const dims = parseDimensionsCm(variant.name) ?? parseDimensionsCm(variant.description) ?? { w: 30, h: 40 };
 
@@ -1583,9 +1699,10 @@ function FramePreview({
   // Passe-partout blanc = un attribut mount/passe-partout choisi avec une valeur autre que
   // "aucun/none/sans" — approximation raisonnable puisque Prodigi encode ces valeurs en texte
   // libre plutôt qu'un simple booléen.
-  const hasMat = Object.entries(attributes).some(
-    ([name, value]) => /mount|passe.?partout|mat\b/i.test(name) && !/^(none|aucun|sans|no)\b/i.test(value)
-  );
+  const hasMat =
+    Object.entries(attributes).some(
+      ([name, value]) => /mount|passe.?partout|mat\b/i.test(name) && !/^(none|aucun|sans|no)\b/i.test(value)
+    ) || borderType === "Bordure blanche";
 
   return (
     <div className="relative" style={{ width: CANVAS, height: CANVAS }}>

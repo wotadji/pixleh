@@ -31,6 +31,12 @@ interface PrintCatalogItemDTO {
    * reorderPrintCatalogItems. Pas affiché tel quel, sert juste au tri côté serveur ; réordonné
    * par glisser-déposer dans la liste (voir handleDrop). */
   sortOrder: number;
+  /** Choix "Photo pleine page"/"Bordure blanche" proposé au client à l'assignation (02/08/2026,
+   * demande d'Adriel : "On dois ajouter dans panel admin type de bordure [...] meme si nous ne
+   * mettons pas cela dans le visuel [transmis à Prodigi], juste pour la représentation
+   * visuel") — LOCAL à pixleh, Prodigi ne supporte pas ce choix via son API (leur doc : les
+   * bordures doivent être incluses dans le fichier envoyé, pas passées en attribut). */
+  borderOptionEnabled: boolean;
 }
 
 /** Parse prodigiAttributeOptions en toute sécurité — utilisé aussi bien dans la liste que dans
@@ -67,6 +73,8 @@ interface FormState {
   /** Id du groupe parent si ce formulaire crée/édite une VARIANTE à l'intérieur d'un groupe
    * (ouvert via le bouton "+ Ajouter un SKU" d'un groupe) — null sinon. */
   groupId: string | null;
+  /** Voir doc PrintCatalogItemDTO.borderOptionEnabled — LOCAL, jamais transmis à Prodigi. */
+  borderOptionEnabled: boolean;
 }
 
 /** Génère un id côté client pour un nouveau produit (même patron que makeSlideId dans
@@ -87,6 +95,7 @@ const EMPTY_FORM_FIELDS = {
   wholesaleCost: "",
   isProductGroup: false,
   groupId: null as string | null,
+  borderOptionEnabled: false,
 };
 
 type StatusFilter = "ALL" | "ACTIVE" | "INACTIVE" | "NO_SKU";
@@ -116,6 +125,7 @@ function itemToForm(item: PrintCatalogItemDTO): FormState {
     wholesaleCost: item.wholesaleCostCents != null ? fromCents(item.wholesaleCostCents) : "",
     isProductGroup: item.isProductGroup,
     groupId: item.groupId,
+    borderOptionEnabled: item.borderOptionEnabled,
   };
 }
 
@@ -302,6 +312,7 @@ export default function AdminPrintCatalogPage() {
       wholesaleCostCents: form.wholesaleCost.trim() ? toCents(form.wholesaleCost) : null,
       isProductGroup: form.isProductGroup,
       groupId: form.groupId,
+      borderOptionEnabled: form.borderOptionEnabled,
     };
 
     try {
@@ -944,6 +955,16 @@ function GridCard({
               {Object.keys(attributeOptions).length} attribut{Object.keys(attributeOptions).length > 1 ? "s" : ""}
             </span>
           )}
+          {/* Badge "Bordure" — 02/08/2026, demande d'Adriel : toggle admin borderOptionEnabled
+              (voir formulaire), visuel/informatif uniquement, jamais transmis à Prodigi. */}
+          {item.borderOptionEnabled && (
+            <span
+              className="rounded-full bg-teal-600/90 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm"
+              title="Le client peut choisir le type de bordure (indicatif, non transmis à Prodigi)"
+            >
+              Bordure
+            </span>
+          )}
         </div>
       </div>
 
@@ -1268,6 +1289,16 @@ function CatalogRow({
                 {Object.keys(attributeOptions).length > 1 ? "s" : ""}
               </span>
             )}
+            {/* Badge "Bordure" — 02/08/2026, demande d'Adriel : toggle admin borderOptionEnabled,
+                visuel/informatif uniquement, jamais transmis à Prodigi. */}
+            {item.borderOptionEnabled && (
+              <span
+                className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-medium text-teal-700"
+                title="Le client peut choisir le type de bordure (indicatif, non transmis à Prodigi)"
+              >
+                Bordure
+              </span>
+            )}
           </p>
           <p className="truncate text-sm text-gray-500">
             {item.sku ? (
@@ -1526,6 +1557,35 @@ function ProductModal({
               onChange={(e) => setForm({ ...form, sku: e.target.value })}
             />
           </div>
+        )}
+
+        {/* Type de bordure — LOCAL à pixleh, jamais transmis à Prodigi (02/08/2026, demande
+            d'Adriel : "On dois ajouter dans panel admin type de bordure pour que nous puisson
+            l'utilisé pour le client qui imprime meme si nous ne mettons pas cela dans le visuel
+            [le fichier envoyé à Prodigi] (juste pour la représentation visuel)") — Prodigi
+            n'accepte ce choix qu'en l'intégrant directement au fichier envoyé, pas comme
+            attribut API (contrairement à couleur de cadre, verre...). Activer ce toggle propose
+            simplement au client un choix "Photo pleine page"/"Bordure blanche" à l'assignation,
+            informatif pour pixleh/le studio mais sans effet sur la commande Prodigi réelle. */}
+        {!form.isProductGroup && (
+          <label className="flex items-start gap-2.5 rounded-lg border border-gray-200 p-3">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+              checked={form.borderOptionEnabled}
+              onChange={(e) => setForm({ ...form, borderOptionEnabled: e.target.checked })}
+            />
+            <span>
+              <span className="block text-sm font-medium text-gray-900">
+                Proposer le choix du type de bordure
+              </span>
+              <span className="mt-0.5 block text-xs text-gray-500">
+                Affiche "Photo pleine page" / "Bordure blanche" au client à l&apos;assignation —
+                indicatif uniquement, Prodigi ne supporte pas ce choix via son API (il faudrait
+                intégrer la bordure directement dans le fichier envoyé, non fait ici).
+              </span>
+            </span>
+          </label>
         )}
 
         {/* Rattachement à un groupe (demande d'Adriel, 02/08/2026 : "dans l'ajout d'un produit

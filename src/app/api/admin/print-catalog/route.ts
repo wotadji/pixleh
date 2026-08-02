@@ -68,6 +68,7 @@ export async function POST(req: Request) {
       wholesaleCostCents,
       isProductGroup,
       groupId,
+      borderOptionEnabled: parsed.data.borderOptionEnabled ?? false,
     });
 
     return NextResponse.json({ item, prodigiSync }, { status: 201 });

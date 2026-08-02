@@ -51,6 +51,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       }),
       ...(parsed.data.isProductGroup !== undefined && { isProductGroup: parsed.data.isProductGroup }),
       ...(parsed.data.groupId !== undefined && { groupId: parsed.data.groupId ?? null }),
+      ...(parsed.data.borderOptionEnabled !== undefined && {
+        borderOptionEnabled: parsed.data.borderOptionEnabled,
+      }),
     });
 
     return NextResponse.json({ item });

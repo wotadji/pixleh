@@ -77,17 +77,21 @@ export default async function PrintSelectionPage({ params }: { params: { gallery
     : [];
   const productByPhotoId = new Map(printSelections.map((s) => [s.photoId, s.productId]));
 
-  // Selection.selectedAttributes n'existe pas encore dans le Prisma Client généré du sandbox
-  // (tâche #254) — chantier "sélection d'attribut au moment de l'achat" (02/08/2026, demande
-  // d'Adriel : "je veux construire une vraie UI de sélection d'attribut au moment de l'achat"),
-  // lu séparément via $queryRaw, même workaround que le reste du catalogue impression.
+  // Selection.selectedAttributes/borderType n'existent pas encore dans le Prisma Client généré
+  // du sandbox (tâche #254) — chantiers "sélection d'attribut au moment de l'achat" et "type de
+  // bordure" (02/08/2026, demande d'Adriel), lus séparément via $queryRaw, même workaround que
+  // le reste du catalogue impression. borderType est un choix LOCAL (voir doc
+  // Product.borderOptionEnabled dans schema.prisma) : lu ici uniquement pour préremplir
+  // ProductOptionsModal si le client rouvre le sélecteur d'un produit déjà assigné, jamais
+  // transmis à Prodigi.
   const attributeRows = printSelections.length
-    ? await prisma.$queryRaw<Array<{ photoId: string; selectedAttributes: string | null }>>`
-        SELECT "photoId", "selectedAttributes" FROM "Selection"
+    ? await prisma.$queryRaw<Array<{ photoId: string; selectedAttributes: string | null; borderType: string | null }>>`
+        SELECT "photoId", "selectedAttributes", "borderType" FROM "Selection"
         WHERE "id" IN (${Prisma.join(printSelections.map((s) => s.id))})
       `
     : [];
   const attributesByPhotoId = new Map(attributeRows.map((r) => [r.photoId, r.selectedAttributes]));
+  const borderTypeByPhotoId = new Map(attributeRows.map((r) => [r.photoId, r.borderType]));
 
   const printProducts = await getActivePrintCatalog();
 
@@ -120,6 +124,7 @@ export default async function PrintSelectionPage({ params }: { params: { gallery
         previewUrl: `/api/files/studios/${gallery.studioId}/galleries/${gallery.id}/${p.id}/preview.jpg?v=${p.updatedAt.getTime()}`,
         productId: productByPhotoId.get(p.id) ?? null,
         selectedAttributes: parseSelectedAttributes(attributesByPhotoId.get(p.id)),
+        borderType: borderTypeByPhotoId.get(p.id) ?? null,
       }))}
       printProducts={printProducts.map((p) => ({
         id: p.id,
@@ -129,6 +134,7 @@ export default async function PrintSelectionPage({ params }: { params: { gallery
         currency: p.currency,
         imageUrl: p.imageUrl,
         attributeOptions: parseJsonRecord<Record<string, string[]>>(p.prodigiAttributeOptions, {}),
+        borderOptionEnabled: p.borderOptionEnabled,
         variants: p.isProductGroup
           ? (variantsByGroupId.get(p.id) ?? []).map((v) => ({
               id: v.id,
@@ -138,6 +144,7 @@ export default async function PrintSelectionPage({ params }: { params: { gallery
               currency: v.currency,
               imageUrl: v.imageUrl,
               attributeOptions: parseJsonRecord<Record<string, string[]>>(v.prodigiAttributeOptions, {}),
+              borderOptionEnabled: v.borderOptionEnabled,
             }))
           : undefined,
       }))}
