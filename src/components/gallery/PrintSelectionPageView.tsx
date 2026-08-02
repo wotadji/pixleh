@@ -82,7 +82,13 @@ const COLOR_SWATCHES: [string, string][] = [
   ["black", "#18181b"],
   ["blanc", "#ffffff"],
   ["white", "#ffffff"],
-  ["naturel", "#d9c7a8"],
+  // "natural" (anglais, valeur réelle envoyée par Prodigi, voir capture Adriel : couleur "natural"
+  // proposée à côté de "black"/"white") ajouté séparément de "naturel" (02/08/2026, demande
+  // d'Adriel : "la couleur naturel dois avoir le code hexadecimal : #d6c7b0") — "naturel" n'est
+  // PAS une sous-chaîne de "natural" (lettre "e" en trop), donc sans cette entrée dédiée l'option
+  // anglaise ne matchait aucun mot-clé et retombait sur le gris neutre par défaut.
+  ["natural", "#d6c7b0"],
+  ["naturel", "#d6c7b0"],
   ["chene", "#b98a55"],
   ["oak", "#b98a55"],
   ["noyer", "#5c3a21"],
