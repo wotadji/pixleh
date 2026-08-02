@@ -1679,13 +1679,21 @@ function FramePreview({
   const maxW = CANVAS - SIDE_RESERVE * 2;
   const maxH = CANVAS - TOP_GUIDE - 8;
   const scale = Math.min(maxW / refDims.w, maxH / refDims.h);
-  // Taille minimale relevée à nouveau (60 → 90px) — demande d'Adriel : "je veux que le petit
-  // format soit plus grand". L'échelle commune au groupe (référence = plus grand format, voir
-  // referenceDims/task précédente) fait qu'un petit format (ex: 40x50 face à un 60x90) reste
-  // proportionnellement plus petit ; ce plancher garantit qu'il reste malgré tout confortablement
-  // lisible, quitte à ne plus être parfaitement proportionnel au plus grand format du groupe.
-  const frameW = Math.max(90, Math.round(dims.w * scale));
-  const frameH = Math.max(90, Math.round(dims.h * scale));
+  // Taille minimale relevée une nouvelle fois (02/08/2026, demande d'Adriel : "je veux que tu
+  // agrandisse encore le plus petit format") — MIN_SIDE 90 → 110px. Auparavant le plancher
+  // s'appliquait indépendamment à W et à H (Math.max(90, ...) sur chacun), ce qui déformait
+  // légèrement le ratio du petit format dès qu'un seul des deux côtés touchait le plancher
+  // (ex: 40×50 → 90×110, ratio 0.818 au lieu de 0.8). Ici on applique un seul facteur
+  // d'agrandissement uniforme (boost) calculé sur le plus petit des deux côtés, PUIS on l'applique
+  // aux deux — le ratio largeur/hauteur réel du format reste donc exact, seule la taille globale
+  // augmente quand le format est trop petit pour rester lisible face au plus grand format du
+  // groupe (referenceDims).
+  const MIN_SIDE = 110;
+  const rawFrameW = dims.w * scale;
+  const rawFrameH = dims.h * scale;
+  const boost = Math.min(rawFrameW, rawFrameH) < MIN_SIDE ? MIN_SIDE / Math.min(rawFrameW, rawFrameH) : 1;
+  const frameW = Math.round(rawFrameW * boost);
+  const frameH = Math.round(rawFrameH * boost);
   const frameTop = TOP_GUIDE + 3;
   // Centrage horizontal du cadre dans le canvas COMPLET (pas juste la zone "utile" hors repère) —
   // grâce à SIDE_RESERVE réservé symétriquement des deux côtés lors du calcul de l'échelle
