@@ -960,7 +960,7 @@ function GridCard({
           {item.borderOptionEnabled && (
             <span
               className="rounded-full bg-teal-600/90 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm"
-              title="Le client peut choisir le type de bordure (indicatif, non transmis à Prodigi)"
+              title="Marge blanche appliquée automatiquement à l'aperçu client (indicatif, non transmis à Prodigi)"
             >
               Bordure
             </span>
@@ -1294,7 +1294,7 @@ function CatalogRow({
             {item.borderOptionEnabled && (
               <span
                 className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-medium text-teal-700"
-                title="Le client peut choisir le type de bordure (indicatif, non transmis à Prodigi)"
+                title="Marge blanche appliquée automatiquement à l'aperçu client (indicatif, non transmis à Prodigi)"
               >
                 Bordure
               </span>
@@ -1564,9 +1564,12 @@ function ProductModal({
             l'utilisé pour le client qui imprime meme si nous ne mettons pas cela dans le visuel
             [le fichier envoyé à Prodigi] (juste pour la représentation visuel)") — Prodigi
             n'accepte ce choix qu'en l'intégrant directement au fichier envoyé, pas comme
-            attribut API (contrairement à couleur de cadre, verre...). Activer ce toggle propose
-            simplement au client un choix "Photo pleine page"/"Bordure blanche" à l'assignation,
-            informatif pour pixleh/le studio mais sans effet sur la commande Prodigi réelle. */}
+            attribut API (contrairement à couleur de cadre, verre...). Initialement pensé comme un
+            choix client ("Photo pleine page"/"Bordure blanche"), simplifié en simple bascule
+            automatique (02/08/2026, demande d'Adriel : "retirer Type de bordure [...] si le Type
+            de bordure est coché dans panel admin le mettre automatiquement sur l'image") — plus
+            de sélecteur côté client, juste une marge blanche appliquée d'office à l'aperçu
+            (FramePreview) dès que ce toggle est activé. */}
         {!form.isProductGroup && (
           <label className="flex items-start gap-2.5 rounded-lg border border-gray-200 p-3">
             <input
@@ -1577,12 +1580,12 @@ function ProductModal({
             />
             <span>
               <span className="block text-sm font-medium text-gray-900">
-                Proposer le choix du type de bordure
+                Bordure blanche automatique
               </span>
               <span className="mt-0.5 block text-xs text-gray-500">
-                Affiche "Photo pleine page" / "Bordure blanche" au client à l&apos;assignation —
-                indicatif uniquement, Prodigi ne supporte pas ce choix via son API (il faudrait
-                intégrer la bordure directement dans le fichier envoyé, non fait ici).
+                Applique automatiquement une marge blanche autour de la photo dans l&apos;aperçu
+                client — indicatif uniquement, Prodigi ne supporte pas ce réglage via son API (il
+                faudrait intégrer la bordure directement dans le fichier envoyé, non fait ici).
               </span>
             </span>
           </label>
