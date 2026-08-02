@@ -1067,9 +1067,38 @@ function GridCard({
                       <IconGrip small />
                     </span>
                     <span className="truncate">{v.name}</span>
+                    {/* Badge "N attributs" — même indicateur que la vue tableau (CatalogRow), ajouté
+                        ici pour qu'Adriel puisse vérifier en un coup d'œil qu'une resynchro a bien
+                        chargé les attributs (couleur, verre...) sans avoir à ouvrir la modale. */}
+                    {Object.keys(parseAttributeOptions(v.prodigiAttributeOptions)).length > 0 && (
+                      <span className="shrink-0 rounded-full bg-brand-50 px-1.5 py-0.5 text-[10px] font-medium text-brand-700">
+                        {Object.keys(parseAttributeOptions(v.prodigiAttributeOptions)).length} attr.
+                      </span>
+                    )}
                   </span>
                   <span className="flex shrink-0 items-center gap-1.5">
                     <span className="font-medium text-gray-800">{formatMoney(v.priceCents)}</span>
+                    {/* Resynchroniser PAR VARIANTE (02/08/2026, bug remonté par Adriel : "GLOBAL-BOX-40X60
+                        a bien le frame colour [chez Prodigi], mais je ne le vois pas dans client
+                        imprimante") — manquait ici : le bouton "Resynchroniser" n'existait QUE sur les
+                        produits autonomes (item.sku, plus haut) et sur chaque ligne en vue tableau
+                        (CatalogRow), jamais sur les variantes listées dans une fiche groupe en vue
+                        grille. Sans lui, une variante ajoutée à un groupe ne pouvait JAMAIS charger ses
+                        attributs Prodigi (couleur, verre...) une fois créée — la première synchro à la
+                        création (getProdigiQuote) ne récupère que le coût, pas les attributs sélectionnables
+                        (voir getProdigiProductDetails), qui restaient donc vides pour toute variante de
+                        groupe tant qu'aucun moyen de resync n'existait. */}
+                    {v.sku && (
+                      <button
+                        type="button"
+                        title="Resynchroniser"
+                        disabled={resyncing === v.id}
+                        onClick={() => onResync(v)}
+                        className="text-gray-300 hover:text-gray-600 disabled:opacity-50"
+                      >
+                        {resyncing === v.id ? <IconSpinner /> : <IconRefresh />}
+                      </button>
+                    )}
                     <button
                       type="button"
                       title="Modifier"
