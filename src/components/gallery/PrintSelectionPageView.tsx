@@ -7,6 +7,13 @@ import { Spinner } from "@/components/ui/Spinner";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { MarketingLanguageSwitcher } from "@/components/marketing/MarketingLanguageSwitcher";
 
+/** Pluralise un mot i18n selon un compte — évite de dupliquer `count > 1 ? plural : singular)`
+ * partout dans ce fichier. Purement une histoire d'accord (pas d'interpolation : `t()` reste une
+ * simple table de correspondance, voir doc LanguageProvider.tsx). */
+function pluralize(count: number, singularKey: string, pluralKey: string, t: (key: string) => string) {
+  return count > 1 ? t(pluralKey) : t(singularKey);
+}
+
 /** Résout le nom/la description affichés selon la langue active (02/08/2026, demande d'Adriel :
  * "je veux la possibilité de traduire par les différents langues [...] dans gallery mettre la
  * possibilité de changer de langue") — repli sur le français (product.name/description, source
@@ -83,23 +90,27 @@ interface PrintProductDTO {
   variants?: PrintProductDTO[];
 }
 
-/** Libellés FR des noms d'attributs Prodigi les plus courants (voir doc Product Details) —
- * dégrade proprement sur le nom brut (mis en forme) pour tout attribut moins fréquent. */
-const ATTRIBUTE_LABELS: Record<string, string> = {
-  wrap: "Bordure de la toile",
-  colour: "Couleur",
-  color: "Couleur",
-  frame: "Cadre",
-  mount: "Passe-partout",
-  mountColour: "Couleur du passe-partout",
-  finish: "Finition",
-  glaze: "Verre",
-  paperType: "Type de papier",
-  substrateWeight: "Grammage",
+/** Clés i18n des noms d'attributs Prodigi les plus courants (voir doc Product Details) —
+ * dégrade proprement sur le nom brut (mis en forme) pour tout attribut moins fréquent.
+ * 02/08/2026 : converti en clés `gallery.printSelection.attr*` (bug remonté par Adriel — "j'ai
+ * mis anglais mais le texte ne change pas" — cette page n'était pas du tout i18n, voir
+ * PrintSelectionPageView pour le reste du chantier), résolues via t() au moment de l'affichage. */
+const ATTRIBUTE_LABEL_KEYS: Record<string, string> = {
+  wrap: "gallery.printSelection.attrWrap",
+  colour: "gallery.printSelection.attrColor",
+  color: "gallery.printSelection.attrColor",
+  frame: "gallery.printSelection.attrFrame",
+  mount: "gallery.printSelection.attrMount",
+  mountColour: "gallery.printSelection.attrMountColour",
+  finish: "gallery.printSelection.attrFinish",
+  glaze: "gallery.printSelection.attrGlaze",
+  paperType: "gallery.printSelection.attrPaperType",
+  substrateWeight: "gallery.printSelection.attrSubstrateWeight",
 };
 
-function attributeLabel(name: string) {
-  return ATTRIBUTE_LABELS[name] || name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, " $1");
+function attributeLabel(name: string, t: (key: string) => string) {
+  const key = ATTRIBUTE_LABEL_KEYS[name];
+  return key ? t(key) : name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, " $1");
 }
 
 /** Table de correspondance mot-clé → couleur CSS pour la pastille des options de type "couleur"
@@ -249,8 +260,13 @@ function groupByProduct(photos: PhotoDTO[], printProducts: PrintProductDTO[]): P
   return groups;
 }
 
-function formatMoney(cents: number, currency: string) {
-  return new Intl.NumberFormat("fr-FR", { style: "currency", currency }).format(cents / 100);
+/** locale optionnel (défaut "fr") pour rester compatible avec les quelques appels hors composant
+ * React (aucun ici en pratique) — tous les appels réels passent désormais la locale active (voir
+ * useLanguage()), corrige le bug remonté par Adriel (02/08/2026) : "j'ai mis anglais mais le
+ * texte ne change pas" — les montants restaient formatés en fr-FR quelle que soit la langue
+ * choisie. */
+function formatMoney(cents: number, currency: string, locale = "fr") {
+  return new Intl.NumberFormat(locale, { style: "currency", currency }).format(cents / 100);
 }
 
 // Nombre de photos affichées par groupe avant le bouton "Afficher plus" (chantier 01/08/2026,
@@ -291,6 +307,7 @@ export function PrintSelectionPageView({
   printProducts: PrintProductDTO[];
 }) {
   const tr = useProductText();
+  const { t, locale } = useLanguage();
   const [photos, setPhotos] = useState(initialPhotos);
   // Liste "à plat" incluant les variantes de chaque groupe (chantier "groupe de produits",
   // 02/08/2026) — utilisée partout où on doit RETROUVER le produit réellement assigné à une
@@ -483,11 +500,11 @@ export function PrintSelectionPageView({
           setShippingQuoteError(null);
         } else {
           setShippingQuote(null);
-          setShippingQuoteError(data.error || "Livraison : devis momentanément indisponible.");
+          setShippingQuoteError(data.error || t("gallery.printSelection.shippingQuoteUnavailable"));
         }
       } catch {
         setShippingQuote(null);
-        setShippingQuoteError("Livraison : devis momentanément indisponible.");
+        setShippingQuoteError(t("gallery.printSelection.shippingQuoteUnavailable"));
       } finally {
         setShippingQuoteLoading(false);
       }
@@ -681,23 +698,23 @@ export function PrintSelectionPageView({
   async function handleOrder() {
     setError(null);
     if (printProducts.length === 0) {
-      setError("Aucun tarif d'impression n'a été configuré par le photographe.");
+      setError(t("gallery.printSelection.errorNoPricing"));
       return;
     }
     if (photos.length === 0) {
-      setError("Votre sélection est vide.");
+      setError(t("gallery.printSelection.errorEmptySelection"));
       return;
     }
     if (hasUnassigned) {
-      setError("Assignez un service d'impression à chaque photo avant de commander.");
+      setError(t("gallery.printSelection.errorUnassignedPhotos"));
       return;
     }
     if (!customer.name || !customer.email) {
-      setError("Merci de renseigner votre nom et votre email.");
+      setError(t("gallery.printSelection.errorMissingContact"));
       return;
     }
     if (!shipping.line1 || !shipping.city || !shipping.postalCode || !shipping.countryCode || !shipping.phone) {
-      setError("Merci de renseigner votre adresse de livraison complète, téléphone inclus.");
+      setError(t("gallery.printSelection.errorMissingAddress"));
       return;
     }
     // Bloque la commande si le devis de livraison n'a pas pu être calculé (Prodigi indisponible)
@@ -705,11 +722,11 @@ export function PrintSelectionPageView({
     // la commande dans ce cas (voir doc dans checkout/route.ts) ; prévenir ICI évite au client
     // d'arriver jusqu'à Stripe pour rien (02/08/2026, chantier "shipping dynamique").
     if (shippingQuoteLoading) {
-      setError("Calcul des frais de livraison en cours, réessayez dans un instant.");
+      setError(t("gallery.printSelection.errorShippingCalculating"));
       return;
     }
     if (!shippingQuote) {
-      setError(shippingQuoteError || "Impossible de calculer les frais de livraison pour le moment. Réessayez.");
+      setError(shippingQuoteError || t("gallery.printSelection.errorShippingUnavailable"));
       return;
     }
     // attributes transmis au panier — chantier "sélection d'attribut au moment de l'achat"
@@ -740,7 +757,7 @@ export function PrintSelectionPageView({
     const data = await res.json();
     setLoading(false);
     if (!res.ok) {
-      setError(data?.error || "Erreur lors de la commande.");
+      setError(data?.error || t("gallery.printSelection.errorOrderFailed"));
       return;
     }
     window.location.href = data.url;
@@ -755,7 +772,7 @@ export function PrintSelectionPageView({
             className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900"
           >
             <IconArrowLeft />
-            Retour à la galerie
+            {t("gallery.printSelection.backToGallery")}
           </Link>
           <div className="flex min-w-0 items-center gap-3 text-right">
             {/* Sélecteur de langue (02/08/2026, demande d'Adriel : "dans gallery mettre la
@@ -781,7 +798,7 @@ export function PrintSelectionPageView({
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-xl font-semibold text-gray-900">
-            Sélection impression{photos.length > 0 ? ` (${photos.length})` : ""}
+            {t("gallery.printSelection.title")}{photos.length > 0 ? ` (${photos.length})` : ""}
           </h1>
           {/* Indicateur de progression (chantier 01/08/2026, sélections à 200 photos) — permet de
               voir en un coup d'œil où on en est sans dérouler toute la liste. */}
@@ -791,12 +808,12 @@ export function PrintSelectionPageView({
                 assignedCount === photos.length ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-600"
               }`}
             >
-              {assignedCount} / {photos.length} assignées
+              {assignedCount} / {photos.length} {t("gallery.printSelection.assignedSuffix")}
             </span>
           )}
         </div>
         <p className="mt-1 text-sm text-gray-500">
-          Vérifiez vos tirages, indiquez vos coordonnées et votre adresse de livraison pour commander.
+          {t("gallery.printSelection.subtitle")}
         </p>
 
         {/* Catalogue des produits d'impression disponibles (demande d'Adriel, 01/08/2026 :
@@ -810,7 +827,7 @@ export function PrintSelectionPageView({
               <button
                 type="button"
                 onClick={() => scrollProductStrip(-1)}
-                aria-label="Produits précédents"
+                aria-label={t("gallery.printSelection.prevProducts")}
                 className="absolute -left-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-md hover:bg-gray-50"
               >
                 <IconChevronLeft />
@@ -844,7 +861,7 @@ export function PrintSelectionPageView({
                       02/08/2026) — le prix affiché est celui de la variante la moins chère. */}
                   {p.variants && p.variants.length > 0 && (
                     <span className="ml-1.5 align-middle text-[10px] font-normal uppercase tracking-wide text-brand-600">
-                      {p.variants.length} tailles
+                      {p.variants.length} {t("gallery.printSelection.sizesCount")}
                     </span>
                   )}
                 </p>
@@ -854,12 +871,12 @@ export function PrintSelectionPageView({
                 <p className="mt-auto text-sm font-medium text-gray-800">
                   {p.variants && p.variants.length > 0 ? (
                     <>
-                      dès {formatMoney(Math.min(...p.variants.map((v) => v.priceCents)), p.currency)}
+                      {t("gallery.printSelection.fromPrice")} {formatMoney(Math.min(...p.variants.map((v) => v.priceCents)), p.currency, locale)}
                     </>
                   ) : (
-                    formatMoney(p.priceCents, p.currency)
+                    formatMoney(p.priceCents, p.currency, locale)
                   )}
-                  <span className="ml-1 text-xs font-normal text-gray-400">/ photo</span>
+                  <span className="ml-1 text-xs font-normal text-gray-400">{t("gallery.printSelection.perPhoto")}</span>
                 </p>
                 {/* Bouton "voir les produits du groupe" (demande d'Adriel, 01/08/2026 : "j'ai
                     ajouté les produits dans un groupe, sauf que j'ai pas la possibilité de voir
@@ -873,7 +890,8 @@ export function PrintSelectionPageView({
                     className="mt-1 flex items-center justify-center gap-1 rounded-md border border-gray-200 py-1 text-xs font-medium text-gray-600 hover:border-brand-300 hover:bg-brand-50/50 hover:text-brand-700"
                   >
                     <IconEye />
-                    Voir les {p.variants.length} produit{p.variants.length > 1 ? "s" : ""}
+                    {t("gallery.printSelection.viewProductsPrefix")} {p.variants.length}{" "}
+                    {pluralize(p.variants.length, "gallery.printSelection.productSingular", "gallery.printSelection.productPlural", t)}
                   </button>
                 )}
               </div>
@@ -884,7 +902,7 @@ export function PrintSelectionPageView({
               <button
                 type="button"
                 onClick={() => scrollProductStrip(1)}
-                aria-label="Produits suivants"
+                aria-label={t("gallery.printSelection.nextProducts")}
                 className="absolute -right-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-md hover:bg-gray-50"
               >
                 <IconChevronRight />
@@ -899,11 +917,10 @@ export function PrintSelectionPageView({
               <IconPrinterEmpty />
             </div>
             <p className="text-sm text-gray-500">
-              Votre sélection est vide. Retournez à la galerie et cliquez sur l&apos;icône imprimante d&apos;une
-              photo pour l&apos;ajouter ici.
+              {t("gallery.printSelection.emptyMessage")}
             </p>
             <Link href={`/g/${gallerySlug}`} className="btn-primary mt-1">
-              Retour à la galerie
+              {t("gallery.printSelection.backToGallery")}
             </Link>
           </div>
         ) : (
@@ -920,7 +937,7 @@ export function PrintSelectionPageView({
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Rechercher une photo (nom de fichier)"
+                    placeholder={t("gallery.printSelection.searchPlaceholder")}
                     className="input py-1.5 pl-8 text-xs"
                   />
                 </div>
@@ -932,7 +949,7 @@ export function PrintSelectionPageView({
                       filterMode === "all" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                     }`}
                   >
-                    Toutes ({photos.length})
+                    {t("gallery.printSelection.filterAll")} ({photos.length})
                   </button>
                   {unassignedPhotos.length > 0 && (
                     <button
@@ -944,7 +961,7 @@ export function PrintSelectionPageView({
                           : "bg-amber-50 text-amber-700 hover:bg-amber-100"
                       }`}
                     >
-                      Non assignées ({unassignedPhotos.length})
+                      {t("gallery.printSelection.filterUnassigned")} ({unassignedPhotos.length})
                     </button>
                   )}
                 </div>
@@ -961,13 +978,13 @@ export function PrintSelectionPageView({
                     onChange={toggleAll}
                     className="h-4 w-4 accent-gray-800"
                   />
-                  Tout sélectionner{filterMode !== "all" || searchQuery ? " (filtré)" : ""}
+                  {t("gallery.printSelection.selectAll")}{filterMode !== "all" || searchQuery ? ` ${t("gallery.printSelection.filteredSuffix")}` : ""}
                 </label>
                 <div className="flex items-center gap-0.5 rounded-md border border-gray-200 p-0.5">
                   <button
                     type="button"
                     onClick={() => setView("list")}
-                    aria-label="Vue liste"
+                    aria-label={t("gallery.printSelection.listView")}
                     className={`flex h-6 w-6 items-center justify-center rounded ${
                       view === "list" ? "bg-gray-800 text-white" : "text-gray-400 hover:text-gray-700"
                     }`}
@@ -977,7 +994,7 @@ export function PrintSelectionPageView({
                   <button
                     type="button"
                     onClick={() => setView("grid")}
-                    aria-label="Vue grille"
+                    aria-label={t("gallery.printSelection.gridView")}
                     className={`flex h-6 w-6 items-center justify-center rounded ${
                       view === "grid" ? "bg-gray-800 text-white" : "text-gray-400 hover:text-gray-700"
                     }`}
@@ -988,7 +1005,7 @@ export function PrintSelectionPageView({
               </div>
 
               {displayGroups.length === 0 && (
-                <p className="px-5 py-8 text-center text-sm text-gray-400">Aucune photo ne correspond à ce filtre.</p>
+                <p className="px-5 py-8 text-center text-sm text-gray-400">{t("gallery.printSelection.noPhotosMatch")}</p>
               )}
 
               <div className="divide-y divide-gray-100 px-2 py-2">
@@ -1043,7 +1060,7 @@ export function PrintSelectionPageView({
                             pas avoir à cocher 90 photos une par une. */}
                         <input
                           type="checkbox"
-                          aria-label={`Sélectionner tout le groupe ${g.product ? tr(g.product).name : "non assigné"}`}
+                          aria-label={`${t("gallery.printSelection.selectGroupPrefix")} ${g.product ? tr(g.product).name : t("gallery.printSelection.unassignedGroupName")}`}
                           checked={groupAllChecked}
                           ref={(el) => {
                             if (el) el.indeterminate = groupSomeChecked;
@@ -1063,14 +1080,14 @@ export function PrintSelectionPageView({
                                 g.product ? "text-gray-700" : "text-amber-700"
                               }`}
                             >
-                              {g.product ? tr(g.product).name : "Service non assigné"}
+                              {g.product ? tr(g.product).name : t("gallery.printSelection.unassignedGroupName")}
                               {/* Prix à l'unité à côté du nom du produit (demande d'Adriel,
                                   01/08/2026 : "au niveau de la checklist a coté du nom de la
                                   liste mettre le prix à l'unité") — distinct du total du groupe
                                   déjà affiché à droite (nombre de photos × prix). */}
                               {g.product && (
                                 <span className="ml-1.5 font-normal normal-case text-gray-400">
-                                  · {formatMoney(g.product.priceCents, g.product.currency)}/photo
+                                  · {formatMoney(g.product.priceCents, g.product.currency, locale)}{t("gallery.printSelection.perPhoto")}
                                 </span>
                               )}
                             </h3>
@@ -1081,10 +1098,10 @@ export function PrintSelectionPageView({
                               diminue en temps réel à chaque lot assigné, sans jamais sortir de
                               l'écran pendant qu'on trie un gros volume de photos. */}
                           <span className={`shrink-0 text-xs ${g.product ? "text-gray-400" : "font-medium text-amber-700"}`}>
-                            {g.photos.length} photo{g.photos.length > 1 ? "s" : ""}
+                            {g.photos.length} {pluralize(g.photos.length, "gallery.printSelection.photoSingular", "gallery.printSelection.photoPlural", t)}
                             {g.product
-                              ? ` · ${formatMoney(g.product.priceCents * g.photos.length, g.product.currency)}`
-                              : " à assigner"}
+                              ? ` · ${formatMoney(g.product.priceCents * g.photos.length, g.product.currency, locale)}`
+                              : ` ${t("gallery.printSelection.toAssign")}`}
                           </span>
                         </button>
                         {/* Réassigne TOUT le groupe (voir reassignGroup) sans avoir à cocher les
@@ -1102,13 +1119,13 @@ export function PrintSelectionPageView({
                         {printProducts.length > 0 && (
                           <div className="flex shrink-0 items-center gap-1.5">
                             <span className="hidden text-xs text-gray-400 sm:inline">
-                              {g.product ? "Réassigner à" : "Assigner à"}
+                              {g.product ? t("gallery.printSelection.reassignTo") : t("gallery.printSelection.assignTo")}
                             </span>
                             <div
                               className="w-40"
                               title={
                                 groupSomeChecked
-                                  ? "Sélection partielle dans ce groupe : utilisez \"Assigner à\" en bas de page pour ne déplacer que les photos cochées, ou cochez tout le groupe pour le déplacer en entier."
+                                  ? t("gallery.printSelection.partialSelectionTooltip")
                                   : undefined
                               }
                             >
@@ -1118,15 +1135,15 @@ export function PrintSelectionPageView({
                                 options={printProducts
                                   .filter((p) => p.id !== g.product?.id)
                                   .map((p) => ({ value: p.id, label: p.name }))}
-                                placeholder={groupSomeChecked ? "Sélection partielle" : "Choisir..."}
-                                searchPlaceholder="Rechercher un produit..."
+                                placeholder={groupSomeChecked ? t("gallery.printSelection.partialSelectionPlaceholder") : t("gallery.printSelection.choosePlaceholder")}
+                                searchPlaceholder={t("gallery.printSelection.searchProductPlaceholder")}
                                 disabled={groupSomeChecked}
                                 // "Non assigné" n'a de sens que pour désassigner un groupe déjà
                                 // assigné (g.product non nul) — le groupe "unassigned" l'est
                                 // déjà, inutile de proposer de s'y réassigner lui-même (demande
                                 // d'Adriel, 01/08/2026 : "je veux la possibilité pour une image
                                 // assigné de le rendre non-assigné").
-                                emptyOptionLabel={g.product ? "Non assigné" : undefined}
+                                emptyOptionLabel={g.product ? t("gallery.printSelection.unassignedOption") : undefined}
                               />
                             </div>
                           </div>
@@ -1149,12 +1166,12 @@ export function PrintSelectionPageView({
                                 initial: groupAttributesUniform ? (groupAttributesSample ?? undefined) : undefined,
                               })
                             }
-                            title="Choisir les options (couleur, cadre...) de ce groupe"
+                            title={t("gallery.printSelection.chooseOptionsTitle")}
                             className="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200"
                           >
                             {groupAttributesUniform && groupAttributesSample
                               ? Object.values(groupAttributesSample).join(" · ")
-                              : "Choisir les options"}
+                              : t("gallery.printSelection.chooseOptionsLabel")}
                           </button>
                         )}
                       </div>
@@ -1174,7 +1191,7 @@ export function PrintSelectionPageView({
                                   type="button"
                                   onClick={() => setZoomIndex(flatOrder.findIndex((x) => x.id === p.id))}
                                   className="shrink-0"
-                                  aria-label="Agrandir"
+                                  aria-label={t("gallery.printSelection.enlarge")}
                                 >
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img
@@ -1189,7 +1206,7 @@ export function PrintSelectionPageView({
                                   onClick={() => removeOne(p.id)}
                                   className="shrink-0 text-xs uppercase tracking-wide text-gray-400 hover:text-gray-700"
                                 >
-                                  Retirer
+                                  {t("gallery.printSelection.remove")}
                                 </button>
                               </li>
                             ))}
@@ -1214,7 +1231,7 @@ export function PrintSelectionPageView({
                                 />
                                 <button
                                   onClick={() => removeOne(p.id)}
-                                  aria-label="Retirer"
+                                  aria-label={t("gallery.printSelection.remove")}
                                   className="absolute right-1 top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white group-hover:flex"
                                 >
                                   <IconClose />
@@ -1234,7 +1251,7 @@ export function PrintSelectionPageView({
                           onClick={() => revealGroup(key, g.photos.length)}
                           className="mx-3 mt-2 rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
                         >
-                          Afficher les {g.photos.length - visiblePhotos.length} photos restantes
+                          {t("gallery.printSelection.showRemainingPrefix")} {g.photos.length - visiblePhotos.length} {t("gallery.printSelection.remainingPhotos")}
                         </button>
                       )}
                     </div>
@@ -1246,12 +1263,12 @@ export function PrintSelectionPageView({
             {/* Carte sticky : récapitulatif + coordonnées + adresse de livraison + CTA. */}
             <div className="lg:sticky lg:top-20">
               <div className="rounded-xl border border-gray-200 bg-white p-5">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-800">Récapitulatif</h2>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-800">{t("gallery.printSelection.summaryTitle")}</h2>
 
                 {printProducts.length === 0 ? (
                   <div className="mt-3 flex items-start gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-3.5 py-3 text-sm text-amber-800">
                     <IconAlert className="mt-0.5 shrink-0 text-amber-500" />
-                    <p>Aucun tarif d&apos;impression n&apos;a été configuré par le photographe pour le moment.</p>
+                    <p>{t("gallery.printSelection.noPricingConfigured")}</p>
                   </div>
                 ) : (
                   <>
@@ -1259,9 +1276,7 @@ export function PrintSelectionPageView({
                       <div className="mt-3 flex items-start gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-800">
                         <IconAlert className="mt-0.5 shrink-0 text-amber-500" />
                         <p>
-                          {unassignedPhotos.length} photo{unassignedPhotos.length > 1 ? "s" : ""} sans service assigné —
-                          filtrez sur &laquo;&nbsp;Non assignées&nbsp;&raquo; pour les retrouver, puis cochez-les ou
-                          choisissez un produit directement dans l&apos;en-tête du groupe.
+                          {unassignedPhotos.length} {pluralize(unassignedPhotos.length, "gallery.printSelection.photoSingular", "gallery.printSelection.photoPlural", t)} {t("gallery.printSelection.unassignedWarning")}
                         </p>
                       </div>
                     )}
@@ -1275,28 +1290,28 @@ export function PrintSelectionPageView({
                               {g.photos.length} × {tr(g.product!).name}
                             </span>
                             <span className="shrink-0 font-medium text-gray-800">
-                              {formatMoney(g.product!.priceCents * g.photos.length, g.product!.currency)}
+                              {formatMoney(g.product!.priceCents * g.photos.length, g.product!.currency, locale)}
                             </span>
                           </div>
                         ))}
                     </div>
 
                     <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
-                      <span className="text-sm font-medium text-gray-600">Tirages</span>
-                      <span className="text-lg font-semibold text-gray-900">{formatMoney(totalCents, currency)}</span>
+                      <span className="text-sm font-medium text-gray-600">{t("gallery.printSelection.printsLabel")}</span>
+                      <span className="text-lg font-semibold text-gray-900">{formatMoney(totalCents, currency, locale)}</span>
                     </div>
 
                     <div className="mt-5 space-y-2 border-t border-gray-100 pt-5">
-                      <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Vos coordonnées</p>
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-400">{t("gallery.printSelection.yourContactInfo")}</p>
                       <input
-                        placeholder="Votre nom *"
+                        placeholder={t("gallery.printSelection.fieldName")}
                         required
                         className="input"
                         value={customer.name}
                         onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
                       />
                       <input
-                        placeholder="Votre email *"
+                        placeholder={t("gallery.printSelection.fieldEmail")}
                         type="email"
                         required
                         className="input"
@@ -1307,12 +1322,12 @@ export function PrintSelectionPageView({
 
                     <div className="mt-4 space-y-2 border-t border-gray-100 pt-4">
                       <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                        Adresse de livraison des tirages
+                        {t("gallery.printSelection.shippingAddressTitle")}
                       </p>
 
                       <div ref={addressBoxRef} className="relative">
                         <input
-                          placeholder="Adresse (numéro et rue) *"
+                          placeholder={t("gallery.printSelection.fieldAddress")}
                           required
                           className="input"
                           value={shipping.line1}
@@ -1339,21 +1354,21 @@ export function PrintSelectionPageView({
                       </div>
 
                       <input
-                        placeholder="Complément d'adresse (optionnel)"
+                        placeholder={t("gallery.printSelection.fieldAddress2")}
                         className="input"
                         value={shipping.line2}
                         onChange={(e) => setShipping({ ...shipping, line2: e.target.value })}
                       />
                       <div className="grid grid-cols-2 gap-3">
                         <input
-                          placeholder="Code postal *"
+                          placeholder={t("gallery.printSelection.fieldPostalCode")}
                           required
                           className="input"
                           value={shipping.postalCode}
                           onChange={(e) => setShipping({ ...shipping, postalCode: e.target.value })}
                         />
                         <input
-                          placeholder="Ville *"
+                          placeholder={t("gallery.printSelection.fieldCity")}
                           required
                           className="input"
                           value={shipping.city}
@@ -1376,7 +1391,7 @@ export function PrintSelectionPageView({
                           ))}
                         </select>
                         <input
-                          placeholder="Téléphone *"
+                          placeholder={t("gallery.printSelection.fieldPhone")}
                           required
                           className="input"
                           value={shipping.phone}
@@ -1384,8 +1399,7 @@ export function PrintSelectionPageView({
                         />
                       </div>
                       <p className="text-[11px] text-gray-400">
-                        * Champs obligatoires (nom, email, adresse, code postal, ville, téléphone) —
-                        seul le complément d&apos;adresse est optionnel.
+                        {t("gallery.printSelection.requiredFieldsNote")}
                       </p>
                     </div>
 
@@ -1399,15 +1413,15 @@ export function PrintSelectionPageView({
                         que d'annoncer un montant faux). */}
                     {(shippingQuoteLoading || shippingQuote || shippingQuoteError) && (
                       <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-4 text-sm text-gray-600">
-                        <span>Livraison</span>
+                        <span>{t("gallery.printSelection.shippingLabel")}</span>
                         {shippingQuoteLoading ? (
                           <span className="flex items-center gap-1.5 text-xs text-gray-400">
                             <Spinner size={12} />
-                            Calcul en cours…
+                            {t("gallery.printSelection.calculating")}
                           </span>
                         ) : shippingQuote ? (
                           <span className="shrink-0 font-medium text-gray-800">
-                            {formatMoney(shippingQuote.cents, shippingQuote.currency)}
+                            {formatMoney(shippingQuote.cents, shippingQuote.currency, locale)}
                           </span>
                         ) : (
                           <span className="text-xs text-amber-600">{shippingQuoteError}</span>
@@ -1426,20 +1440,19 @@ export function PrintSelectionPageView({
                         voir prodigiOrder.ts), qui peut être suivie ou non selon destination/produit. */}
                     {shippingQuote && (
                       <p className="mt-2 text-[11px] text-gray-400">
-                        Délai indicatif : impression sous 2 à 4 jours ouvrés, puis expédition en
-                        Standard (délai de transport variable selon la destination).
+                        {t("gallery.printSelection.deliveryEstimate")}
                       </p>
                     )}
                     {!shippingQuote && !shippingQuoteLoading && !shippingQuoteError && assignedCount > 0 && (
                       <p className="mt-3 border-t border-gray-100 pt-3 text-[11px] text-gray-400">
-                        Renseignez une adresse complète ci-dessus pour calculer les frais de livraison.
+                        {t("gallery.printSelection.addressNeededForShipping")}
                       </p>
                     )}
 
                     <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
-                      <span className="text-sm font-medium text-gray-600">Total</span>
+                      <span className="text-sm font-medium text-gray-600">{t("gallery.printSelection.totalLabel")}</span>
                       <span className="text-lg font-semibold text-gray-900">
-                        {formatMoney(totalCents + (shippingQuote?.cents ?? 0), currency)}
+                        {formatMoney(totalCents + (shippingQuote?.cents ?? 0), currency, locale)}
                       </span>
                     </div>
 
@@ -1447,12 +1460,11 @@ export function PrintSelectionPageView({
 
                     <button onClick={handleOrder} disabled={loading} className="btn-primary mt-4 w-full">
                       {loading
-                        ? "Redirection..."
-                        : `Commander · ${formatMoney(totalCents + (shippingQuote?.cents ?? 0), currency)}`}
+                        ? t("gallery.printSelection.redirecting")
+                        : `${t("gallery.printSelection.orderButton")} · ${formatMoney(totalCents + (shippingQuote?.cents ?? 0), currency, locale)}`}
                     </button>
                     <p className="mt-2 text-center text-[11px] text-gray-400">
-                      Paiement sécurisé par carte bancaire (Stripe). Vos tirages sont imprimés et expédiés par notre
-                      partenaire d&apos;impression.
+                      {t("gallery.printSelection.securePaymentNote")}
                     </p>
                   </>
                 )}
@@ -1470,12 +1482,13 @@ export function PrintSelectionPageView({
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
             <span className="text-sm font-medium text-gray-800">
-              {validChecked.size} photo{validChecked.size > 1 ? "s" : ""} sélectionnée{validChecked.size > 1 ? "s" : ""}
+              {validChecked.size} {pluralize(validChecked.size, "gallery.printSelection.photoSingular", "gallery.printSelection.photoPlural", t)}{" "}
+              {pluralize(validChecked.size, "gallery.printSelection.selectedSingular", "gallery.printSelection.selectedPlural", t)}
             </span>
             <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
               {printProducts.length > 0 && (
                 <div className="flex items-center gap-1.5">
-                  <span className="hidden text-xs text-gray-500 sm:inline">Assigner à :</span>
+                  <span className="hidden text-xs text-gray-500 sm:inline">{t("gallery.printSelection.assignTo")} :</span>
                   <div className="w-44">
                     {/* value="" en permanence (jamais l'id du dernier produit choisi) — bug
                         remonté par Adriel (01/08/2026) : "au footer il assigne deja sans que je
@@ -1497,14 +1510,14 @@ export function PrintSelectionPageView({
                       value=""
                       onChange={(value) => assignToProduct(value)}
                       options={printProducts.map((p) => ({ value: p.id, label: tr(p).name }))}
-                      placeholder="Choisir un produit"
-                      searchPlaceholder="Rechercher un produit..."
+                      placeholder={t("gallery.printSelection.chooseProductPlaceholder")}
+                      searchPlaceholder={t("gallery.printSelection.searchProductPlaceholder")}
                       openUpward
                       // Permet de désassigner les photos cochées, y compris déjà assignées
                       // (demande d'Adriel, 01/08/2026 : "je veux la possibilité pour une image
                       // assigné de le rendre non-assigné") — cocher une photo dans un groupe puis
                       // choisir "Non assigné" ici la fait ressortir vers "Service non assigné".
-                      emptyOptionLabel="Non assigné"
+                      emptyOptionLabel={t("gallery.printSelection.unassignedOption")}
                     />
                   </div>
                 </div>
@@ -1513,13 +1526,13 @@ export function PrintSelectionPageView({
                 onClick={handleBulkDelete}
                 className="text-xs font-medium uppercase tracking-wide text-red-600 hover:text-red-800"
               >
-                Supprimer ({validChecked.size})
+                {t("gallery.printSelection.deleteButton")} ({validChecked.size})
               </button>
               <button
                 onClick={() => setChecked(new Set())}
                 className="text-xs font-medium uppercase tracking-wide text-gray-500 hover:text-gray-700"
               >
-                Annuler
+                {t("gallery.printSelection.cancelButton")}
               </button>
             </div>
           </div>
@@ -1605,6 +1618,7 @@ function ProductOptionsModal({
   onConfirm: (variantId: string, attributes: Record<string, string> | null, borderType: string | null) => void;
 }) {
   const tr = useProductText();
+  const { t, locale } = useLanguage();
   const variants = entry.variants && entry.variants.length > 0 ? entry.variants : [entry];
   const showSizePicker = variants.length > 1;
 
@@ -1673,27 +1687,27 @@ function ProductOptionsModal({
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label={`Options pour ${entry.name}`}
+        aria-label={`${t("gallery.printSelection.optionsForPrefix")} ${entry.name}`}
       >
         <div className="flex items-start gap-4 border-b border-gray-100 px-8 py-6">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
             <IconSliders />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-lg font-semibold text-gray-900">Options — {entry.name}</h3>
+            <h3 className="truncate text-lg font-semibold text-gray-900">{t("gallery.printSelection.optionsDash")} {entry.name}</h3>
             <p className="mt-1 text-sm text-gray-500">
               {showSizePicker && attributeEntries.length > 0
-                ? "Choisissez le format et les options"
+                ? t("gallery.printSelection.chooseFormatAndOptions")
                 : showSizePicker
-                  ? "Choisissez le format"
-                  : `Choisissez les ${attributeEntries.length} option${attributeEntries.length > 1 ? "s" : ""}`}{" "}
-              avant d&apos;assigner {count > 1 ? `ces ${count} photos` : "cette photo"}.
+                  ? t("gallery.printSelection.chooseFormat")
+                  : `${t("gallery.printSelection.chooseOptionsPrefix")} ${attributeEntries.length} ${pluralize(attributeEntries.length, "gallery.printSelection.optionSingular", "gallery.printSelection.optionPlural", t)}`}{" "}
+              {t("gallery.printSelection.beforeAssignPrefix")} {count > 1 ? `${t("gallery.printSelection.thesePhotosPrefix")} ${count} ${t("gallery.printSelection.photoPlural")}` : t("gallery.printSelection.thisPhoto")}.
             </p>
           </div>
           <button
             type="button"
             onClick={onCancel}
-            aria-label="Fermer"
+            aria-label={t("gallery.printSelection.close")}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
           >
             <IconClose />
@@ -1722,7 +1736,7 @@ function ProductOptionsModal({
             <div className="w-full text-center">
               <p className="line-clamp-2 text-sm font-medium leading-snug text-gray-900">{tr(selectedVariant).name}</p>
               <p className="mt-1 text-base font-semibold text-gray-800">
-                {formatMoney(selectedVariant.priceCents, selectedVariant.currency)}
+                {formatMoney(selectedVariant.priceCents, selectedVariant.currency, locale)}
               </p>
             </div>
           </div>
@@ -1734,7 +1748,7 @@ function ProductOptionsModal({
                   importante à comparer entre tailles. */}
               {showSizePicker && (
                 <div>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Format</p>
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">{t("gallery.printSelection.formatLabel")}</p>
                   <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                     {variants.map((variant) => {
                       const selected = variant.id === selectedVariantId;
@@ -1752,7 +1766,7 @@ function ProductOptionsModal({
                         >
                           <span className="min-w-0 flex-1 truncate font-medium">{tr(variant).name}</span>
                           <span className="shrink-0 text-sm font-semibold">
-                            {formatMoney(variant.priceCents, variant.currency)}
+                            {formatMoney(variant.priceCents, variant.currency, locale)}
                           </span>
                         </button>
                       );
@@ -1770,7 +1784,7 @@ function ProductOptionsModal({
               {attributeEntries.map(([name, options]) => (
                 <div key={name}>
                   <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
-                    {attributeLabel(name)}
+                    {attributeLabel(name, t)}
                   </p>
                   <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                     {options.map((option) => {
@@ -1813,14 +1827,14 @@ function ProductOptionsModal({
 
         <div className="flex justify-end gap-2 border-t border-gray-100 bg-gray-50/60 px-8 py-5">
           <button type="button" className="btn-secondary text-sm" onClick={onCancel}>
-            Annuler
+            {t("gallery.printSelection.cancelButton")}
           </button>
           <button
             type="button"
             className="btn-primary text-sm"
             onClick={() => onConfirm(selectedVariant.id, attributeEntries.length > 0 ? values : null, borderType)}
           >
-            Valider
+            {t("gallery.printSelection.validateButton")}
           </button>
         </div>
       </div>
@@ -2043,6 +2057,7 @@ function FramePreview({
  */
 function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO; onClose: () => void }) {
   const tr = useProductText();
+  const { t, locale } = useLanguage();
   const variants = group.variants ?? [];
   const prices = variants.map((v) => v.priceCents);
   const minPrice = prices.length > 0 ? Math.min(...prices) : null;
@@ -2059,7 +2074,7 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label={`Produits du groupe ${tr(group).name}`}
+        aria-label={`${t("gallery.printSelection.productsOfGroupPrefix")} ${tr(group).name}`}
       >
         {/* En-tête — redesign "pro" (01/08/2026, demande d'Adriel : "tu es expert en ux, ui et
             expert en web design, je veux que tu me proposes un design pro de ce modal" puis
@@ -2074,14 +2089,15 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
           <div className="min-w-0 flex-1">
             <h3 className="truncate text-lg font-semibold text-gray-900">{tr(group).name}</h3>
             <p className="mt-1 text-sm text-gray-500">
-              {variants.length} produit{variants.length > 1 ? "s" : ""} disponible{variants.length > 1 ? "s" : ""}
+              {variants.length} {pluralize(variants.length, "gallery.printSelection.productSingular", "gallery.printSelection.productPlural", t)}{" "}
+              {pluralize(variants.length, "gallery.printSelection.availableSingular", "gallery.printSelection.availablePlural", t)}
               {minPrice != null && maxPrice != null && (
                 <>
                   {" "}
                   ·{" "}
                   {minPrice === maxPrice
-                    ? formatMoney(minPrice, variants[0].currency)
-                    : `${formatMoney(minPrice, variants[0].currency)} – ${formatMoney(maxPrice, variants[0].currency)}`}
+                    ? formatMoney(minPrice, variants[0].currency, locale)
+                    : `${formatMoney(minPrice, variants[0].currency, locale)} – ${formatMoney(maxPrice, variants[0].currency, locale)}`}
                 </>
               )}
             </p>
@@ -2089,7 +2105,7 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fermer"
+            aria-label={t("gallery.printSelection.close")}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
           >
             <IconClose />
@@ -2115,7 +2131,7 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
             {tr(group).description ? (
               <p className="whitespace-pre-line text-sm leading-relaxed text-gray-600">{tr(group).description}</p>
             ) : (
-              <p className="text-sm italic text-gray-400">Aucune description renseignée pour ce groupe.</p>
+              <p className="text-sm italic text-gray-400">{t("gallery.printSelection.noDescriptionForGroup")}</p>
             )}
           </div>
 
@@ -2123,7 +2139,7 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
           <div className="min-h-0 flex-1 overflow-y-auto">
             {variants.length === 0 ? (
               <p className="px-8 py-10 text-center text-sm text-gray-400">
-                Aucun produit disponible dans ce groupe pour le moment.
+                {t("gallery.printSelection.noProductsInGroup")}
               </p>
             ) : (
               <ul className="divide-y divide-gray-100">
@@ -2154,9 +2170,9 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-sm font-semibold text-gray-900">
-                        {formatMoney(variant.priceCents, variant.currency)}
+                        {formatMoney(variant.priceCents, variant.currency, locale)}
                       </p>
-                      <p className="text-[11px] text-gray-400">/ photo</p>
+                      <p className="text-[11px] text-gray-400">{t("gallery.printSelection.perPhoto")}</p>
                     </div>
                   </li>
                   );
@@ -2167,9 +2183,9 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-gray-100 bg-gray-50/60 px-8 py-5">
-          <p className="text-xs text-gray-400">Le format se choisit au moment d&apos;assigner une photo.</p>
+          <p className="text-xs text-gray-400">{t("gallery.printSelection.formatChosenAtAssignment")}</p>
           <button type="button" className="btn-secondary shrink-0 text-sm" onClick={onClose}>
-            Fermer
+            {t("gallery.printSelection.close")}
           </button>
         </div>
       </div>
@@ -2189,6 +2205,7 @@ function PrintZoomModal({
   onNavigate: (index: number) => void;
   onClose: () => void;
 }) {
+  const { t } = useLanguage();
   const photo = photos[index];
 
   useEffect(() => {
@@ -2207,7 +2224,7 @@ function PrintZoomModal({
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 px-4" onClick={onClose}>
       <button
         onClick={onClose}
-        aria-label="Fermer"
+        aria-label={t("gallery.printSelection.close")}
         className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
       >
         <IconClose />
@@ -2219,7 +2236,7 @@ function PrintZoomModal({
               e.stopPropagation();
               onNavigate((index - 1 + photos.length) % photos.length);
             }}
-            aria-label="Photo précédente"
+            aria-label={t("gallery.printSelection.prevPhoto")}
             className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 sm:left-5"
           >
             ‹
@@ -2229,7 +2246,7 @@ function PrintZoomModal({
               e.stopPropagation();
               onNavigate((index + 1) % photos.length);
             }}
-            aria-label="Photo suivante"
+            aria-label={t("gallery.printSelection.nextPhoto")}
             className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 sm:right-5"
           >
             ›
