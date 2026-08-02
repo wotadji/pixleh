@@ -157,6 +157,24 @@ export default function AdminPrintCatalogPage() {
   // en ligne et en grid") — même vocabulaire visuel que la page /print-selection côté client.
   const [view, setView] = useState<"list" | "grid">("list");
 
+  /** Accordéon par groupe de produit (demande d'Adriel, 02/08/2026 : "peux tu mettre un systeme
+   * accordeon par groupe de produit ?") — les variantes d'un groupe sont repliées par défaut
+   * (voir l'initialisation dans loadItems ci-dessous, une seule fois au premier chargement) pour
+   * garder la liste lisible même avec plusieurs groupes déjà bien remplis en SKU ; un clic sur le
+   * chevron d'un groupe (CatalogRow en vue liste, en-tête "N produits" en vue grille) le
+   * déplie/replie indépendamment des autres. Clé = id du groupe. */
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const collapsedGroupsInitialized = useRef(false);
+
+  function toggleGroupCollapse(groupId: string) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  }
+
   /**
    * Réordonnancement par glisser-déposer (01/08/2026, demande d'Adriel : "ajouter la possibilité
    * de déplacer les groupe de produits pour classer par ordre d'affichage (drill down par
@@ -221,8 +239,15 @@ export default function AdminPrintCatalogPage() {
   async function loadItems() {
     const res = await fetch("/api/admin/print-catalog");
     if (res.ok) {
-      const data = await res.json();
+      const data: { items: PrintCatalogItemDTO[] } = await res.json();
       setItems(data.items);
+      // Replié par défaut au tout premier chargement seulement (pas aux rechargements après
+      // save/toggle/reorder, sinon un groupe qu'on vient de déplier se refermerait tout seul
+      // après chaque action) — voir collapsedGroups ci-dessus.
+      if (!collapsedGroupsInitialized.current) {
+        collapsedGroupsInitialized.current = true;
+        setCollapsedGroups(new Set(data.items.filter((i) => i.isProductGroup).map((i) => i.id)));
+      }
     }
   }
 
@@ -668,6 +693,8 @@ export default function AdminPrintCatalogPage() {
               reorderEnabled={canReorderRoot}
               onReorder={reorderRoot}
               onReorderVariant={(draggedId, targetId) => reorderVariants(item.id, draggedId, targetId)}
+              collapsed={collapsedGroups.has(item.id)}
+              onToggleCollapse={() => toggleGroupCollapse(item.id)}
             />
           ) : (
             <div key={item.id}>
@@ -689,8 +716,11 @@ export default function AdminPrintCatalogPage() {
                 onRemove={remove}
                 reorderEnabled={canReorderRoot}
                 onReorder={reorderRoot}
+                collapsible={item.isProductGroup}
+                collapsed={collapsedGroups.has(item.id)}
+                onToggleCollapse={() => toggleGroupCollapse(item.id)}
               />
-              {item.isProductGroup && (
+              {item.isProductGroup && !collapsedGroups.has(item.id) && (
                 <div className="divide-y divide-gray-100 border-t border-gray-100 bg-gray-50/60 pl-6">
                   {(variantsByGroup.get(item.id) ?? []).length === 0 && (
                     <p className="p-4 text-sm text-gray-400">Aucun SKU dans ce groupe pour le moment.</p>
@@ -811,6 +841,8 @@ function GridCard({
   reorderEnabled,
   onReorder,
   onReorderVariant,
+  collapsed,
+  onToggleCollapse,
 }: {
   item: PrintCatalogItemDTO;
   variants: PrintCatalogItemDTO[];
@@ -829,6 +861,10 @@ function GridCard({
   reorderEnabled?: boolean;
   onReorder?: (draggedId: string, targetId: string) => void;
   onReorderVariant?: (draggedId: string, targetId: string) => void;
+  /** Accordéon par groupe (02/08/2026, demande d'Adriel : "peux tu mettre un systeme accordeon
+   * par groupe de produit ?") — ignoré si item n'est pas un groupe (isProductGroup false). */
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }) {
   const marginCents = item.wholesaleCostCents != null ? item.priceCents - item.wholesaleCostCents : null;
   const tone = marginCents != null ? marginTone(marginCents, item.priceCents) : null;
@@ -951,12 +987,27 @@ function GridCard({
       </div>
 
       {item.isProductGroup && (
-        <div className="border-t border-gray-100 bg-gray-50/70 px-4 py-3">
-          {variants.length === 0 ? (
-            <p className="text-xs text-gray-400">Aucun SKU dans ce groupe pour le moment.</p>
-          ) : (
-            <ul className="space-y-1.5">
-              {variants.map((v) => (
+        <div className="border-t border-gray-100 bg-gray-50/70">
+          {/* Accordéon par groupe (02/08/2026, demande d'Adriel : "peux tu mettre un systeme
+              accordeon par groupe de produit ?") — replié par défaut au premier chargement (voir
+              collapsedGroups), l'en-tête reste toujours visible et cliquable même replié. */}
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="flex w-full items-center justify-between px-4 py-2.5 text-xs font-medium text-gray-600 hover:bg-gray-100/80"
+          >
+            <span>
+              {variants.length} produit{variants.length > 1 ? "s" : ""}
+            </span>
+            <IconChevronDown className={`transition-transform ${collapsed ? "-rotate-90" : ""}`} />
+          </button>
+          {!collapsed && (
+            <div className="px-4 pb-3">
+              {variants.length === 0 ? (
+                <p className="text-xs text-gray-400">Aucun SKU dans ce groupe pour le moment.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {variants.map((v) => (
                 <li
                   key={v.id}
                   draggable
@@ -1003,16 +1054,18 @@ function GridCard({
                     </button>
                   </span>
                 </li>
-              ))}
-            </ul>
+                  ))}
+                </ul>
+              )}
+              <button
+                type="button"
+                className="mt-2.5 w-full rounded-full bg-white px-3 py-1.5 text-xs font-medium text-brand-700 shadow-sm ring-1 ring-brand-200 hover:bg-brand-50"
+                onClick={() => onAddVariant(item)}
+              >
+                + Ajouter un SKU
+              </button>
+            </div>
           )}
-          <button
-            type="button"
-            className="mt-2.5 w-full rounded-full bg-white px-3 py-1.5 text-xs font-medium text-brand-700 shadow-sm ring-1 ring-brand-200 hover:bg-brand-50"
-            onClick={() => onAddVariant(item)}
-          >
-            + Ajouter un SKU
-          </button>
         </div>
       )}
 
@@ -1070,6 +1123,9 @@ function CatalogRow({
   onRemove,
   reorderEnabled,
   onReorder,
+  collapsible,
+  collapsed,
+  onToggleCollapse,
 }: {
   item: PrintCatalogItemDTO;
   isVariant?: boolean;
@@ -1086,6 +1142,12 @@ function CatalogRow({
    * racine, voir canReorderRoot ; toujours vrai pour les variantes d'un groupe). */
   reorderEnabled?: boolean;
   onReorder?: (draggedId: string, targetId: string) => void;
+  /** Accordéon par groupe (02/08/2026, demande d'Adriel : "peux tu mettre un systeme accordeon
+   * par groupe de produit ?") — `collapsible` n'est vrai que pour une ligne racine GROUPE (jamais
+   * pour une variante ni un produit autonome) : affiche le chevron qui replie/déplie ses SKU. */
+  collapsible?: boolean;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }) {
   const marginCents = item.wholesaleCostCents != null ? item.priceCents - item.wholesaleCostCents : null;
   const tone = marginCents != null ? marginTone(marginCents, item.priceCents) : null;
@@ -1113,6 +1175,17 @@ function CatalogRow({
       }`}
     >
       <div className="flex min-w-0 items-center gap-3">
+        {collapsible && (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            aria-label={collapsed ? "Déplier le groupe" : "Replier le groupe"}
+            title={collapsed ? "Déplier le groupe" : "Replier le groupe"}
+            className="shrink-0 text-gray-400 hover:text-gray-700"
+          >
+            <IconChevronDown className={`transition-transform ${collapsed ? "-rotate-90" : ""}`} />
+          </button>
+        )}
         {reorderEnabled && (
           <span className="shrink-0 text-gray-300" title="Glisser pour réordonner">
             <IconGrip />
@@ -1776,6 +1849,25 @@ function IconGrip({ small }: { small?: boolean }) {
       <circle cx="16" cy="5" r="1.6" />
       <circle cx="16" cy="12" r="1.6" />
       <circle cx="16" cy="19" r="1.6" />
+    </svg>
+  );
+}
+
+/** Chevron d'accordéon (02/08/2026, demande d'Adriel : "peux tu mettre un systeme accordeon par
+ * groupe de produit ?") — pivote via une classe `-rotate-90` passée par l'appelant plutôt qu'une
+ * prop dédiée, pour rester un simple composant d'icône sans état. */
+function IconChevronDown({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      className={className}
+    >
+      <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
