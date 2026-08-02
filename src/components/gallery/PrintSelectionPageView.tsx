@@ -1496,7 +1496,7 @@ function ProductOptionsModal({
               bordure = attribut couleur/cadre choisi, présence d'un passe-partout blanc = attribut
               mount choisi, avec la photo réellement sélectionnée par le client à l'intérieur.
               Masqué sur mobile (pas la place), la sélection reste possible sans lui. */}
-          <div className="hidden w-60 shrink-0 flex-col items-center gap-4 border-r border-gray-100 bg-gray-50/60 p-6 sm:flex">
+          <div className="hidden w-72 shrink-0 flex-col items-center gap-4 border-r border-gray-100 bg-gray-50/60 p-6 sm:flex">
             <FramePreview
               variant={selectedVariant}
               attributes={values}
@@ -1657,14 +1657,18 @@ function FramePreview({
   // coté de l'image") — moins d'espace réservé en haut/à droite (TOP_GUIDE/RIGHT_GUIDE réduits)
   // et frameTop ramené juste sous le repère de largeur, pour que cotes et cadre soient visuellement
   // collés plutôt que séparés par une grande marge.
-  const CANVAS = 176;
-  const TOP_GUIDE = 18;
-  const RIGHT_GUIDE = 26;
+  // Aperçu agrandi (02/08/2026, demande d'Adriel : "je trouve que le format 40*50 est trop
+  // petit") — canvas et panneau élargis (voir le conteneur w-72 ci-dessus, anciennement w-60)
+  // pour un cadre nettement plus grand et lisible, taille minimale du cadre relevée en
+  // conséquence (48 → 60px).
+  const CANVAS = 228;
+  const TOP_GUIDE = 23;
+  const RIGHT_GUIDE = 34;
   const maxW = CANVAS - RIGHT_GUIDE - 8;
   const maxH = CANVAS - TOP_GUIDE - 8;
   const scale = Math.min(maxW / refDims.w, maxH / refDims.h);
-  const frameW = Math.max(48, Math.round(dims.w * scale));
-  const frameH = Math.max(48, Math.round(dims.h * scale));
+  const frameW = Math.max(60, Math.round(dims.w * scale));
+  const frameH = Math.max(60, Math.round(dims.h * scale));
   const frameTop = TOP_GUIDE + 3;
 
   // Couleur du cadre = attribut de COULEUR choisi (voir colorSwatchFor, déjà utilisé pour les
