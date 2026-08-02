@@ -757,7 +757,11 @@ export function PrintSelectionPageView({
             <IconArrowLeft />
             Retour à la galerie
           </Link>
-          <div className="flex min-w-0 items-center gap-2 text-right">
+          <div className="flex min-w-0 items-center gap-3 text-right">
+            {/* Sélecteur de langue (02/08/2026, demande d'Adriel : "dans gallery mettre la
+                possibilité de changer de langue") — réutilise le composant déjà utilisé sur le
+                site marketing (voir src/components/marketing/MarketingLanguageSwitcher.tsx). */}
+            <MarketingLanguageSwitcher />
             <div className="min-w-0 leading-tight">
               <p className="truncate text-sm font-semibold text-gray-900">{galleryTitle}</p>
               {studioName && <p className="truncate text-xs text-gray-500">{studioName}</p>}

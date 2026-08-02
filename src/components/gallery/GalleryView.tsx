@@ -14,6 +14,7 @@ import {
   masonryItemSpacingClass,
 } from "@/lib/galleryDesign";
 import { buildEmbedUrl, formatDuration, type VideoProvider } from "@/lib/videoEmbed";
+import { MarketingLanguageSwitcher } from "@/components/marketing/MarketingLanguageSwitcher";
 
 interface PhotoDTO {
   id: string;
@@ -451,6 +452,10 @@ export function GalleryView({
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
+          {/* Sélecteur de langue (02/08/2026, demande d'Adriel : "dans gallery mettre la
+              possibilité de changer de langue") — réutilise le composant du site marketing. */}
+          <MarketingLanguageSwitcher />
+          <span className="hidden h-4 w-px opacity-20 sm:inline" style={{ backgroundColor: palette.text }} />
           {/* Bascule Photos / Vidéo — visible seulement si la galerie a au moins une
               vidéo (voir `videos` prop), au même niveau que les icônes d'action et
               directement à côté d'elles plutôt que sur sa propre ligne. */}
