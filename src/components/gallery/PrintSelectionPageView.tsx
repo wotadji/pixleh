@@ -982,8 +982,21 @@ export function PrintSelectionPageView({
                     <div key={key} className="py-2">
                       {/* Accordéon par service (demande d'Adriel, 01/08/2026 : "a chaque
                           assignation mettre un accordeon avec les images assigné au produits")
-                          — replié/déplié indépendamment des autres groupes, ouvert par défaut. */}
-                      <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+                          — replié/déplié indépendamment des autres groupes, ouvert par défaut.
+                          Bandeau COLLANT (02/08/2026, demande d'Adriel : "imaginons que nous avons
+                          100 photos non assignées [...] propose moi une solution design thinking
+                          et pro") — jusqu'ici, pour trier un gros lot (ex: 100 photos "Service non
+                          assigné"), la case à cocher/le nom du groupe/le compteur/le sélecteur
+                          "Assigner à" défilaient hors écran dès qu'on parcourait les vignettes,
+                          obligeant à remonter tout en haut à chaque action. En épinglant cet
+                          en-tête sous la barre de nav (top-16, juste sous le bandeau sticky top-0
+                          de la page) pendant que son groupe défile — pattern "en-tête de section"
+                          classique (Google Photos, Gmail) — la case "tout cocher", le compteur
+                          restant et le sélecteur d'assignation restent toujours à portée de main,
+                          quelle que soit la profondeur de scroll dans le lot. Un seul en-tête
+                          "colle" à la fois : dès que ce groupe défile hors de vue, il repart avec
+                          son contenu et laisse place au suivant, comportement natif de `sticky`. */}
+                      <div className="sticky top-16 z-10 flex flex-wrap items-center gap-2 border-b border-gray-100 bg-white px-3 py-2">
                         {/* Case du groupe (chantier 01/08/2026, sélections à 200 photos, demande
                             d'Adriel : "avec le design que nous avons cela ne sera pas pratique a
                             utiliser") — sélectionne/désélectionne les photos DU GROUPE ENTIER
@@ -1023,9 +1036,16 @@ export function PrintSelectionPageView({
                               )}
                             </h3>
                           </span>
-                          <span className="shrink-0 text-xs text-gray-400">
+                          {/* "à assigner" plutôt qu'un simple décompte pour le groupe non assigné
+                              (02/08/2026, demande d'Adriel) — ce compteur, maintenant collant
+                              (voir ci-dessus), sert d'indicateur de PROGRESSION vivant : il
+                              diminue en temps réel à chaque lot assigné, sans jamais sortir de
+                              l'écran pendant qu'on trie un gros volume de photos. */}
+                          <span className={`shrink-0 text-xs ${g.product ? "text-gray-400" : "font-medium text-amber-700"}`}>
                             {g.photos.length} photo{g.photos.length > 1 ? "s" : ""}
-                            {g.product ? ` · ${formatMoney(g.product.priceCents * g.photos.length, g.product.currency)}` : ""}
+                            {g.product
+                              ? ` · ${formatMoney(g.product.priceCents * g.photos.length, g.product.currency)}`
+                              : " à assigner"}
                           </span>
                         </button>
                         {/* Réassigne TOUT le groupe (voir reassignGroup) sans avoir à cocher les
