@@ -1996,6 +1996,15 @@ function FramePreview({
  * AVANT toute sélection de photo — contrairement à VariantSelectionModal (ci-dessus), qui sert à
  * CHOISIR une taille pour l'assigner, celui-ci se contente de lister image/nom/description/prix
  * de chaque variante, sans action d'assignation.
+ *
+ * Redesign en DEUX parties (02/08/2026, demande d'Adriel : "je veux que dans le modal on est
+ * deux partie une qui montre la photo et la description et l'autre qui liste les produits du
+ * groupe") — colonne de gauche : photo + description du produit-GROUPE lui-même (ex: "Tirages
+ * Photo Classiques", son imageUrl/description propres, distincts de ceux de chaque variante) ;
+ * colonne de droite : la liste des variantes (tailles/SKU), inchangée. Empilées verticalement sur
+ * mobile (photo/description au-dessus de la liste, pas assez de place pour deux colonnes),
+ * côte à côte à partir de sm — modale élargie (max-w-2xl → max-w-3xl) pour laisser respirer les
+ * deux colonnes.
  */
 function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO; onClose: () => void }) {
   const variants = group.variants ?? [];
@@ -2010,7 +2019,7 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
       role="presentation"
     >
       <div
-        className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -2051,46 +2060,71 @@ function GroupProductsPreviewModal({ group, onClose }: { group: PrintProductDTO;
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {variants.length === 0 ? (
-            <p className="px-8 py-10 text-center text-sm text-gray-400">
-              Aucun produit disponible dans ce groupe pour le moment.
-            </p>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {variants.map((variant) => (
-                <li key={variant.id} className="flex items-center gap-4 px-8 py-4 hover:bg-gray-50/70">
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
-                    {variant.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={variant.imageUrl} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <span className="text-gray-300">
-                        <IconPrinterEmpty />
-                      </span>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium leading-snug text-gray-900">{variant.name}</p>
-                    {/* line-clamp-2 plutôt que "truncate" (1 ligne, coupait la description au
-                        milieu d'un mot avec "...") — laisse la description respirer sur deux
-                        lignes complètes avant de tronquer proprement. */}
-                    {variant.description && (
-                      <p className="mt-1 line-clamp-2 text-xs leading-snug text-gray-500">
-                        {variant.description}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row">
+          {/* Colonne gauche — photo + description du produit-GROUPE lui-même (pas d'une
+              variante) : c'est le texte que le photographe a saisi pour présenter le service
+              dans son ensemble (ex: "Tirages Photo Classiques"). Fond légèrement teinté pour la
+              distinguer visuellement de la liste des produits à droite. */}
+          <div className="flex shrink-0 flex-col gap-4 border-b border-gray-100 bg-gray-50/60 p-8 sm:w-64 sm:overflow-y-auto sm:border-b-0 sm:border-r">
+            <div className="aspect-square w-full shrink-0 overflow-hidden rounded-xl border border-gray-100 bg-white">
+              {group.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={group.imageUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-gray-300">
+                  <IconPrinterEmpty />
+                </div>
+              )}
+            </div>
+            {group.description ? (
+              <p className="whitespace-pre-line text-sm leading-relaxed text-gray-600">{group.description}</p>
+            ) : (
+              <p className="text-sm italic text-gray-400">Aucune description renseignée pour ce groupe.</p>
+            )}
+          </div>
+
+          {/* Colonne droite — liste des variantes (tailles/SKU), inchangée. */}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {variants.length === 0 ? (
+              <p className="px-8 py-10 text-center text-sm text-gray-400">
+                Aucun produit disponible dans ce groupe pour le moment.
+              </p>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {variants.map((variant) => (
+                  <li key={variant.id} className="flex items-center gap-4 px-8 py-4 hover:bg-gray-50/70">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
+                      {variant.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={variant.imageUrl} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <span className="text-gray-300">
+                          <IconPrinterEmpty />
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium leading-snug text-gray-900">{variant.name}</p>
+                      {/* line-clamp-2 plutôt que "truncate" (1 ligne, coupait la description au
+                          milieu d'un mot avec "...") — laisse la description respirer sur deux
+                          lignes complètes avant de tronquer proprement. */}
+                      {variant.description && (
+                        <p className="mt-1 line-clamp-2 text-xs leading-snug text-gray-500">
+                          {variant.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-semibold text-gray-900">
+                        {formatMoney(variant.priceCents, variant.currency)}
                       </p>
-                    )}
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold text-gray-900">
-                      {formatMoney(variant.priceCents, variant.currency)}
-                    </p>
-                    <p className="text-[11px] text-gray-400">/ photo</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+                      <p className="text-[11px] text-gray-400">/ photo</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-gray-100 bg-gray-50/60 px-8 py-5">
