@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { PageSpinner } from "@/components/ui/Spinner";
+import { useLanguage } from "@/lib/i18n/LanguageProvider";
 
 interface PlanDTO {
   id: string;
@@ -150,6 +151,7 @@ export default function AdminPlansPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stripeConfigured, setStripeConfigured] = useState(true);
+  const { t } = useLanguage();
 
   async function loadPlans() {
     const res = await fetch("/api/admin/plans");
@@ -213,7 +215,7 @@ export default function AdminPlansPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data?.error?.formErrors?.[0] || data?.error || "Erreur lors de l'enregistrement.");
+        setError(data?.error?.formErrors?.[0] || data?.error || t("admin.plans.errorSave"));
         setSaving(false);
         return;
       }
@@ -223,17 +225,17 @@ export default function AdminPlansPage() {
       setModalOpen(false);
       await loadPlans();
     } catch {
-      setError("Erreur réseau.");
+      setError(t("admin.plans.errorNetwork"));
     }
     setSaving(false);
   }
 
   async function remove(plan: PlanDTO) {
-    if (!confirm(`Supprimer le plan "${plan.name}" ? Cette action est irréversible.`)) return;
+    if (!confirm(`${t("admin.plans.confirmDeletePrefix")} "${plan.name}" ${t("admin.plans.confirmDeleteSuffix")}`)) return;
     const res = await fetch(`/api/admin/plans/${plan.id}`, { method: "DELETE" });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      alert(data?.error || "Suppression impossible.");
+      alert(data?.error || t("admin.plans.errorDelete"));
       return;
     }
     await loadPlans();
@@ -244,33 +246,29 @@ export default function AdminPlansPage() {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <h1 className="font-serif text-2xl font-semibold">Plans tarifaires</h1>
+        <h1 className="font-serif text-2xl font-semibold">{t("admin.plans.title")}</h1>
         <button type="button" className="btn-primary" onClick={openCreate}>
-          + Nouveau plan
+          {t("admin.plans.newPlan")}
         </button>
       </div>
 
       {!stripeConfigured && (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Les clés Stripe (STRIPE_SECRET_KEY) ne sont pas encore configurées dans .env — les plans sont
-          enregistrés côté pixleh, mais pas encore synchronisés avec Stripe. Ils ne pourront pas être
-          souscrits par carte tant que ça n'est pas fait.
+          {t("admin.plans.stripeWarning")}
         </div>
       )}
 
       <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-        Certaines options ci-dessous (relances, acompte/pourboire réservation, validation manuelle,
-        domaine personnalisé...) décrivent une intention de grille tarifaire mais ne sont pas encore
-        appliquées côté produit. Active-les une par une, une fois développées, depuis{" "}
+        {t("admin.plans.featuresHintPrefix")}{" "}
         <a href="/admin/features" className="text-brand-600 hover:underline">
-          Fonctionnalités
+          {t("admin.plans.featuresHintLink")}
         </a>
-        .
+        {t("admin.plans.featuresHintSuffix")}
       </div>
 
       <div className="mt-6 space-y-3">
         {plans.length === 0 && (
-          <p className="text-sm text-gray-500">Aucun plan pour le moment — crée le premier.</p>
+          <p className="text-sm text-gray-500">{t("admin.plans.empty")}</p>
         )}
         {plans.map((plan) => (
           <div
@@ -281,35 +279,35 @@ export default function AdminPlansPage() {
               <div className="flex items-center gap-2">
                 <p className="font-medium">{plan.name}</p>
                 {plan.isFree && (
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">Gratuit</span>
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{t("admin.plans.badgeFree")}</span>
                 )}
                 {!plan.active && (
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">Désactivé</span>
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{t("admin.plans.badgeDisabled")}</span>
                 )}
                 {!plan.stripeProductId && (
                   <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
-                    Non synchronisé Stripe
+                    {t("admin.plans.badgeNotSynced")}
                   </span>
                 )}
               </div>
               <p className="mt-1 text-sm text-gray-500">
-                {fromCents(plan.priceMonthlyCents)}€/mois — ou {fromCents(plan.priceAnnualCents)}€/mois en
-                annuel · {plan.storageLimitGB ? `${plan.storageLimitGB} Go` : "Stockage illimité"} ·{" "}
-                {plan.galleryLimit ? `${plan.galleryLimit} galeries` : "Galeries illimitées"} ·{" "}
-                {plan.teamMemberLimit ? `${plan.teamMemberLimit} membre(s)` : "Équipe illimitée"}
-                {plan.storeCommissionPercent > 0 && ` · ${plan.storeCommissionPercent}% commission boutique`}
+                {fromCents(plan.priceMonthlyCents)}€{t("admin.plans.perMonth")} — {t("admin.plans.orAnnual")} {fromCents(plan.priceAnnualCents)}€{t("admin.plans.perMonth")} ·{" "}
+                {plan.storageLimitGB ? `${plan.storageLimitGB} ${t("admin.plans.gbUnit")}` : t("admin.plans.storageUnlimited")} ·{" "}
+                {plan.galleryLimit ? `${plan.galleryLimit} ${t("admin.plans.galleriesUnit")}` : t("admin.plans.galleriesUnlimited")} ·{" "}
+                {plan.teamMemberLimit ? `${plan.teamMemberLimit} ${t("admin.plans.memberUnit")}` : t("admin.plans.teamUnlimited")}
+                {plan.storeCommissionPercent > 0 && ` · ${plan.storeCommissionPercent}% ${t("admin.plans.storeCommissionSuffix")}`}
               </p>
             </div>
             <div className="flex shrink-0 gap-2">
               <button type="button" className="btn-secondary text-sm" onClick={() => openEdit(plan)}>
-                Modifier
+                {t("admin.plans.edit")}
               </button>
               <button
                 type="button"
                 className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
                 onClick={() => remove(plan)}
               >
-                Supprimer
+                {t("admin.plans.delete")}
               </button>
             </div>
           </div>
@@ -319,15 +317,15 @@ export default function AdminPlansPage() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={form.id ? "Modifier le plan" : "Nouveau plan"}
+        title={form.id ? t("admin.plans.modalEditTitle") : t("admin.plans.modalNewTitle")}
         widthClassName="max-w-4xl"
         footer={
           <>
             <button type="button" className="btn-secondary text-sm" onClick={() => setModalOpen(false)}>
-              Annuler
+              {t("admin.plans.cancel")}
             </button>
             <button type="button" className="btn-primary text-sm" disabled={saving} onClick={save}>
-              {saving ? "Enregistrement..." : "Enregistrer"}
+              {saving ? t("admin.plans.saving") : t("admin.plans.save")}
             </button>
           </>
         }
@@ -335,7 +333,7 @@ export default function AdminPlansPage() {
         <div className="max-h-[70vh] space-y-5 overflow-y-auto pr-1">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-sm font-medium">Nom affiché</label>
+              <label className="mb-1 block text-sm font-medium">{t("admin.plans.fieldName")}</label>
               <input
                 className="input"
                 value={form.name}
@@ -343,7 +341,7 @@ export default function AdminPlansPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Slug (identifiant)</label>
+              <label className="mb-1 block text-sm font-medium">{t("admin.plans.fieldSlug")}</label>
               <input
                 className="input"
                 placeholder="ex: starter"
@@ -354,7 +352,7 @@ export default function AdminPlansPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">Description courte</label>
+            <label className="mb-1 block text-sm font-medium">{t("admin.plans.fieldDescription")}</label>
             <input
               className="input"
               placeholder="Pour bien démarrer, seul(e)"
@@ -365,7 +363,7 @@ export default function AdminPlansPage() {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-sm font-medium">Prix mensuel (€)</label>
+              <label className="mb-1 block text-sm font-medium">{t("admin.plans.fieldPriceMonthly")}</label>
               <input
                 type="number"
                 step="0.01"
@@ -375,7 +373,7 @@ export default function AdminPlansPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Prix mensuel si annuel (€)</label>
+              <label className="mb-1 block text-sm font-medium">{t("admin.plans.fieldPriceAnnual")}</label>
               <input
                 type="number"
                 step="0.01"
@@ -387,18 +385,18 @@ export default function AdminPlansPage() {
           </div>
 
           <div>
-            <p className="mb-2 text-sm font-medium text-gray-700">Stockage / galeries / équipe</p>
+            <p className="mb-2 text-sm font-medium text-gray-700">{t("admin.plans.sectionQuotas")}</p>
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="mb-1 flex items-center justify-between text-sm font-medium">
-                  Stockage (Go)
+                  {t("admin.plans.fieldStorage")}
                   <label className="flex items-center gap-1 text-xs font-normal text-gray-500">
                     <input
                       type="checkbox"
                       checked={form.storageUnlimited}
                       onChange={(e) => setForm({ ...form, storageUnlimited: e.target.checked })}
                     />
-                    illimité
+                    {t("admin.plans.unlimited")}
                   </label>
                 </label>
                 <input
@@ -411,14 +409,14 @@ export default function AdminPlansPage() {
               </div>
               <div>
                 <label className="mb-1 flex items-center justify-between text-sm font-medium">
-                  Galeries
+                  {t("admin.plans.fieldGalleries")}
                   <label className="flex items-center gap-1 text-xs font-normal text-gray-500">
                     <input
                       type="checkbox"
                       checked={form.galleryUnlimited}
                       onChange={(e) => setForm({ ...form, galleryUnlimited: e.target.checked })}
                     />
-                    illimité
+                    {t("admin.plans.unlimited")}
                   </label>
                 </label>
                 <input
@@ -431,14 +429,14 @@ export default function AdminPlansPage() {
               </div>
               <div>
                 <label className="mb-1 flex items-center justify-between text-sm font-medium">
-                  Équipe
+                  {t("admin.plans.fieldTeam")}
                   <label className="flex items-center gap-1 text-xs font-normal text-gray-500">
                     <input
                       type="checkbox"
                       checked={form.teamUnlimited}
                       onChange={(e) => setForm({ ...form, teamUnlimited: e.target.checked })}
                     />
-                    illimité
+                    {t("admin.plans.unlimited")}
                   </label>
                 </label>
                 <input
@@ -453,10 +451,10 @@ export default function AdminPlansPage() {
           </div>
 
           <div>
-            <p className="mb-2 text-sm font-medium text-gray-700">Boutique / contrats / réservation</p>
+            <p className="mb-2 text-sm font-medium text-gray-700">{t("admin.plans.sectionStore")}</p>
             <div className="grid grid-cols-4 gap-3">
               <div>
-                <label className="mb-1 block text-sm font-medium">Commission boutique (%)</label>
+                <label className="mb-1 block text-sm font-medium">{t("admin.plans.fieldCommission")}</label>
                 <input
                   type="number"
                   min={0}
@@ -468,14 +466,14 @@ export default function AdminPlansPage() {
               </div>
               <div>
                 <label className="mb-1 flex items-center justify-between text-sm font-medium">
-                  Contrats
+                  {t("admin.plans.fieldContracts")}
                   <label className="flex items-center gap-1 text-xs font-normal text-gray-500">
                     <input
                       type="checkbox"
                       checked={form.contractUnlimited}
                       onChange={(e) => setForm({ ...form, contractUnlimited: e.target.checked })}
                     />
-                    illimité
+                    {t("admin.plans.unlimited")}
                   </label>
                 </label>
                 <input
@@ -488,14 +486,14 @@ export default function AdminPlansPage() {
               </div>
               <div>
                 <label className="mb-1 flex items-center justify-between text-sm font-medium">
-                  Devis
+                  {t("admin.plans.fieldQuotes")}
                   <label className="flex items-center gap-1 text-xs font-normal text-gray-500">
                     <input
                       type="checkbox"
                       checked={form.quoteUnlimited}
                       onChange={(e) => setForm({ ...form, quoteUnlimited: e.target.checked })}
                     />
-                    illimité
+                    {t("admin.plans.unlimited")}
                   </label>
                 </label>
                 <input
@@ -508,14 +506,14 @@ export default function AdminPlansPage() {
               </div>
               <div>
                 <label className="mb-1 flex items-center justify-between text-sm font-medium">
-                  Types de séance
+                  {t("admin.plans.fieldSessionTypes")}
                   <label className="flex items-center gap-1 text-xs font-normal text-gray-500">
                     <input
                       type="checkbox"
                       checked={form.sessionTypeUnlimited}
                       onChange={(e) => setForm({ ...form, sessionTypeUnlimited: e.target.checked })}
                     />
-                    illimité
+                    {t("admin.plans.unlimited")}
                   </label>
                 </label>
                 <input
@@ -536,7 +534,7 @@ export default function AdminPlansPage() {
                 checked={form.customDomainAllowed}
                 onChange={(e) => setForm({ ...form, customDomainAllowed: e.target.checked })}
               />
-              Domaine personnalisé autorisé
+              {t("admin.plans.checkCustomDomain")}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -544,7 +542,7 @@ export default function AdminPlansPage() {
                 checked={form.removeBranding}
                 onChange={(e) => setForm({ ...form, removeBranding: e.target.checked })}
               />
-              Retire "Propulsé par pixleh"
+              {t("admin.plans.checkRemoveBranding")}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -552,7 +550,7 @@ export default function AdminPlansPage() {
                 checked={form.paymentReminders}
                 onChange={(e) => setForm({ ...form, paymentReminders: e.target.checked })}
               />
-              Relances automatiques (facture, document)
+              {t("admin.plans.checkPaymentReminders")}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -560,7 +558,7 @@ export default function AdminPlansPage() {
                 checked={form.tipOnInvoice}
                 onChange={(e) => setForm({ ...form, tipOnInvoice: e.target.checked })}
               />
-              Pourboire sur facture
+              {t("admin.plans.checkTipOnInvoice")}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -568,7 +566,7 @@ export default function AdminPlansPage() {
                 checked={form.depositAtBooking}
                 onChange={(e) => setForm({ ...form, depositAtBooking: e.target.checked })}
               />
-              Acompte à la réservation
+              {t("admin.plans.checkDepositAtBooking")}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -576,7 +574,7 @@ export default function AdminPlansPage() {
                 checked={form.tipAtBooking}
                 onChange={(e) => setForm({ ...form, tipAtBooking: e.target.checked })}
               />
-              Pourboire à la réservation
+              {t("admin.plans.checkTipAtBooking")}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -584,7 +582,7 @@ export default function AdminPlansPage() {
                 checked={form.manualBookingApproval}
                 onChange={(e) => setForm({ ...form, manualBookingApproval: e.target.checked })}
               />
-              Validation manuelle des réservations
+              {t("admin.plans.checkManualApproval")}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -592,7 +590,7 @@ export default function AdminPlansPage() {
                 checked={form.bookingReminders}
                 onChange={(e) => setForm({ ...form, bookingReminders: e.target.checked })}
               />
-              Relances de réservation
+              {t("admin.plans.checkBookingReminders")}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -600,7 +598,7 @@ export default function AdminPlansPage() {
                 checked={form.isFree}
                 onChange={(e) => setForm({ ...form, isFree: e.target.checked })}
               />
-              Plan gratuit par défaut (attribué à l'inscription)
+              {t("admin.plans.checkFreeDefault")}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -608,12 +606,12 @@ export default function AdminPlansPage() {
                 checked={form.active}
                 onChange={(e) => setForm({ ...form, active: e.target.checked })}
               />
-              Actif (visible sur la page tarifs)
+              {t("admin.plans.checkActive")}
             </label>
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">Ordre d'affichage</label>
+            <label className="mb-1 block text-sm font-medium">{t("admin.plans.fieldSortOrder")}</label>
             <input
               type="number"
               className="input w-24"
