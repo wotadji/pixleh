@@ -107,7 +107,13 @@ const COLOR_SWATCHES: [string, string][] = [
 ];
 
 function colorSwatchFor(attributeName: string, option: string): string | null {
-  const isColorAttribute = /couleur|color|glaze|verre|finish|finition/i.test(attributeName);
+  // "colour" (orthographe britannique utilisée par l'API Prodigi elle-même, voir
+  // ATTRIBUTE_LABELS ci-dessus qui mappe "colour" → "Couleur") n'est PAS une sous-chaîne de
+  // "color" (…colo[u]r, la lettre "u" en plus casse le match) — sans ce mot-clé explicite, ni la
+  // pastille de couleur sur les cartes d'attribut, ni la couleur du cadre dans FramePreview ne se
+  // mettaient à jour au clic (02/08/2026, bug remonté par Adriel : "quand je clique sur couleur
+  // rien ne change").
+  const isColorAttribute = /couleur|colour|color|glaze|verre|finish|finition/i.test(attributeName);
   if (!isColorAttribute) return null;
   const normalized = option
     .normalize("NFD")
@@ -1414,6 +1420,23 @@ function ProductOptionsModal({
   const variants = entry.variants && entry.variants.length > 0 ? entry.variants : [entry];
   const showSizePicker = variants.length > 1;
 
+  // Format de référence pour l'échelle de FramePreview = le plus GRAND format proposé par ce
+  // groupe (02/08/2026, bug remonté par Adriel : "quand je change le format l'image bug, par
+  // exemple taille de 60x90 est plus petit que la taille 40x50"). Avant ce correctif, FramePreview
+  // recalculait un "fit to box" indépendant pour chaque variante — un format plus haut (ex:
+  // 60x90, ratio 0.66) finissait avec une largeur dessinée plus petite qu'un format plus carré
+  // (ex: 40x50, ratio 0.8) alors qu'il est physiquement plus grand dans les deux dimensions. En
+  // calculant l'échelle UNE SEULE FOIS à partir du plus grand format du groupe puis en
+  // l'appliquant telle quelle à la variante sélectionnée, un format plus grand occupe forcément
+  // plus de place dans l'aperçu, jamais moins.
+  const referenceDims = variants.reduce(
+    (max, v) => {
+      const d = parseDimensionsCm(v.name) ?? parseDimensionsCm(v.description) ?? { w: 30, h: 40 };
+      return { w: Math.max(max.w, d.w), h: Math.max(max.h, d.h) };
+    },
+    { w: 0, h: 0 }
+  );
+
   function defaultValuesFor(variant: PrintProductDTO, seed?: Record<string, string>) {
     const v: Record<string, string> = {};
     for (const [name, options] of Object.entries(variant.attributeOptions)) {
@@ -1496,7 +1519,13 @@ function ProductOptionsModal({
               mount choisi, avec la photo réellement sélectionnée par le client à l'intérieur.
               Masqué sur mobile (pas la place), la sélection reste possible sans lui. */}
           <div className="hidden w-60 shrink-0 flex-col items-center gap-4 border-r border-gray-100 bg-gray-50/60 p-6 sm:flex">
-            <FramePreview variant={selectedVariant} attributes={values} photoUrl={photoUrl} borderType={borderType} />
+            <FramePreview
+              variant={selectedVariant}
+              attributes={values}
+              photoUrl={photoUrl}
+              borderType={borderType}
+              referenceDims={referenceDims}
+            />
             <div className="w-full text-center">
               <p className="line-clamp-2 text-sm font-medium leading-snug text-gray-900">{selectedVariant.name}</p>
               <p className="mt-1 text-base font-semibold text-gray-800">
@@ -1665,6 +1694,7 @@ function FramePreview({
   attributes,
   photoUrl,
   borderType,
+  referenceDims,
 }: {
   variant: PrintProductDTO;
   attributes: Record<string, string>;
@@ -1673,18 +1703,27 @@ function FramePreview({
    * (02/08/2026, chantier "type de bordure"), influence uniquement l'affichage d'un passe-partout
    * blanc dans cette maquette, comme le ferait un vrai attribut mount Prodigi. */
   borderType?: string | null;
+  /** Format de référence (le plus grand du groupe) utilisé pour calculer une échelle COMMUNE à
+   * toutes les tailles proposées — voir le calcul dans ProductOptionsModal (02/08/2026, bug
+   * remonté par Adriel : "60x90 est plus petit que 40x50"). Sans lui (produit sans variantes),
+   * on retombe sur les dimensions de la variante elle-même : comportement inchangé pour un
+   * produit à taille unique. */
+  referenceDims?: { w: number; h: number };
 }) {
   const dims = parseDimensionsCm(variant.name) ?? parseDimensionsCm(variant.description) ?? { w: 30, h: 40 };
+  const refDims = referenceDims && referenceDims.w > 0 && referenceDims.h > 0 ? referenceDims : dims;
 
   // Zone de dessin fixe (indépendante de la largeur réelle du panneau, en pixels) — la place
   // réservée en haut/à droite pour les repères de cote laisse le reste à la mise à l'échelle du
-  // cadre selon son ratio largeur/hauteur réel.
+  // cadre selon son ratio largeur/hauteur réel. L'échelle se calcule à partir de `refDims` (le
+  // plus grand format du groupe, cf. ci-dessus), PAS de `dims` (la variante affichée) : c'est ce
+  // qui garantit qu'un plus grand format occupe plus de place, jamais moins.
   const CANVAS = 176;
   const TOP_GUIDE = 26;
   const RIGHT_GUIDE = 36;
   const maxW = CANVAS - RIGHT_GUIDE - 10;
   const maxH = CANVAS - TOP_GUIDE - 10;
-  const scale = Math.min(maxW / dims.w, maxH / dims.h);
+  const scale = Math.min(maxW / refDims.w, maxH / refDims.h);
   const frameW = Math.max(48, Math.round(dims.w * scale));
   const frameH = Math.max(48, Math.round(dims.h * scale));
   const frameTop = TOP_GUIDE + 6;
@@ -1693,7 +1732,17 @@ function FramePreview({
   // colorSwatchFor, déjà utilisé pour les pastilles des cartes d'attribut) — gris neutre par
   // défaut si le produit n'a pas d'attribut couleur (rien à représenter) ou si l'option choisie
   // ne correspond à aucun mot-clé connu.
-  const frameColorEntry = Object.entries(attributes).find(([name]) => /couleur|color|frame|cadre/i.test(name));
+  // "colour" (orthographe Prodigi, voir ATTRIBUTE_LABELS et le correctif sur colorSwatchFor
+  // ci-dessus) ajouté au même titre que "color" — sans lui, la couleur du cadre ne suivait
+  // jamais la sélection (02/08/2026, bug remonté par Adriel : "quand je clique sur couleur rien
+  // ne change"). "mountColour" (couleur du passe-partout) matche aussi /couleur|colour|color/,
+  // donc on cherche d'abord une correspondance EXACTE ("colour"/"color"/"frame"/"cadre") avant de
+  // retomber sur une correspondance large en excluant explicitement "mount" — pour ne pas piocher
+  // par erreur la couleur du passe-partout comme couleur de cadre.
+  const attributeEntries = Object.entries(attributes);
+  const frameColorEntry =
+    attributeEntries.find(([name]) => /^(colour|color|frame|cadre)$/i.test(name)) ??
+    attributeEntries.find(([name]) => /couleur|colour|color|frame|cadre/i.test(name) && !/mount/i.test(name));
   const frameColor = (frameColorEntry && colorSwatchFor(frameColorEntry[0], frameColorEntry[1])) || "#9ca3af";
 
   // Passe-partout blanc = un attribut mount/passe-partout choisi avec une valeur autre que
