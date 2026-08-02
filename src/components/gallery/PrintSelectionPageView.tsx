@@ -1215,39 +1215,10 @@ export function PrintSelectionPageView({
                         ))}
                     </div>
 
-                    {/* Ligne "Livraison" DYNAMIQUE (02/08/2026, demande d'Adriel : "un vrai calcul
-                        de shipping dynamique au moment du checkout [...] affiché comme ligne
-                        Livraison séparée dans le panier") — auparavant le shipping n'apparaissait
-                        JAMAIS ici, le total ne portait que sur le prix des tirages. Trois états :
-                        en cours de calcul (adresse tout juste saisie), calculé (montant Prodigi
-                        réel selon panier + destination), ou indisponible (Prodigi hors service :
-                        on prévient plutôt que d'annoncer un montant faux). */}
-                    {(shippingQuoteLoading || shippingQuote || shippingQuoteError) && (
-                      <div className="mt-1.5 flex items-center justify-between text-sm text-gray-600">
-                        <span>Livraison</span>
-                        {shippingQuoteLoading ? (
-                          <span className="text-xs text-gray-400">Calcul en cours…</span>
-                        ) : shippingQuote ? (
-                          <span className="shrink-0 font-medium text-gray-800">
-                            {formatMoney(shippingQuote.cents, shippingQuote.currency)}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-amber-600">Calculée à l&apos;étape suivante</span>
-                        )}
-                      </div>
-                    )}
-
                     <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
-                      <span className="text-sm font-medium text-gray-600">Total</span>
-                      <span className="text-lg font-semibold text-gray-900">
-                        {formatMoney(totalCents + (shippingQuote?.cents ?? 0), currency)}
-                      </span>
+                      <span className="text-sm font-medium text-gray-600">Sous-total</span>
+                      <span className="text-lg font-semibold text-gray-900">{formatMoney(totalCents, currency)}</span>
                     </div>
-                    {!shippingQuote && !shippingQuoteLoading && assignedCount > 0 && (
-                      <p className="mt-1 text-[11px] text-gray-400">
-                        Hors frais de livraison — renseignez votre adresse ci-dessous pour les inclure.
-                      </p>
-                    )}
 
                     <div className="mt-5 space-y-2 border-t border-gray-100 pt-5">
                       <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Vos coordonnées</p>
@@ -1342,6 +1313,41 @@ export function PrintSelectionPageView({
                         />
                       </div>
                       <p className="text-[11px] text-gray-400">* Téléphone requis pour faciliter la livraison.</p>
+                    </div>
+
+                    {/* Ligne "Livraison" DYNAMIQUE, APRÈS l'adresse (02/08/2026, demande d'Adriel :
+                        "mettre livraison apres Adresse de livraison des tirages") — logique : le
+                        coût de port dépend directement de l'adresse juste au-dessus, donc autant
+                        l'afficher juste après plutôt que plus haut dans le récapitulatif, avant
+                        même que l'adresse soit saisie. Trois états : en cours de calcul (adresse
+                        tout juste saisie), calculé (montant Prodigi réel selon panier +
+                        destination), ou indisponible (Prodigi hors service : on prévient plutôt
+                        que d'annoncer un montant faux). */}
+                    {(shippingQuoteLoading || shippingQuote || shippingQuoteError) && (
+                      <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-4 text-sm text-gray-600">
+                        <span>Livraison</span>
+                        {shippingQuoteLoading ? (
+                          <span className="text-xs text-gray-400">Calcul en cours…</span>
+                        ) : shippingQuote ? (
+                          <span className="shrink-0 font-medium text-gray-800">
+                            {formatMoney(shippingQuote.cents, shippingQuote.currency)}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-amber-600">{shippingQuoteError}</span>
+                        )}
+                      </div>
+                    )}
+                    {!shippingQuote && !shippingQuoteLoading && !shippingQuoteError && assignedCount > 0 && (
+                      <p className="mt-3 border-t border-gray-100 pt-3 text-[11px] text-gray-400">
+                        Renseignez une adresse complète ci-dessus pour calculer les frais de livraison.
+                      </p>
+                    )}
+
+                    <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
+                      <span className="text-sm font-medium text-gray-600">Total</span>
+                      <span className="text-lg font-semibold text-gray-900">
+                        {formatMoney(totalCents + (shippingQuote?.cents ?? 0), currency)}
+                      </span>
                     </div>
 
                     {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
