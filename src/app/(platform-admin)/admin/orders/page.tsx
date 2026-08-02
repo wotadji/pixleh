@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { useLanguage } from "@/lib/i18n/LanguageProvider";
 
 type OrderStatus = "PENDING" | "PAID" | "FULFILLED" | "CANCELLED" | "REFUNDED";
 
@@ -75,12 +76,12 @@ function groupItems(items: OrderItemDTO[]): ProductGroup[] {
   return [...byProduct.values()];
 }
 
-const STATUS_LABELS: Record<OrderStatus, string> = {
-  PENDING: "En attente",
-  PAID: "Payée",
-  FULFILLED: "Traitée",
-  CANCELLED: "Annulée",
-  REFUNDED: "Remboursée",
+const STATUS_KEYS: Record<OrderStatus, string> = {
+  PENDING: "admin.orders.statusPending",
+  PAID: "admin.orders.statusPaid",
+  FULFILLED: "admin.orders.statusFulfilled",
+  CANCELLED: "admin.orders.statusCancelled",
+  REFUNDED: "admin.orders.statusRefunded",
 };
 
 const STATUS_STYLES: Record<OrderStatus, string> = {
@@ -100,12 +101,12 @@ function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-function formatDate(iso: string): string {
-  return new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium" }).format(new Date(iso));
+function formatDate(iso: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(iso));
 }
 
-function formatMoney(cents: number, currency: string) {
-  return new Intl.NumberFormat("fr-FR", { style: "currency", currency }).format(cents / 100);
+function formatMoney(cents: number, currency: string, locale: string) {
+  return new Intl.NumberFormat(locale, { style: "currency", currency }).format(cents / 100);
 }
 
 /**
@@ -130,6 +131,7 @@ export default function AdminOrdersPage() {
   const [detailGalleryId, setDetailGalleryId] = useState<string | null>(null);
   const [zoomIndex, setZoomIndex] = useState<number | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const { t, locale } = useLanguage();
 
   async function retryProdigi(orderId: string) {
     setRetryingId(orderId);
@@ -209,17 +211,18 @@ export default function AdminOrdersPage() {
 
   return (
     <div>
-      <h1 className="font-serif text-2xl font-semibold">Commandes</h1>
-      <p className="mt-1 text-sm text-gray-500">
-        Toutes les commandes de tous les studios, y compris les commandes d&apos;impression
-        (catalogue plateforme, voir Catalogue impression) — filtrable par studio.
-      </p>
+      <h1 className="font-serif text-2xl font-semibold">{t("admin.orders.title")}</h1>
+      <p className="mt-1 text-sm text-gray-500">{t("admin.orders.subtitle")}</p>
 
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Commandes" value={String(stats.total)} />
-        <StatCard label="CA payé / traité" value={formatMoney(stats.revenue, stats.currency)} />
-        <StatCard label="En attente" value={String(stats.pending)} tone={stats.pending > 0 ? "amber" : undefined} />
-        <StatCard label="Studios concernés" value={String(stats.studioCount)} />
+        <StatCard label={t("admin.orders.statOrders")} value={String(stats.total)} />
+        <StatCard label={t("admin.orders.statRevenue")} value={formatMoney(stats.revenue, stats.currency, locale)} />
+        <StatCard
+          label={t("admin.orders.statPending")}
+          value={String(stats.pending)}
+          tone={stats.pending > 0 ? "amber" : undefined}
+        />
+        <StatCard label={t("admin.orders.statStudios")} value={String(stats.studioCount)} />
       </div>
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
@@ -228,7 +231,7 @@ export default function AdminOrdersPage() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher (client, studio, galerie)"
+            placeholder={t("admin.orders.searchPlaceholder")}
             className="input"
           />
         </div>
@@ -237,10 +240,10 @@ export default function AdminOrdersPage() {
             <SearchableSelect
               value={studioFilter}
               onChange={setStudioFilter}
-              placeholder="Tous les studios"
-              searchPlaceholder="Rechercher un studio..."
+              placeholder={t("admin.orders.allStudios")}
+              searchPlaceholder={t("admin.orders.searchStudioPlaceholder")}
               options={[
-                { value: "ALL", label: "Tous les studios" },
+                { value: "ALL", label: t("admin.orders.allStudios") },
                 ...studios.map((s) => ({ value: s.id, label: s.name })),
               ]}
             />
@@ -251,10 +254,10 @@ export default function AdminOrdersPage() {
               onChange={(e) => setStatusFilter(e.target.value as OrderStatus | "ALL")}
               className="input"
             >
-              <option value="ALL">Tous les statuts</option>
-              {(Object.keys(STATUS_LABELS) as OrderStatus[]).map((s) => (
+              <option value="ALL">{t("admin.orders.allStatuses")}</option>
+              {(Object.keys(STATUS_KEYS) as OrderStatus[]).map((s) => (
                 <option key={s} value={s}>
-                  {STATUS_LABELS[s]}
+                  {t(STATUS_KEYS[s])}
                 </option>
               ))}
             </select>
@@ -268,9 +271,9 @@ export default function AdminOrdersPage() {
             colonne au lieu d'être renvoyés en dessous du client sur toute la largeur). */}
         {filtered.length > 0 && (
           <div className="hidden grid-cols-[minmax(0,280px)_minmax(0,1.6fr)_auto] gap-3 border-b border-gray-100 bg-gray-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:grid">
-            <span>Client</span>
-            <span>Produits</span>
-            <span className="text-right">Montant</span>
+            <span>{t("admin.orders.colClient")}</span>
+            <span>{t("admin.orders.colProducts")}</span>
+            <span className="text-right">{t("admin.orders.colAmount")}</span>
           </div>
         )}
         <div className="divide-y divide-gray-100">
@@ -280,7 +283,7 @@ export default function AdminOrdersPage() {
                 <IconBag />
               </div>
               <p className="text-sm text-gray-500">
-                {orders.length === 0 ? "Aucune commande pour le moment." : "Aucune commande ne correspond à ta recherche."}
+                {orders.length === 0 ? t("admin.orders.emptyNone") : t("admin.orders.emptyNoMatch")}
               </p>
             </div>
           )}
@@ -305,7 +308,7 @@ export default function AdminOrdersPage() {
                     <p className="text-sm text-gray-500">
                       {o.customerEmail} · {o.galleryTitle || "—"}
                     </p>
-                    <p className="mt-0.5 text-[11px] text-gray-400">{formatDate(o.createdAt)}</p>
+                    <p className="mt-0.5 text-[11px] text-gray-400">{formatDate(o.createdAt, locale)}</p>
                   </div>
                 </div>
 
@@ -326,7 +329,7 @@ export default function AdminOrdersPage() {
                           }}
                           className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-brand-700 shadow-sm hover:bg-brand-50"
                         >
-                          Plus de détail
+                          {t("admin.orders.moreDetail")}
                         </button>
                       )}
                     </div>
@@ -334,27 +337,27 @@ export default function AdminOrdersPage() {
                 </div>
 
                 <div className="text-left sm:text-right">
-                  <p className="font-medium text-gray-900">{formatMoney(o.totalCents, o.currency)}</p>
+                  <p className="font-medium text-gray-900">{formatMoney(o.totalCents, o.currency, locale)}</p>
                   <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[o.status]}`}>
-                    {STATUS_LABELS[o.status]}
+                    {t(STATUS_KEYS[o.status])}
                   </span>
                   {/* Statut de soumission Prodigi (chantier "impression pixleh Phase 2",
                       01/08/2026) — soumission automatique au paiement (voir webhook Stripe),
                       bouton "Réessayer" si échec (Prodigi indisponible, adresse incomplète...). */}
                   {o.prodigiStatus === "SUBMITTED" && (
-                    <span className="mt-1 block text-[11px] font-medium text-green-600">Envoyée à l&apos;impression</span>
+                    <span className="mt-1 block text-[11px] font-medium text-green-600">{t("admin.orders.prodigiSubmitted")}</span>
                   )}
                   {o.prodigiStatus === "FAILED" && (
                     <div className="mt-1 flex flex-col items-start gap-1 sm:items-end">
                       <span className="text-[11px] font-medium text-red-600" title={o.prodigiError || undefined}>
-                        Échec impression Prodigi
+                        {t("admin.orders.prodigiFailed")}
                       </span>
                       <button
                         onClick={() => retryProdigi(o.id)}
                         disabled={retryingId === o.id}
                         className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
                       >
-                        {retryingId === o.id ? "Envoi..." : "Réessayer"}
+                        {retryingId === o.id ? t("admin.orders.sending") : t("admin.orders.retry")}
                       </button>
                     </div>
                   )}
@@ -372,17 +375,17 @@ export default function AdminOrdersPage() {
             disabled={currentPage <= 1}
             className="text-gray-600 hover:text-gray-900 disabled:pointer-events-none disabled:opacity-40"
           >
-            Précédent
+            {t("admin.orders.prev")}
           </button>
           <span className="text-gray-500">
-            Page {currentPage} / {totalPages}
+            {t("admin.orders.pagePrefix")} {currentPage} / {totalPages}
           </span>
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={currentPage >= totalPages}
             className="text-gray-600 hover:text-gray-900 disabled:pointer-events-none disabled:opacity-40"
           >
-            Suivant
+            {t("admin.orders.next")}
           </button>
         </div>
       )}
@@ -438,6 +441,7 @@ function OrderPhotosModal({
     galleryId && photoIds.length > 0
       ? `/api/galleries/${galleryId}/download-all?ids=${photoIds.join(",")}&size=hd`
       : null;
+  const { t } = useLanguage();
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
@@ -456,12 +460,12 @@ function OrderPhotosModal({
                 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-gray-700 hover:text-gray-900"
               >
                 <IconDownload />
-                Télécharger
+                {t("admin.orders.download")}
               </a>
             )}
             <button
               onClick={onClose}
-              aria-label="Fermer"
+              aria-label={t("admin.orders.close")}
               className="flex h-6 w-6 items-center justify-center text-gray-500 hover:text-gray-800"
             >
               <IconX />
@@ -501,6 +505,7 @@ function OrderPhotoZoom({
   onClose: () => void;
 }) {
   const photo = photos[index];
+  const { t } = useLanguage();
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -518,7 +523,7 @@ function OrderPhotoZoom({
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 px-4" onClick={onClose}>
       <button
         onClick={onClose}
-        aria-label="Fermer"
+        aria-label={t("admin.orders.close")}
         className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
       >
         <IconX />
@@ -530,7 +535,7 @@ function OrderPhotoZoom({
               e.stopPropagation();
               onNavigate((index - 1 + photos.length) % photos.length);
             }}
-            aria-label="Photo précédente"
+            aria-label={t("admin.orders.prevPhoto")}
             className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 sm:left-5"
           >
             ‹
@@ -540,7 +545,7 @@ function OrderPhotoZoom({
               e.stopPropagation();
               onNavigate((index + 1) % photos.length);
             }}
-            aria-label="Photo suivante"
+            aria-label={t("admin.orders.nextPhoto")}
             className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 sm:right-5"
           >
             ›
