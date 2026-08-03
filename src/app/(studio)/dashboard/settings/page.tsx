@@ -464,32 +464,33 @@ export default function SettingsPage() {
       <h1 className="font-serif text-2xl font-semibold">{t("settings.title")}</h1>
 
       {/* Sous-menu : une section à la fois, plutôt qu'une longue page à faire défiler.
-          Redesign du 03/08/2026 (demande d'Adriel, 3 passes) : (1) pastilles icône + libellé
+          Redesign du 03/08/2026 (demande d'Adriel, 4 passes) : (1) pastilles icône + libellé
           dans un bandeau gris au lieu du simple soulignement texte qui wrappait de façon
           désordonnée ; (2) "une seule ligne et responsive" → tentative avec scroll horizontal ;
-          (3) "tout le menu doit être visible" → le scroll masquait des onglets hors champ sur
-          petit écran, ce qui ne convient pas pour une nav (contrairement à une liste de
-          contenu) : les 7 onglets se partagent maintenant la largeur disponible à parts égales
-          (flex-1) et RESTENT TOUJOURS TOUS VISIBLES sur une seule ligne, y compris en mobile —
-          le libellé texte se masque sous le breakpoint `sm` (icône + tooltip natif via
-          `title` seulement) pour que 7 pastilles tiennent sans jamais scroller ni wrapper. */}
+          (3) "tout le menu doit être visible" → passage à 7 pastilles à largeur égale
+          (flex-1), mais le libellé texte était masqué sous `sm` pour tenir ; (4) "tous les
+          textes doivent être visible" → les libellés eux-mêmes ont été raccourcis dans
+          dictionaries.ts (ex. "Types de séance (réservation)" → "Séances", "Profil du
+          studio" → "Profil") et c'est maintenant l'ICÔNE qui se masque sous `sm` (le texte,
+          lui, reste TOUJOURS affiché, à toute taille d'écran) — le texte est ce qui compte
+          pour se repérer, l'icône n'est qu'une décoration qu'on peut sacrifier en premier
+          quand la place manque. */}
       <nav className="mt-6 flex gap-1 rounded-xl bg-gray-100 p-1.5 sm:gap-1.5">
         {TABS.map((tabDef) => (
           <button
             key={tabDef.key}
             onClick={() => setTab(tabDef.key)}
             aria-current={tab === tabDef.key ? "page" : undefined}
-            title={tabDef.label}
-            className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-1.5 py-1.5 text-sm font-medium transition-colors sm:px-3 ${
+            className={`flex min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-1 py-1.5 text-[11px] font-medium transition-colors sm:gap-1.5 sm:px-3 sm:text-sm ${
               tab === tabDef.key
                 ? "bg-white text-gray-900 shadow-sm"
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            <span className={`shrink-0 ${tab === tabDef.key ? "text-brand-600" : "text-gray-400"}`}>
+            <span className={`hidden shrink-0 sm:inline ${tab === tabDef.key ? "text-brand-600" : "text-gray-400"}`}>
               {tabDef.icon}
             </span>
-            <span className="hidden truncate sm:inline">{tabDef.label}</span>
+            <span className="truncate">{tabDef.label}</span>
           </button>
         ))}
       </nav>
