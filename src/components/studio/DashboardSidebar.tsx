@@ -100,34 +100,42 @@ export function DashboardSidebar({
             {studioName.trim().slice(0, 1).toUpperCase() || "?"}
           </div>
           {profileIncomplete && (
-            <InfoBubble
-              trigger={
-                <span className="absolute -right-0.5 -top-0.5 block h-2.5 w-2.5 rounded-full border-2 border-white bg-amber-500" />
-              }
-              triggerLabel={t("studio.sidebar.incompleteProfile.trigger")}
-            >
-              <p className="text-xs font-semibold text-gray-900">{t("studio.sidebar.incompleteProfile.title")}</p>
-              <ul className="mt-1.5 space-y-1 text-xs text-gray-600">
-                {missingLogo && (
-                  <li className="flex items-center gap-1.5">
-                    <span className="h-1 w-1 shrink-0 rounded-full bg-amber-500" />
-                    {t("studio.sidebar.incompleteProfile.missingLogo")}
-                  </li>
-                )}
-                {missingContactEmail && (
-                  <li className="flex items-center gap-1.5">
-                    <span className="h-1 w-1 shrink-0 rounded-full bg-amber-500" />
-                    {t("studio.sidebar.incompleteProfile.missingContactEmail")}
-                  </li>
-                )}
-              </ul>
-              <Link
-                href="/dashboard/settings"
-                className="mt-2 block text-xs font-medium text-brand-600 hover:text-brand-700"
+            // Le déclencheur doit être positionné directement par CE wrapper (collé sur
+            // l'avatar, coin haut-droit) — pas par une classe "absolute" sur le contenu du
+            // trigger lui-même, qui serait alors positionnée par rapport au wrapper interne
+            // de InfoBubble (relative inline-flex, en flux normal) et finirait décollée de
+            // l'avatar (bug repéré le 03/08/2026 sur capture d'Adriel : la pastille flottait
+            // en bas de la carte au lieu d'être collée à l'avatar).
+            <div className="absolute -right-0.5 -top-0.5">
+              <InfoBubble
+                trigger={
+                  <span className="block h-2.5 w-2.5 rounded-full border-2 border-white bg-amber-500" />
+                }
+                triggerLabel={t("studio.sidebar.incompleteProfile.trigger")}
               >
-                {t("studio.sidebar.incompleteProfile.cta")}
-              </Link>
-            </InfoBubble>
+                <p className="text-xs font-semibold text-gray-900">{t("studio.sidebar.incompleteProfile.title")}</p>
+                <ul className="mt-1.5 space-y-1 text-xs text-gray-600">
+                  {missingLogo && (
+                    <li className="flex items-center gap-1.5">
+                      <span className="h-1 w-1 shrink-0 rounded-full bg-amber-500" />
+                      {t("studio.sidebar.incompleteProfile.missingLogo")}
+                    </li>
+                  )}
+                  {missingContactEmail && (
+                    <li className="flex items-center gap-1.5">
+                      <span className="h-1 w-1 shrink-0 rounded-full bg-amber-500" />
+                      {t("studio.sidebar.incompleteProfile.missingContactEmail")}
+                    </li>
+                  )}
+                </ul>
+                <Link
+                  href="/dashboard/settings"
+                  className="mt-2 block text-xs font-medium text-brand-600 hover:text-brand-700"
+                >
+                  {t("studio.sidebar.incompleteProfile.cta")}
+                </Link>
+              </InfoBubble>
+            </div>
           )}
         </div>
         <p className="truncate text-sm font-medium text-gray-900">{studioName}</p>

@@ -71,14 +71,14 @@ export default function SettingsPage() {
     }
   }
 
-  const TABS: { key: SettingsTab; label: string }[] = [
-    { key: "profile", label: t("settings.profileSection") },
-    { key: "account", label: t("settings.accountSection") },
-    { key: "password", label: t("settings.passwordSection") },
-    { key: "watermark", label: t("settings.watermarkSection") },
-    { key: "carousel", label: t("settings.carouselSection") },
-    { key: "bookingTypes", label: t("settings.bookingTypesSection") },
-    { key: "billing", label: t("settings.billingSection") },
+  const TABS: { key: SettingsTab; label: string; icon: JSX.Element }[] = [
+    { key: "profile", label: t("settings.profileSection"), icon: <TabIconUser /> },
+    { key: "account", label: t("settings.accountSection"), icon: <TabIconAt /> },
+    { key: "password", label: t("settings.passwordSection"), icon: <TabIconLock /> },
+    { key: "watermark", label: t("settings.watermarkSection"), icon: <TabIconDroplet /> },
+    { key: "carousel", label: t("settings.carouselSection"), icon: <TabIconImages /> },
+    { key: "bookingTypes", label: t("settings.bookingTypesSection"), icon: <TabIconCalendar /> },
+    { key: "billing", label: t("settings.billingSection"), icon: <TabIconCard /> },
   ];
 
   // Profil studio (affiché aux clients : couvertures de galerie, site public...)
@@ -463,18 +463,25 @@ export default function SettingsPage() {
     <div className="max-w-2xl">
       <h1 className="font-serif text-2xl font-semibold">{t("settings.title")}</h1>
 
-      {/* Sous-menu : une section à la fois, plutôt qu'une longue page à faire défiler. */}
-      <nav className="mt-6 flex flex-wrap gap-x-6 gap-y-2 border-b border-gray-200">
+      {/* Sous-menu : une section à la fois, plutôt qu'une longue page à faire défiler.
+          Redesign du 03/08/2026 (demande d'Adriel : "refaire un UX/UI pro") : les 7 onglets
+          en simple soulignement texte wrappaient de façon désordonnée sur deux lignes sans
+          alignement — remplacés par des pastilles icône + libellé dans un bandeau gris, qui
+          s'enroulent proprement quelle que soit la largeur d'écran (même logique que la nav
+          groupée de la sidebar, cf. DashboardSidebar.tsx). */}
+      <nav className="mt-6 flex flex-wrap gap-1.5 rounded-xl bg-gray-100 p-1.5">
         {TABS.map((tabDef) => (
           <button
             key={tabDef.key}
             onClick={() => setTab(tabDef.key)}
-            className={`-mb-px border-b-2 pb-2.5 text-sm font-medium transition-colors ${
+            aria-current={tab === tabDef.key ? "page" : undefined}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
               tab === tabDef.key
-                ? "border-gray-900 text-gray-900"
-                : "border-transparent text-gray-400 hover:text-gray-600"
+                ? "bg-white text-gray-900 shadow-sm"
+                : "text-gray-500 hover:text-gray-700"
             }`}
           >
+            <span className={tab === tabDef.key ? "text-brand-600" : "text-gray-400"}>{tabDef.icon}</span>
             {tabDef.label}
           </button>
         ))}
@@ -1074,5 +1081,72 @@ export default function SettingsPage() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+// Icônes des onglets Paramètres — même style que DashboardSidebar.tsx (stroke 1.8, viewBox 24)
+// pour rester visuellement cohérent entre la nav principale et ce sous-menu.
+function TabIconUser() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M4.5 20c0-3.6 3.4-6.5 7.5-6.5s7.5 2.9 7.5 6.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TabIconAt() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M16 12v1.5a2.5 2.5 0 0 0 5 0V12a9 9 0 1 0-4 7.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function TabIconLock() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="4.5" y="10.5" width="15" height="10" rx="2" />
+      <path d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TabIconDroplet() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 3.5S6 10 6 14.5a6 6 0 0 0 12 0C18 10 12 3.5 12 3.5Z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function TabIconImages() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="3" y="5" width="14" height="12" rx="2" />
+      <path d="M7 21h14V9" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="7.5" cy="9.5" r="1.3" />
+      <path d="M4 15l3.5-3.5L11 15" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function TabIconCalendar() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="3.5" y="5" width="17" height="16" rx="2" />
+      <path d="M3.5 10h17M8 3v4M16 3v4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TabIconCard() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="2.5" y="5.5" width="19" height="13" rx="2" />
+      <path d="M2.5 10h19" strokeLinecap="round" />
+      <path d="M6 14.5h4" strokeLinecap="round" />
+    </svg>
   );
 }
