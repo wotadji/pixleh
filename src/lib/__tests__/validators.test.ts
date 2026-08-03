@@ -53,6 +53,7 @@ describe("invoiceSchema (parcours critique : facturation)", () => {
 
   it("accepte une facture avec des lignes valides", () => {
     const result = invoiceSchema.safeParse({
+      guestClientName: "Client sans fiche CRM",
       lineItems: [{ description: "Séance photo", quantity: 1, unitPriceCents: 15000 }],
     });
     expect(result.success).toBe(true);
