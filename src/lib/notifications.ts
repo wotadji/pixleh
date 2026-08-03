@@ -473,6 +473,37 @@ export async function sendStudioNewBookingEmail(params: {
   });
 }
 
+/** Confirmation envoyée au CLIENT (pas au studio, voir sendStudioNewBookingEmail ci-dessus)
+ * après la création d'une demande de réservation depuis la vitrine publique /s/[slug]/book
+ * — jusqu'ici seul le studio était notifié, le client n'avait aucune confirmation par email
+ * de sa demande. La réservation reste en statut PENDING tant que le studio ne l'a pas
+ * confirmée manuellement (voir /api/bookings/[id]) : l'email le précise pour éviter toute
+ * confusion ("j'ai réservé" vs "ma demande est en attente"). */
+export async function sendClientBookingConfirmationEmail(params: {
+  customerName: string;
+  customerEmail: string;
+  studioName: string;
+  startsAt: Date;
+  endsAt: Date;
+}) {
+  const dateLabel = params.startsAt.toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" });
+  const html = wrapEmail(`
+    <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Demande de réservation reçue</h2>
+    <p>Bonjour ${escapeHtml(params.customerName)},</p>
+    <p>Votre demande de réservation le <strong>${dateLabel}</strong> auprès de
+    <strong>${escapeHtml(params.studioName)}</strong> a bien été reçue.</p>
+    <p>Elle est en attente de confirmation : ${escapeHtml(params.studioName)} vous recontactera
+    prochainement pour la confirmer.</p>
+  `);
+
+  return sendMail({
+    to: params.customerEmail,
+    subject: `Demande de réservation reçue — ${params.studioName}`,
+    text: `Bonjour ${params.customerName}, votre demande de réservation le ${dateLabel} auprès de ${params.studioName} a bien été reçue. Elle est en attente de confirmation, ${params.studioName} vous recontactera prochainement.`,
+    html,
+  });
+}
+
 /** Nouveau visiteur sur le lien invité d'une galerie (voir /api/guest-access) — n'est
  * appelé que pour un email jamais vu sur cette galerie (première visite), pas à chaque
  * retour du même invité, pour ne pas spammer le studio. */
@@ -622,6 +653,37 @@ export async function sendStudioOrderPaidEmail(params: {
     to,
     subject: `Commande payée — ${amount}`,
     text: `${params.customerName} (${params.customerEmail}) a payé une commande de ${amount}. Voir : ${appUrl("/dashboard/orders")}`,
+    html,
+  });
+}
+
+/** Confirmation envoyée au CLIENT (pas au studio, voir sendStudioOrderPaidEmail ci-dessus)
+ * après le paiement réussi d'une commande d'impression (catalogue impression plateforme,
+ * voir /api/cart/checkout et le webhook Stripe checkout.session.completed) — jusqu'ici seul
+ * le studio était notifié, le client n'avait aucune confirmation par email de son paiement.
+ * Volontairement sobre (pas de lien de suivi de commande, qui n'existe pas encore côté
+ * client) : confirme juste la réception du paiement et que l'impression/expédition suit. */
+export async function sendClientOrderPaidEmail(params: {
+  customerEmail: string;
+  customerName: string;
+  studioName: string;
+  totalCents: number;
+  currency: string;
+}) {
+  const amount = formatAmount(params.totalCents, params.currency);
+  const html = wrapEmail(`
+    <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Paiement reçu, merci !</h2>
+    <p>Bonjour ${escapeHtml(params.customerName)},</p>
+    <p>Votre commande de <strong>${amount}</strong> auprès de <strong>${escapeHtml(params.studioName)}</strong>
+    a bien été reçue et est en cours de traitement.</p>
+    <p>Elle sera expédiée dès son impression. Vous serez recontacté(e) par
+    <strong>${escapeHtml(params.studioName)}</strong> si besoin.</p>
+  `);
+
+  return sendMail({
+    to: params.customerEmail,
+    subject: `Paiement reçu — votre commande chez ${params.studioName}`,
+    text: `Bonjour ${params.customerName}, votre commande de ${amount} auprès de ${params.studioName} a bien été reçue et est en cours de traitement. Elle sera expédiée dès son impression.`,
     html,
   });
 }

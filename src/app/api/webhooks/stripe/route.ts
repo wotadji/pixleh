@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
 import { syncSubscriptionFromStripe } from "@/lib/subscriptionSync";
-import { sendStudioOrderPaidEmail } from "@/lib/notifications";
+import { sendStudioOrderPaidEmail, sendClientOrderPaidEmail } from "@/lib/notifications";
 import { markInvoicePaidFromStripe } from "@/lib/invoicePayment";
 import { submitProdigiOrder } from "@/lib/prodigiOrder";
 import type Stripe from "stripe";
@@ -43,7 +43,10 @@ export async function POST(req: Request) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
 
-      const order = await prisma.order.findUnique({ where: { stripeSessionId: session.id } });
+      const order = await prisma.order.findUnique({
+        where: { stripeSessionId: session.id },
+        include: { studio: { select: { name: true } } },
+      });
       if (order) {
         await prisma.order.update({ where: { id: order.id }, data: { status: "PAID" } });
         // Best-effort, ne bloque jamais la confirmation du paiement (voir sendMail).
@@ -54,6 +57,17 @@ export async function POST(req: Request) {
           totalCents: order.totalCents,
           currency: order.currency,
         }).catch((e) => console.error("Échec de la notification de commande payée :", e));
+
+        // Confirmation au client (demande d'Adriel : le client n'avait jusqu'ici aucune
+        // confirmation par email de son paiement) — best-effort comme ci-dessus, ne bloque
+        // jamais la confirmation de paiement ni la soumission Prodigi.
+        sendClientOrderPaidEmail({
+          customerEmail: order.customerEmail,
+          customerName: order.customerName,
+          studioName: order.studio.name,
+          totalCents: order.totalCents,
+          currency: order.currency,
+        }).catch((e) => console.error("Échec de l'email de confirmation client :", e));
 
         // Soumission automatique à Prodigi (chantier "impression pixleh Phase 2", 01/08/2026,
         // demande d'Adriel : "passons à la phase 2" — envoi automatique, pas de validation

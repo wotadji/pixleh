@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireStudioSession, AccessError } from "@/lib/access";
 import { bookingRequestSchema } from "@/lib/validators";
-import { sendStudioNewBookingEmail } from "@/lib/notifications";
+import { sendStudioNewBookingEmail, sendClientBookingConfirmationEmail } from "@/lib/notifications";
 
 /** Liste des réservations du studio connecté. */
 export async function GET() {
@@ -59,6 +59,16 @@ export async function POST(req: Request) {
     startsAt: booking.startsAt,
     notes: booking.notes,
   }).catch((e) => console.error("Échec de la notification de réservation :", e));
+
+  // Best-effort : confirme au client que sa demande a bien été reçue, sans jamais faire
+  // échouer la réservation elle-même pour un souci d'envoi (même patron que ci-dessus).
+  sendClientBookingConfirmationEmail({
+    customerName: booking.customerName,
+    customerEmail: booking.customerEmail,
+    studioName: studio.name,
+    startsAt: booking.startsAt,
+    endsAt: booking.endsAt,
+  }).catch((e) => console.error("Échec de la confirmation de réservation au client :", e));
 
   return NextResponse.json({ booking }, { status: 201 });
 }

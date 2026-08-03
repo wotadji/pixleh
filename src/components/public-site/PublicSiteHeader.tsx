@@ -9,8 +9,9 @@ import { useEffect, useState } from "react";
  * en évidence l'entrée de menu correspondant à la page/section affichée. "Portfolio"
  * mène désormais vers la page dédiée /portfolio (grille complète + pagination) plutôt
  * que l'accueil — seul "À propos" reste une ancre scrollspy sur la page d'accueil
- * (#about) ; les autres (Blog, Réserver, Contact, Portfolio) sont de vraies sous-pages,
- * mises en évidence par simple correspondance d'URL.
+ * (#about) ; les autres (Réserver, Contact, Portfolio) sont de vraies sous-pages, mises
+ * en évidence par simple correspondance d'URL. Le lien "Blog" a été retiré de ce menu
+ * (demande d'Adriel) ; la page /s/[slug]/blog reste accessible en URL directe.
  */
 export function PublicSiteHeader({
   studioName,
@@ -47,7 +48,6 @@ export function PublicSiteHeader({
       active: pathname === `/s/${studioSlug}/portfolio`,
     },
     { href: `/s/${studioSlug}#about`, label: "À propos", active: isHome && aboutInView },
-    { href: `/s/${studioSlug}/blog`, label: "Blog", active: pathname?.startsWith(`/s/${studioSlug}/blog`) },
     { href: `/s/${studioSlug}/book`, label: "Réserver", active: pathname === `/s/${studioSlug}/book` },
     { href: `/s/${studioSlug}/contact`, label: "Contact", active: pathname === `/s/${studioSlug}/contact` },
   ];
