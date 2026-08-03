@@ -29,8 +29,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
     prisma.user.findUnique({ where: { id: session.user.id }, select: { emailVerified: true } }),
     // Nom du studio (30/07/2026, demande d'Adriel) : affiché sous "pixleh" dans la sidebar à
     // la place du nom de l'utilisateur — pas non plus exposé dans la session NextAuth.
-    prisma.studio.findUnique({ where: { id: session.user.studioId }, select: { name: true } }),
+    // logoUrl/settings.contactEmail ajoutés (03/08/2026) pour la pastille "profil incomplet"
+    // sur la carte studio de la sidebar (voir DashboardSidebar).
+    prisma.studio.findUnique({
+      where: { id: session.user.studioId },
+      select: { name: true, logoUrl: true, settings: { select: { contactEmail: true } } },
+    }),
   ]);
+
+  const profileIncomplete = !studio?.logoUrl || !studio?.settings?.contactEmail;
 
   return (
     <div className="flex min-h-screen">
@@ -39,6 +46,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         studioSlug={session.user.studioSlug}
         isPlatformAdmin={Boolean((session.user as any).isPlatformAdmin)}
         unreadClientsCount={unreadClientsCount}
+        profileIncomplete={profileIncomplete}
+        missingLogo={!studio?.logoUrl}
+        missingContactEmail={!studio?.settings?.contactEmail}
       />
       <div className="flex flex-1 flex-col">
         <main className="flex-1 p-8">

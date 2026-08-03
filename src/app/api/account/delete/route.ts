@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireStudioSession, AccessError, handleApiError } from "@/lib/access";
 import { getStorage } from "@/lib/storage";
 import { getStripe } from "@/lib/stripe";
+import { sendMail } from "@/lib/mailer";
 
 /**
  * Suppression définitive du compte Studio (droit à l'effacement RGPD) — voir l'audit du
@@ -71,8 +72,11 @@ export async function POST(req: Request) {
 
     const studio = await prisma.studio.findUnique({
       where: { id: studioId },
-      select: { stripeCustomerId: true, stripeSubscriptionId: true },
+      select: { stripeCustomerId: true, stripeSubscriptionId: true, name: true },
     });
+
+    const ownerEmail = user.email;
+    const studioName = studio?.name ?? "votre studio";
 
     // Best-effort, comme pour le stockage ci-dessous : si Stripe est injoignable ou mal
     // configuré (ex: STRIPE_SECRET_KEY absente en dev), on supprime quand même les données
@@ -94,6 +98,22 @@ export async function POST(req: Request) {
     }
 
     await prisma.studio.delete({ where: { id: studioId } });
+
+    // Best-effort, comme pour Stripe/le stockage ci-dessus : envoyée seulement après le
+    // succès de la suppression en base, pour ne jamais confirmer par email une suppression
+    // qui aurait en fait échoué. Un échec d'envoi n'est pas bloquant.
+    if (ownerEmail) {
+      sendMail({
+        to: ownerEmail,
+        subject: "Votre compte pixleh a été supprimé",
+        text:
+          `Bonjour,\n\nVotre compte pixleh et l'ensemble des données de ${studioName} ` +
+          `(galeries, clients, commandes, réservations, contrats, factures...) ont été ` +
+          `définitivement supprimés, conformément à votre demande.\n\n` +
+          `Aucune action supplémentaire n'est nécessaire de votre part.\n\n` +
+          `L'équipe pixleh`,
+      }).catch((e) => console.error("Envoi email de confirmation de suppression échoué :", e));
+    }
 
     return NextResponse.json({ ok: true });
   } catch (e) {

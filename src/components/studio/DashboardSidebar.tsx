@@ -6,12 +6,16 @@ import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { SignOutButton } from "@/components/studio/SignOutButton";
 import { PixlehLogo } from "@/components/marketing/PixlehLogo";
+import { InfoBubble } from "@/components/shared/InfoBubble";
 
 export function DashboardSidebar({
   studioName,
   studioSlug,
   isPlatformAdmin,
   unreadClientsCount = 0,
+  profileIncomplete = false,
+  missingLogo = false,
+  missingContactEmail = false,
 }: {
   /** Nom du studio (Studio.name), affiché sous "pixleh" — remplace le nom de l'utilisateur
    * connecté (30/07/2026, demande d'Adriel) : le studio peut avoir plusieurs membres (OWNER/
@@ -22,6 +26,12 @@ export function DashboardSidebar({
   /** Nombre de clients/prospects avec un message de contact non lu — bulle rouge sur le
    * lien "Clients" (même style que le badge Remarques dans GalleryManager). */
   unreadClientsCount?: number;
+  /** Profil studio incomplet (logo et/ou email de contact manquants) — affiche une pastille
+   * discrète sur l'avatar, avec une bulle expliquant quoi compléter (03/08/2026, demande
+   * d'Adriel). Calculé côté layout à partir de Studio.logoUrl / StudioSettings.contactEmail. */
+  profileIncomplete?: boolean;
+  missingLogo?: boolean;
+  missingContactEmail?: boolean;
 }) {
   const { t } = useLanguage();
   const pathname = usePathname();
@@ -85,8 +95,40 @@ export function DashboardSidebar({
       {/* Identité studio — remplace le simple texte par une carte façon "compte actif",
           plus reconnaissable en un coup d'œil quand on jongle entre plusieurs studios. */}
       <div className="mb-5 flex items-center gap-2.5 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-700">
-          {studioName.trim().slice(0, 1).toUpperCase() || "?"}
+        <div className="relative shrink-0">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-700">
+            {studioName.trim().slice(0, 1).toUpperCase() || "?"}
+          </div>
+          {profileIncomplete && (
+            <InfoBubble
+              trigger={
+                <span className="absolute -right-0.5 -top-0.5 block h-2.5 w-2.5 rounded-full border-2 border-white bg-amber-500" />
+              }
+              triggerLabel={t("studio.sidebar.incompleteProfile.trigger")}
+            >
+              <p className="text-xs font-semibold text-gray-900">{t("studio.sidebar.incompleteProfile.title")}</p>
+              <ul className="mt-1.5 space-y-1 text-xs text-gray-600">
+                {missingLogo && (
+                  <li className="flex items-center gap-1.5">
+                    <span className="h-1 w-1 shrink-0 rounded-full bg-amber-500" />
+                    {t("studio.sidebar.incompleteProfile.missingLogo")}
+                  </li>
+                )}
+                {missingContactEmail && (
+                  <li className="flex items-center gap-1.5">
+                    <span className="h-1 w-1 shrink-0 rounded-full bg-amber-500" />
+                    {t("studio.sidebar.incompleteProfile.missingContactEmail")}
+                  </li>
+                )}
+              </ul>
+              <Link
+                href="/dashboard/settings"
+                className="mt-2 block text-xs font-medium text-brand-600 hover:text-brand-700"
+              >
+                {t("studio.sidebar.incompleteProfile.cta")}
+              </Link>
+            </InfoBubble>
+          )}
         </div>
         <p className="truncate text-sm font-medium text-gray-900">{studioName}</p>
       </div>
