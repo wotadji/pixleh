@@ -460,42 +460,46 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-2xl">
+    <div>
       <h1 className="font-serif text-2xl font-semibold">{t("settings.title")}</h1>
 
       {/* Sous-menu : une section à la fois, plutôt qu'une longue page à faire défiler.
-          Redesign du 03/08/2026 (demande d'Adriel, 4 passes) : (1) pastilles icône + libellé
-          dans un bandeau gris au lieu du simple soulignement texte qui wrappait de façon
-          désordonnée ; (2) "une seule ligne et responsive" → tentative avec scroll horizontal ;
-          (3) "tout le menu doit être visible" → passage à 7 pastilles à largeur égale
-          (flex-1), mais le libellé texte était masqué sous `sm` pour tenir ; (4) "tous les
-          textes doivent être visible" → les libellés eux-mêmes ont été raccourcis dans
-          dictionaries.ts (ex. "Types de séance (réservation)" → "Séances", "Profil du
-          studio" → "Profil") et c'est maintenant l'ICÔNE qui se masque sous `sm` (le texte,
-          lui, reste TOUJOURS affiché, à toute taille d'écran) — le texte est ce qui compte
-          pour se repérer, l'icône n'est qu'une décoration qu'on peut sacrifier en premier
-          quand la place manque. */}
-      <nav className="mt-6 flex gap-1 rounded-xl bg-gray-100 p-1.5 sm:gap-1.5">
+          Redesign du 03/08/2026 (demande d'Adriel, 5 passes) : (1) pastilles icône + libellé
+          au lieu du soulignement texte qui wrappait ; (2) tentative de scroll horizontal ;
+          (3) passage à 7 pastilles à largeur égale (flex-1) avec libellé masqué sous `sm` ;
+          (4) libellés raccourcis dans dictionaries.ts + icône masquée sous `sm` au lieu du
+          texte ; (5) "même s'il faut que ça occupe toute la largeur, je veux TOUS les
+          caractères visibles" → aucune de ces contraintes de largeur égale (flex-1) ne
+          convenait : elle forçait chaque onglet dans une colonne trop étroite pour son texte
+          et le tronquait (`truncate`). Solution finale : le `<nav>` sort du conteneur
+          `max-w-2xl` (qui ne s'applique plus qu'aux formulaires en dessous) pour utiliser
+          TOUTE la largeur du panneau ; chaque onglet garde sa largeur naturelle
+          (`whitespace-nowrap`, pas de `truncate`, pas de `flex-1`) donc son texte n'est
+          JAMAIS coupé ; si malgré la pleine largeur les 7 onglets ne tiennent vraiment pas
+          (mobile très étroit), la nav défile horizontalement (`overflow-x-auto`) plutôt que
+          de couper un caractère — un texte entier qu'on doit faire défiler reste toujours
+          préférable à un texte tronqué. */}
+      <nav className="mt-6 flex gap-1.5 overflow-x-auto rounded-xl bg-gray-100 p-1.5 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
         {TABS.map((tabDef) => (
           <button
             key={tabDef.key}
             onClick={() => setTab(tabDef.key)}
             aria-current={tab === tabDef.key ? "page" : undefined}
-            className={`flex min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-1 py-1.5 text-[11px] font-medium transition-colors sm:gap-1.5 sm:px-3 sm:text-sm ${
+            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
               tab === tabDef.key
                 ? "bg-white text-gray-900 shadow-sm"
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            <span className={`hidden shrink-0 sm:inline ${tab === tabDef.key ? "text-brand-600" : "text-gray-400"}`}>
+            <span className={`shrink-0 ${tab === tabDef.key ? "text-brand-600" : "text-gray-400"}`}>
               {tabDef.icon}
             </span>
-            <span className="truncate">{tabDef.label}</span>
+            <span>{tabDef.label}</span>
           </button>
         ))}
       </nav>
 
-      <div className="mt-6 space-y-10">
+      <div className="mt-6 max-w-2xl space-y-10">
         {tab === "profile" && (
           <form onSubmit={saveProfile} className="space-y-6">
             {/* Identité — logo + nom, la partie la plus visible aux clients (avatar sidebar,
