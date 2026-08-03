@@ -596,10 +596,16 @@ export function GalleriesListView({
 
   return (
     <div>
-      <div className="flex flex-nowrap items-center justify-between gap-3 overflow-x-auto">
+      {/* Barre d'outils (titre + recherche + tri + vue + bouton Nouvelle galerie) — était en
+          `flex-nowrap overflow-x-auto`, ce qui coupait le bouton "Nouvelle galerie" hors champ
+          sur mobile et forçait un scroll horizontal (capture d'Adriel, 04/08/2026, même
+          défaut que la nav Paramètres) : passe en colonne sur petit écran, et les actions
+          s'enroulent (`flex-wrap`) plutôt que de déborder — plus aucun bouton n'est jamais
+          coupé ni accessible seulement par un scroll latéral. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="shrink-0 font-serif text-2xl font-semibold">{t("galleries.title")}</h1>
 
-        <div className="flex shrink-0 flex-nowrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {searchOpen ? (
             <div className="relative">
               <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400">

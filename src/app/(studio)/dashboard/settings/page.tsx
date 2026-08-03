@@ -464,28 +464,25 @@ export default function SettingsPage() {
       <h1 className="font-serif text-2xl font-semibold">{t("settings.title")}</h1>
 
       {/* Sous-menu : une section à la fois, plutôt qu'une longue page à faire défiler.
-          Redesign du 03/08/2026 (demande d'Adriel, 5 passes) : (1) pastilles icône + libellé
-          au lieu du soulignement texte qui wrappait ; (2) tentative de scroll horizontal ;
-          (3) passage à 7 pastilles à largeur égale (flex-1) avec libellé masqué sous `sm` ;
-          (4) libellés raccourcis dans dictionaries.ts + icône masquée sous `sm` au lieu du
-          texte ; (5) "même s'il faut que ça occupe toute la largeur, je veux TOUS les
-          caractères visibles" → aucune de ces contraintes de largeur égale (flex-1) ne
-          convenait : elle forçait chaque onglet dans une colonne trop étroite pour son texte
-          et le tronquait (`truncate`). Solution finale : le `<nav>` sort du conteneur
-          `max-w-2xl` (qui ne s'applique plus qu'aux formulaires en dessous) pour utiliser
-          TOUTE la largeur du panneau ; chaque onglet garde sa largeur naturelle
-          (`whitespace-nowrap`, pas de `truncate`, pas de `flex-1`) donc son texte n'est
-          JAMAIS coupé ; si malgré la pleine largeur les 7 onglets ne tiennent vraiment pas
-          (mobile très étroit), la nav défile horizontalement (`overflow-x-auto`) plutôt que
-          de couper un caractère — un texte entier qu'on doit faire défiler reste toujours
-          préférable à un texte tronqué. */}
-      <nav className="mt-6 flex gap-1.5 overflow-x-auto rounded-xl bg-gray-100 p-1.5 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
+          Redesign du 03-04/08/2026 (demande d'Adriel, 6 passes) : (1) pastilles icône +
+          libellé au lieu du soulignement texte qui wrappait ; (2) tentative de scroll
+          horizontal ; (3) 7 pastilles à largeur égale (flex-1) avec libellé masqué sous `sm` ;
+          (4) libellés raccourcis + icône masquée sous `sm` au lieu du texte ; (5) nav sortie
+          du `max-w-2xl` pour utiliser toute la largeur, mais scroll horizontal encore en
+          secours (`overflow-x-auto`) ; (6) "je ne veux pas qu'on scrolle de gauche à droite"
+          → le scroll horizontal N'EST PLUS ACCEPTABLE, même en dernier recours. Solution
+          finale : `flex-wrap` — les pastilles gardent leur largeur naturelle (texte jamais
+          tronqué) et RETOMBENT sur une deuxième ligne si la largeur du panneau ne suffit pas,
+          au lieu de déborder ou de scroller. Contrairement à la version 1 (soulignement texte
+          qui wrappait "de façon désordonnée"), des pastilles de même hauteur avec un fond
+          commun s'alignent proprement même sur 2 lignes. */}
+      <nav className="mt-6 flex flex-wrap gap-1.5 rounded-xl bg-gray-100 p-1.5">
         {TABS.map((tabDef) => (
           <button
             key={tabDef.key}
             onClick={() => setTab(tabDef.key)}
             aria-current={tab === tabDef.key ? "page" : undefined}
-            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
               tab === tabDef.key
                 ? "bg-white text-gray-900 shadow-sm"
                 : "text-gray-500 hover:text-gray-700"
