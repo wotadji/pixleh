@@ -16,6 +16,8 @@ export function DashboardSidebar({
   profileIncomplete = false,
   missingLogo = false,
   missingContactEmail = false,
+  open = false,
+  onClose,
 }: {
   /** Nom du studio (Studio.name), affiché sous "pixleh" — remplace le nom de l'utilisateur
    * connecté (30/07/2026, demande d'Adriel) : le studio peut avoir plusieurs membres (OWNER/
@@ -32,6 +34,11 @@ export function DashboardSidebar({
   profileIncomplete?: boolean;
   missingLogo?: boolean;
   missingContactEmail?: boolean;
+  /** État ouvert/fermé du tiroir mobile, porté par DashboardShell (useState côté client) —
+   * sans effet à partir de md, où la sidebar reste statique comme avant (04/08/2026, chantier
+   * responsivité dashboard). */
+  open?: boolean;
+  onClose?: () => void;
 }) {
   const { t } = useLanguage();
   const pathname = usePathname();
@@ -87,9 +94,22 @@ export function DashboardSidebar({
   ];
 
   return (
-    <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-gray-50 p-4">
-      <div className="mb-5 px-1">
+    <aside
+      className={`fixed inset-y-0 left-0 z-50 flex h-screen w-64 shrink-0 -translate-x-full flex-col overflow-y-auto border-r border-gray-100 bg-gray-50 p-4 transition-transform duration-200 ease-in-out md:sticky md:top-0 md:translate-x-0 ${
+        open ? "translate-x-0" : ""
+      }`}
+    >
+      <div className="mb-5 flex items-center justify-between px-1">
         <PixlehLogo size={24} />
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t("nav.closeMenu")}
+          title={t("nav.closeMenu")}
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 md:hidden"
+        >
+          <IconClose />
+        </button>
       </div>
 
       {/* Identité studio — remplace le simple texte par une carte façon "compte actif",
@@ -204,6 +224,14 @@ export function DashboardSidebar({
         <LanguageSwitcher />
       </div>
     </aside>
+  );
+}
+
+function IconClose() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M5.5 5.5l13 13M18.5 5.5l-13 13" strokeLinecap="round" />
+    </svg>
   );
 }
 

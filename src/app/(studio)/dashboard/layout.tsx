@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getStudioSession } from "@/lib/access";
 import { getQuotaStatus } from "@/lib/quotas";
 import { prisma } from "@/lib/prisma";
-import { DashboardSidebar } from "@/components/studio/DashboardSidebar";
+import { DashboardShell } from "@/components/studio/DashboardShell";
 import { PendingPlanCheckout } from "@/components/studio/PendingPlanCheckout";
 import { CheckoutConfirm } from "@/components/studio/CheckoutConfirm";
 import { DashboardFooter } from "@/components/studio/DashboardFooter";
@@ -40,8 +40,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const profileIncomplete = !studio?.logoUrl || !studio?.settings?.contactEmail;
 
   return (
-    <div className="flex min-h-screen">
-      <DashboardSidebar
+    <div className="flex min-h-screen flex-col md:flex-row">
+      <DashboardShell
         studioName={studio?.name || ""}
         studioSlug={session.user.studioSlug}
         isPlatformAdmin={Boolean((session.user as any).isPlatformAdmin)}
@@ -49,18 +49,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
         profileIncomplete={profileIncomplete}
         missingLogo={!studio?.logoUrl}
         missingContactEmail={!studio?.settings?.contactEmail}
-      />
-      <div className="flex flex-1 flex-col">
-        <main className="flex-1 p-8">
-          <OnboardingGuide studioId={session.user.studioId} />
-          <PendingPlanCheckout />
-          <CheckoutConfirm />
-          <EmailVerificationBanner verified={Boolean(currentUser?.emailVerified)} />
-          <QuotaAlertBanner quota={quota} />
-          {children}
-        </main>
-        <DashboardFooter />
-      </div>
+      >
+        <div className="flex flex-1 flex-col">
+          <main className="flex-1 p-4 md:p-8">
+            <OnboardingGuide studioId={session.user.studioId} />
+            <PendingPlanCheckout />
+            <CheckoutConfirm />
+            <EmailVerificationBanner verified={Boolean(currentUser?.emailVerified)} />
+            <QuotaAlertBanner quota={quota} />
+            {children}
+          </main>
+          <DashboardFooter />
+        </div>
+      </DashboardShell>
     </div>
   );
 }
