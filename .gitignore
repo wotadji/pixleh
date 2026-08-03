@@ -4,6 +4,9 @@ out
 storage
 .env
 .env.local
+# Brouillons perso des variables d'environnement par cible de déploiement (dev/uat/prod) —
+# jamais lus par l'app, jamais poussés sur GitHub (04/08/2026).
+secrets/
 *.log
 .DS_Store
 next-env.d.ts
