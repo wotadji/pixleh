@@ -464,30 +464,32 @@ export default function SettingsPage() {
       <h1 className="font-serif text-2xl font-semibold">{t("settings.title")}</h1>
 
       {/* Sous-menu : une section à la fois, plutôt qu'une longue page à faire défiler.
-          Redesign du 03/08/2026 (demande d'Adriel : "refaire un UX/UI pro") : les 7 onglets
-          en simple soulignement texte wrappaient de façon désordonnée sur deux lignes sans
-          alignement — remplacés par des pastilles icône + libellé dans un bandeau gris.
-          Deuxième passe (même jour, demande d'Adriel : "sur une seule ligne et responsive") :
-          plus de retour à la ligne — la nav reste sur UNE ligne et défile horizontalement
-          (scroll tactile/molette) dès que la largeur d'écran ne suffit plus, comme un
-          segmented control mobile ; la scrollbar est masquée pour rester discrète. */}
-      <nav
-        className="mt-6 flex gap-1.5 overflow-x-auto rounded-xl bg-gray-100 p-1.5 [&::-webkit-scrollbar]:hidden"
-        style={{ scrollbarWidth: "none" }}
-      >
+          Redesign du 03/08/2026 (demande d'Adriel, 3 passes) : (1) pastilles icône + libellé
+          dans un bandeau gris au lieu du simple soulignement texte qui wrappait de façon
+          désordonnée ; (2) "une seule ligne et responsive" → tentative avec scroll horizontal ;
+          (3) "tout le menu doit être visible" → le scroll masquait des onglets hors champ sur
+          petit écran, ce qui ne convient pas pour une nav (contrairement à une liste de
+          contenu) : les 7 onglets se partagent maintenant la largeur disponible à parts égales
+          (flex-1) et RESTENT TOUJOURS TOUS VISIBLES sur une seule ligne, y compris en mobile —
+          le libellé texte se masque sous le breakpoint `sm` (icône + tooltip natif via
+          `title` seulement) pour que 7 pastilles tiennent sans jamais scroller ni wrapper. */}
+      <nav className="mt-6 flex gap-1 rounded-xl bg-gray-100 p-1.5 sm:gap-1.5">
         {TABS.map((tabDef) => (
           <button
             key={tabDef.key}
             onClick={() => setTab(tabDef.key)}
             aria-current={tab === tabDef.key ? "page" : undefined}
-            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+            title={tabDef.label}
+            className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-1.5 py-1.5 text-sm font-medium transition-colors sm:px-3 ${
               tab === tabDef.key
                 ? "bg-white text-gray-900 shadow-sm"
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            <span className={tab === tabDef.key ? "text-brand-600" : "text-gray-400"}>{tabDef.icon}</span>
-            {tabDef.label}
+            <span className={`shrink-0 ${tab === tabDef.key ? "text-brand-600" : "text-gray-400"}`}>
+              {tabDef.icon}
+            </span>
+            <span className="hidden truncate sm:inline">{tabDef.label}</span>
           </button>
         ))}
       </nav>
