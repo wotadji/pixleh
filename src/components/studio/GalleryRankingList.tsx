@@ -22,20 +22,24 @@ export function GalleryRankingList({
   items,
   hrefBase,
   emptyLabel,
+  emptyHint,
   emptyIcon,
   barGradientClassName = "from-brand-600 to-brand-400",
 }: {
   items: RankedGalleryItem[];
   hrefBase: string;
   emptyLabel?: string;
+  /** Sous-texte rassurant affiché sous emptyLabel — ex: quand les données apparaîtront. */
+  emptyHint?: string;
   emptyIcon?: React.ReactNode;
   barGradientClassName?: string;
 }) {
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 py-8 text-gray-300">
+      <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 px-4 py-8 text-center text-gray-300">
         {emptyIcon && <span className="h-8 w-8">{emptyIcon}</span>}
-        {emptyLabel && <p className="text-xs text-gray-400">{emptyLabel}</p>}
+        {emptyLabel && <p className="text-xs font-medium text-gray-400">{emptyLabel}</p>}
+        {emptyHint && <p className="text-[11px] text-gray-300">{emptyHint}</p>}
       </div>
     );
   }
@@ -57,7 +61,7 @@ export function GalleryRankingList({
                   {item.title}
                 </span>
               </span>
-              <span className="flex shrink-0 items-center gap-2.5 text-xs text-gray-400">{item.meta}</span>
+              <span className="flex shrink-0 items-center gap-2.5 text-xs tabular-nums text-gray-400">{item.meta}</span>
             </div>
             <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100">
               <div

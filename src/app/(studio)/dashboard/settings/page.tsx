@@ -482,107 +482,155 @@ export default function SettingsPage() {
 
       <div className="mt-6 space-y-10">
         {tab === "profile" && (
-          <form onSubmit={saveProfile} className="card space-y-4">
-            <div className="flex items-center gap-4">
-              {logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={logoUrl} alt={studioName} className="h-16 w-16 rounded-full object-cover" />
-              ) : (
-                <span className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-200 text-lg font-semibold text-gray-600">
-                  {studioName?.trim()?.[0]?.toUpperCase() || "?"}
-                </span>
-              )}
-              <div>
-                <p className="mb-1 text-xs font-medium text-gray-600">{t("settings.logoLabel")}</p>
-                <div className="flex items-center gap-3">
-                  <label className="btn-secondary cursor-pointer text-xs">
-                    {logoUploading ? t("settings.logoUploading") : t("settings.logoUpload")}
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      disabled={logoUploading}
-                      onChange={handleFileSelected}
-                    />
-                  </label>
-                  {logoUrl && (
-                    <button
-                      type="button"
-                      onClick={removeLogo}
-                      disabled={logoUploading}
-                      className="rounded border border-red-500 px-2.5 py-1 text-xs uppercase tracking-wide text-red-600 hover:bg-red-50 disabled:opacity-50"
-                    >
-                      {t("settings.logoRemove")}
-                    </button>
-                  )}
+          <form onSubmit={saveProfile} className="space-y-6">
+            {/* Identité — logo + nom, la partie la plus visible aux clients (avatar sidebar,
+                couvertures de galerie, site public). Section à part pour que ce soit la
+                première chose vue en arrivant sur l'onglet (redesign du 03/08/2026, demande
+                d'Adriel : "plus pro et sectionné" plutôt qu'un unique long formulaire). */}
+            <section className="card space-y-4">
+              <h2 className="font-serif text-base font-semibold text-gray-900">
+                {t("settings.profile.identitySection")}
+              </h2>
+              <div className="flex items-center gap-4">
+                {logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoUrl} alt={studioName} className="h-16 w-16 rounded-full object-cover" />
+                ) : (
+                  <span className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-200 text-lg font-semibold text-gray-600">
+                    {studioName?.trim()?.[0]?.toUpperCase() || "?"}
+                  </span>
+                )}
+                <div>
+                  <p className="mb-1 text-xs font-medium text-gray-600">{t("settings.logoLabel")}</p>
+                  <div className="flex items-center gap-3">
+                    <label className="btn-secondary cursor-pointer text-xs">
+                      {logoUploading ? t("settings.logoUploading") : t("settings.logoUpload")}
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={logoUploading}
+                        onChange={handleFileSelected}
+                      />
+                    </label>
+                    {logoUrl && (
+                      <button
+                        type="button"
+                        onClick={removeLogo}
+                        disabled={logoUploading}
+                        className="rounded border border-red-500 px-2.5 py-1 text-xs uppercase tracking-wide text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        {t("settings.logoRemove")}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">{t("settings.studioNameLabel")}</label>
-              <input className="input w-full" value={studioName} onChange={(e) => setStudioName(e.target.value)} />
-            </div>
+              <div className="max-w-sm">
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  {t("settings.studioNameLabel")}
+                </label>
+                <input className="input w-full" value={studioName} onChange={(e) => setStudioName(e.target.value)} />
+              </div>
+            </section>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {/* Coordonnées — visibles sur le site public et utilisées côté système (email de
+                contact = destinataire des messages du formulaire de contact, voir
+                POST /api/contact). */}
+            <section className="card space-y-4">
+              <h2 className="font-serif text-base font-semibold text-gray-900">
+                {t("settings.profile.contactSection")}
+              </h2>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">
+                    {t("settings.contactEmailLabel")}
+                  </label>
+                  <input
+                    type="email"
+                    className="input w-full"
+                    value={contactEmail}
+                    onChange={(e) => setContactEmail(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">
+                    {t("settings.contactPhoneLabel")}
+                  </label>
+                  <input
+                    className="input w-full"
+                    value={contactPhone}
+                    onChange={(e) => setContactPhone(e.target.value)}
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-xs font-medium text-gray-600">
+                    {t("settings.addressLabel")}
+                  </label>
+                  <input className="input w-full" value={address} onChange={(e) => setAddress(e.target.value)} />
+                </div>
+              </div>
+            </section>
+
+            {/* Réseaux sociaux — section propre plutôt que mélangée aux coordonnées, pour
+                bien distinguer "comment un client vous contacte" de "où vous suivre". */}
+            <section className="card space-y-4">
+              <h2 className="font-serif text-base font-semibold text-gray-900">
+                {t("settings.profile.socialSection")}
+              </h2>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">
+                    {t("settings.instagramLabel")}
+                  </label>
+                  <input
+                    className="input w-full"
+                    value={instagramUrl}
+                    onChange={(e) => setInstagramUrl(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">
+                    {t("settings.facebookLabel")}
+                  </label>
+                  <input
+                    className="input w-full"
+                    value={facebookUrl}
+                    onChange={(e) => setFacebookUrl(e.target.value)}
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* À propos — texte affiché sur la page publique du studio, section la plus
+                longue (éditeur riche) donc placée en dernier. */}
+            <section className="card space-y-4">
+              <h2 className="font-serif text-base font-semibold text-gray-900">
+                {t("settings.profile.aboutSection")}
+              </h2>
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600">
-                  {t("settings.contactEmailLabel")}
+                  {t("settings.aboutTitleLabel")}
                 </label>
-                <input
-                  type="email"
-                  className="input w-full"
-                  value={contactEmail}
-                  onChange={(e) => setContactEmail(e.target.value)}
-                />
+                <input className="input w-full" value={aboutTitle} onChange={(e) => setAboutTitle(e.target.value)} />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600">
-                  {t("settings.contactPhoneLabel")}
+                  {t("settings.aboutBodyLabel")}
                 </label>
-                <input
-                  className="input w-full"
-                  value={contactPhone}
-                  onChange={(e) => setContactPhone(e.target.value)}
-                />
+                <RichTextEditor value={aboutBody} onChange={setAboutBody} />
               </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">{t("settings.addressLabel")}</label>
-                <input className="input w-full" value={address} onChange={(e) => setAddress(e.target.value)} />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">{t("settings.instagramLabel")}</label>
-                <input
-                  className="input w-full"
-                  value={instagramUrl}
-                  onChange={(e) => setInstagramUrl(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">{t("settings.facebookLabel")}</label>
-                <input
-                  className="input w-full"
-                  value={facebookUrl}
-                  onChange={(e) => setFacebookUrl(e.target.value)}
-                />
-              </div>
-            </div>
+            </section>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">{t("settings.aboutTitleLabel")}</label>
-              <input className="input w-full" value={aboutTitle} onChange={(e) => setAboutTitle(e.target.value)} />
+              <button type="submit" className="btn-primary text-sm">
+                {t("common.save")}
+              </button>
+              {profileSaved && <span className="ml-2 text-sm text-green-600">{t("common.saved")}</span>}
+              {profileError && <span className="ml-2 text-sm text-red-600">{profileError}</span>}
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">{t("settings.aboutBodyLabel")}</label>
-              <RichTextEditor value={aboutBody} onChange={setAboutBody} />
-            </div>
-
-            <button type="submit" className="btn-primary text-sm">
-              {t("common.save")}
-            </button>
-            {profileSaved && <span className="ml-2 text-sm text-green-600">{t("common.saved")}</span>}
-            {profileError && <span className="ml-2 text-sm text-red-600">{profileError}</span>}
           </form>
         )}
 

@@ -78,72 +78,80 @@ export default function WebsiteSettingsPage() {
         </p>
       )}
 
+      {/* Redesign en cartes sectionnées (03/08/2026, demande d'Adriel), même esprit que
+          Paramètres > Profil du studio : un long formulaire vertical à base de <fieldset>
+          devient trois cartes avec en-tête, plus faciles à scanner. Champs/comportement
+          inchangés. */}
       <form onSubmit={handleSubmit} className="mt-6 space-y-6">
-        <fieldset className="space-y-3">
-          <legend className="font-medium">{t("website.homeSection")}</legend>
+        <section className="card space-y-3">
+          <h2 className="font-serif text-base font-semibold text-gray-900">{t("website.homeSection")}</h2>
           <input
             placeholder={t("website.heroTitle")}
-            className="input"
+            className="input w-full"
             value={form.heroTitle}
             onChange={(e) => setForm({ ...form, heroTitle: e.target.value })}
           />
           <input
             placeholder={t("website.heroSubtitle")}
-            className="input"
+            className="input w-full"
             value={form.heroSubtitle}
             onChange={(e) => setForm({ ...form, heroSubtitle: e.target.value })}
           />
-        </fieldset>
+        </section>
 
-        <fieldset className="space-y-3">
-          <legend className="font-medium">{t("website.aboutSection")}</legend>
+        <section className="card space-y-3">
+          <h2 className="font-serif text-base font-semibold text-gray-900">{t("website.aboutSection")}</h2>
           <input
             placeholder={t("website.aboutTitle")}
-            className="input"
+            className="input w-full"
             value={form.aboutTitle}
             onChange={(e) => setForm({ ...form, aboutTitle: e.target.value })}
           />
           <textarea
             placeholder={t("website.aboutBody")}
             rows={5}
-            className="input"
+            className="input w-full"
             value={form.aboutBody}
             onChange={(e) => setForm({ ...form, aboutBody: e.target.value })}
           />
-        </fieldset>
+        </section>
 
-        <fieldset className="space-y-3">
-          <legend className="font-medium">{t("website.contactSection")}</legend>
-          <input
-            placeholder={t("website.contactEmail")}
-            className="input"
-            value={form.contactEmail}
-            onChange={(e) => setForm({ ...form, contactEmail: e.target.value })}
-          />
-          <input
-            placeholder={t("website.contactPhone")}
-            className="input"
-            value={form.contactPhone}
-            onChange={(e) => setForm({ ...form, contactPhone: e.target.value })}
-          />
-          <input
-            placeholder={t("website.instagram")}
-            className="input"
-            value={form.instagramUrl}
-            onChange={(e) => setForm({ ...form, instagramUrl: e.target.value })}
-          />
-          <input
-            placeholder={t("website.facebook")}
-            className="input"
-            value={form.facebookUrl}
-            onChange={(e) => setForm({ ...form, facebookUrl: e.target.value })}
-          />
-        </fieldset>
+        <section className="card space-y-3">
+          <h2 className="font-serif text-base font-semibold text-gray-900">{t("website.contactSection")}</h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <input
+              placeholder={t("website.contactEmail")}
+              className="input w-full"
+              value={form.contactEmail}
+              onChange={(e) => setForm({ ...form, contactEmail: e.target.value })}
+            />
+            <input
+              placeholder={t("website.contactPhone")}
+              className="input w-full"
+              value={form.contactPhone}
+              onChange={(e) => setForm({ ...form, contactPhone: e.target.value })}
+            />
+            <input
+              placeholder={t("website.instagram")}
+              className="input w-full"
+              value={form.instagramUrl}
+              onChange={(e) => setForm({ ...form, instagramUrl: e.target.value })}
+            />
+            <input
+              placeholder={t("website.facebook")}
+              className="input w-full"
+              value={form.facebookUrl}
+              onChange={(e) => setForm({ ...form, facebookUrl: e.target.value })}
+            />
+          </div>
+        </section>
 
-        <button type="submit" disabled={loading} className="btn-primary">
-          {loading ? t("common.saving") : t("common.save")}
-        </button>
-        {saved && <span className="ml-3 text-sm text-green-600">{t("common.saved")}</span>}
+        <div>
+          <button type="submit" disabled={loading} className="btn-primary">
+            {loading ? t("common.saving") : t("common.save")}
+          </button>
+          {saved && <span className="ml-3 text-sm text-green-600">{t("common.saved")}</span>}
+        </div>
       </form>
     </div>
   );

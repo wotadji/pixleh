@@ -158,10 +158,12 @@ export function OverviewStats({
 
   return (
     <div>
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-gray-100 pb-4">
         <div>
           <h1 className="font-serif text-2xl font-semibold">{t("overview.title")}</h1>
-          <p className="mt-1 text-sm capitalize text-gray-400">{dateFormatter.format(new Date())}</p>
+          <p className="mt-1 text-sm capitalize text-gray-400">
+            {t("overview.periodLabel")} · {dateFormatter.format(new Date())}
+          </p>
         </div>
       </div>
 
@@ -310,8 +312,9 @@ export function OverviewStats({
               data={revenueByMonth.map((cents, i) => ({ label: monthLabels[i], value: cents }))}
               formatValue={(cents) => currencyFormatter.format(cents / 100)}
               emptyLabel={t("overview.revenue.empty")}
+              emptyHint={t("overview.revenue.emptyHint")}
               emptyIcon={<IconTrendingUp className="h-full w-full" />}
-              gradientClassName="from-brand-600 to-brand-400"
+              barColorClassName="bg-brand-600"
             />
           </div>
         </div>
@@ -329,9 +332,11 @@ export function OverviewStats({
           <div className="mt-5">
             <SimpleBarChart
               data={uploadsByMonth.map((count, i) => ({ label: monthLabels[i], value: count }))}
+              formatValue={(count) => count.toLocaleString(locale)}
               emptyLabel={t("overview.uploads.empty")}
+              emptyHint={t("overview.uploads.emptyHint")}
               emptyIcon={<IconUpload className="h-full w-full" />}
-              gradientClassName="from-amber-600 to-amber-400"
+              barColorClassName="bg-brand-600"
             />
           </div>
         </div>
@@ -357,8 +362,9 @@ export function OverviewStats({
                 meta: formatGB(g.bytes),
               }))}
               emptyLabel={t("overview.storage.empty")}
+              emptyHint={t("overview.storage.emptyHint")}
               emptyIcon={<IconDatabase className="h-full w-full" />}
-              barGradientClassName="from-blue-600 to-blue-400"
+              barGradientClassName="from-brand-600 to-brand-600"
             />
           </div>
         </div>
@@ -391,8 +397,9 @@ export function OverviewStats({
                 ),
               }))}
               emptyLabel={t("overview.popularity.empty")}
+              emptyHint={t("overview.popularity.emptyHint")}
               emptyIcon={<IconHeart className="h-full w-full" />}
-              barGradientClassName="from-rose-600 to-rose-400"
+              barGradientClassName="from-brand-600 to-brand-600"
             />
           </div>
         </div>
