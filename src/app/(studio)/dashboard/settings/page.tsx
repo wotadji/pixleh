@@ -466,16 +466,21 @@ export default function SettingsPage() {
       {/* Sous-menu : une section à la fois, plutôt qu'une longue page à faire défiler.
           Redesign du 03/08/2026 (demande d'Adriel : "refaire un UX/UI pro") : les 7 onglets
           en simple soulignement texte wrappaient de façon désordonnée sur deux lignes sans
-          alignement — remplacés par des pastilles icône + libellé dans un bandeau gris, qui
-          s'enroulent proprement quelle que soit la largeur d'écran (même logique que la nav
-          groupée de la sidebar, cf. DashboardSidebar.tsx). */}
-      <nav className="mt-6 flex flex-wrap gap-1.5 rounded-xl bg-gray-100 p-1.5">
+          alignement — remplacés par des pastilles icône + libellé dans un bandeau gris.
+          Deuxième passe (même jour, demande d'Adriel : "sur une seule ligne et responsive") :
+          plus de retour à la ligne — la nav reste sur UNE ligne et défile horizontalement
+          (scroll tactile/molette) dès que la largeur d'écran ne suffit plus, comme un
+          segmented control mobile ; la scrollbar est masquée pour rester discrète. */}
+      <nav
+        className="mt-6 flex gap-1.5 overflow-x-auto rounded-xl bg-gray-100 p-1.5 [&::-webkit-scrollbar]:hidden"
+        style={{ scrollbarWidth: "none" }}
+      >
         {TABS.map((tabDef) => (
           <button
             key={tabDef.key}
             onClick={() => setTab(tabDef.key)}
             aria-current={tab === tabDef.key ? "page" : undefined}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
               tab === tabDef.key
                 ? "bg-white text-gray-900 shadow-sm"
                 : "text-gray-500 hover:text-gray-700"
