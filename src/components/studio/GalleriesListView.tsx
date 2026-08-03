@@ -121,6 +121,39 @@ function SearchIcon() {
   );
 }
 
+function PlusIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+      <path d="M10 4.5v11M4.5 10h11" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Icône "pile de photos" pour l'état vide de la liste des galeries — distincte des icônes
+ * fonctionnelles (recherche, corbeille...) plus haut, purement illustrative. */
+function EmptyGalleriesIcon() {
+  return (
+    <svg width="44" height="44" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="6.5" width="15" height="12" rx="2" stroke="currentColor" strokeWidth="1.4" />
+      <path
+        d="M6.5 3.5H21v12.5"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="8" cy="10.5" r="1.4" fill="currentColor" />
+      <path
+        d="M3 16.5l4-3.8a1.4 1.4 0 011.9 0l2.6 2.5 2.2-2a1.4 1.4 0 011.9.03L18 15.5"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function ChevronIcon({ open }: { open: boolean }) {
   return (
     <svg
@@ -601,78 +634,98 @@ export function GalleriesListView({
           sur mobile et forçait un scroll horizontal (capture d'Adriel, 04/08/2026, même
           défaut que la nav Paramètres) : passe en colonne sur petit écran, et les actions
           s'enroulent (`flex-wrap`) plutôt que de déborder — plus aucun bouton n'est jamais
-          coupé ni accessible seulement par un scroll latéral. */}
+          coupé ni accessible seulement par un scroll latéral.
+          Refonte du 03/08/2026 (retour d'Adriel : les outils secondaires flottaient sans lien
+          visuel avec le titre ni entre eux) : les actions secondaires (recherche, tri, bascule
+          grille/liste) sont regroupées dans un même conteneur `bg-gray-50` avec séparateurs
+          fins, pour se lire comme un seul bloc "outils" — bien distinct du bouton primaire
+          "Nouvelle galerie", qui reste seul et contrasté à droite. Un sous-titre sous le
+          titre affiche maintenant le nombre de galeries. */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="shrink-0 font-serif text-2xl font-semibold">{t("galleries.title")}</h1>
+        <div className="shrink-0">
+          <h1 className="font-serif text-2xl font-semibold">{t("galleries.title")}</h1>
+          <p className="mt-0.5 text-sm text-gray-500">
+            {localGalleries.length === 0
+              ? t("galleries.subtitleEmpty")
+              : t("galleries.subtitle").replace("{count}", String(localGalleries.length))}
+          </p>
+        </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {searchOpen ? (
-            <div className="relative">
-              <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400">
+          <div className="flex flex-wrap items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1">
+            {searchOpen ? (
+              <div className="relative">
+                <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400">
+                  <SearchIcon />
+                </span>
+                <input
+                  autoFocus
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onBlur={() => {
+                    if (!search.trim()) setSearchOpen(false);
+                  }}
+                  placeholder={t("galleries.searchPlaceholder")}
+                  className="h-8 w-44 rounded-lg border border-gray-200 bg-white pl-8 pr-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                />
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSearchOpen(true)}
+                title={t("galleries.searchPlaceholder")}
+                className="rounded-lg p-1.5 text-gray-500 hover:bg-white hover:text-gray-700"
+              >
                 <SearchIcon />
-              </span>
-              <input
-                autoFocus
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onBlur={() => {
-                  if (!search.trim()) setSearchOpen(false);
-                }}
-                placeholder={t("galleries.searchPlaceholder")}
-                className="input w-48 pl-8 text-sm"
-              />
+              </button>
+            )}
+
+            <span className="mx-0.5 h-5 w-px shrink-0 bg-gray-200" aria-hidden="true" />
+
+            <select
+              className="h-8 rounded-lg border-0 bg-transparent px-2 text-sm text-gray-700 hover:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+            >
+              <option value="newest">{t("galleries.sortNewest")}</option>
+              <option value="oldest">{t("galleries.sortOldest")}</option>
+              <option value="mostPhotos">{t("galleries.sortMostPhotos")}</option>
+            </select>
+
+            <span className="mx-0.5 h-5 w-px shrink-0 bg-gray-200" aria-hidden="true" />
+
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => changeView("grid")}
+                title={t("galleries.viewGrid")}
+                className={`rounded-lg p-1.5 ${viewMode === "grid" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-white"}`}
+              >
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                  <rect x="2" y="2" width="7" height="7" rx="1" fill="currentColor" />
+                  <rect x="11" y="2" width="7" height="7" rx="1" fill="currentColor" />
+                  <rect x="2" y="11" width="7" height="7" rx="1" fill="currentColor" />
+                  <rect x="11" y="11" width="7" height="7" rx="1" fill="currentColor" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => changeView("list")}
+                title={t("galleries.viewList")}
+                className={`rounded-lg p-1.5 ${viewMode === "list" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-white"}`}
+              >
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                  <rect x="2" y="3" width="16" height="3" rx="1" fill="currentColor" />
+                  <rect x="2" y="8.5" width="16" height="3" rx="1" fill="currentColor" />
+                  <rect x="2" y="14" width="16" height="3" rx="1" fill="currentColor" />
+                </svg>
+              </button>
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setSearchOpen(true)}
-              title={t("galleries.searchPlaceholder")}
-              className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50"
-            >
-              <SearchIcon />
-            </button>
-          )}
-
-          <select
-            className="input w-auto text-sm"
-            value={sortOrder}
-            onChange={(e) => setSortOrder(e.target.value as SortOrder)}
-          >
-            <option value="newest">{t("galleries.sortNewest")}</option>
-            <option value="oldest">{t("galleries.sortOldest")}</option>
-            <option value="mostPhotos">{t("galleries.sortMostPhotos")}</option>
-          </select>
-
-          <div className="flex items-center gap-1 rounded-lg border border-gray-200 p-0.5">
-            <button
-              type="button"
-              onClick={() => changeView("grid")}
-              title={t("galleries.viewGrid")}
-              className={`rounded-md p-1.5 ${viewMode === "grid" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
-            >
-              <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-                <rect x="2" y="2" width="7" height="7" rx="1" fill="currentColor" />
-                <rect x="11" y="2" width="7" height="7" rx="1" fill="currentColor" />
-                <rect x="2" y="11" width="7" height="7" rx="1" fill="currentColor" />
-                <rect x="11" y="11" width="7" height="7" rx="1" fill="currentColor" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={() => changeView("list")}
-              title={t("galleries.viewList")}
-              className={`rounded-md p-1.5 ${viewMode === "list" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
-            >
-              <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-                <rect x="2" y="3" width="16" height="3" rx="1" fill="currentColor" />
-                <rect x="2" y="8.5" width="16" height="3" rx="1" fill="currentColor" />
-                <rect x="2" y="14" width="16" height="3" rx="1" fill="currentColor" />
-              </svg>
-            </button>
           </div>
 
-          <Link href="/dashboard/galleries/new" className="btn-primary whitespace-nowrap">
+          <Link href="/dashboard/galleries/new" className="btn-primary gap-1.5 whitespace-nowrap">
+            <PlusIcon />
             {t("galleries.new")}
           </Link>
         </div>
@@ -824,10 +877,28 @@ export function GalleriesListView({
         )}
       </div>
 
+      {/* État vide redessiné (retour d'Adriel, 03/08/2026) : distingue le cas "aucune galerie
+          créée" (icône + CTA pour démarrer vite) du cas "filtres trop restrictifs" (pas de
+          CTA de création — le bouton "Réinitialiser" de la ligne de filtres au-dessus suffit
+          à corriger ce cas, inutile de le dupliquer ici). */}
       {sorted.length === 0 && (
-        <p className="mt-9 rounded-xl border border-gray-200 p-6 text-sm text-gray-500">
-          {localGalleries.length === 0 ? t("galleries.empty") : t("galleries.noResults")}
-        </p>
+        <div className="mt-9 flex flex-col items-center rounded-xl border border-gray-200 px-6 py-16 text-center">
+          <span className="text-gray-300">
+            <EmptyGalleriesIcon />
+          </span>
+          <p className="mt-4 text-base font-semibold text-gray-800">
+            {localGalleries.length === 0 ? t("galleries.empty") : t("galleries.noResults")}
+          </p>
+          <p className="mt-1 max-w-sm text-sm text-gray-500">
+            {localGalleries.length === 0 ? t("galleries.emptyHint") : t("galleries.noResultsHint")}
+          </p>
+          {localGalleries.length === 0 && (
+            <Link href="/dashboard/galleries/new" className="btn-primary mt-5 gap-1.5">
+              <PlusIcon />
+              {t("galleries.new")}
+            </Link>
+          )}
+        </div>
       )}
 
       {sorted.length > 0 && viewMode === "grid" && (
