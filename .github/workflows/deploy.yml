@@ -85,10 +85,18 @@ jobs:
             cd "${{ secrets.SSH_APP_PATH }}"
             node -v
             npm -v
-            # node_modules exclu du rsync : réinstallé ICI, sur l'OS/l'architecture réelle
-            # du serveur (les binaires natifs de sharp/prisma ne sont pas portables d'une
-            # machine à l'autre — c'est justement ce qui bloque sharp dans le bac à sable
-            # de dev, voir le diagnostic).
+            # Le "NodeJS Selector" du panel (Passenger-like) ne redémarre pas réellement
+            # l'app sur cet hébergement (Hepsia/cloudlogin) : touch tmp/restart.txt n'a
+            # aucun effet ici (bug découvert le 04/08/2026 lors du premier déploiement prod
+            # — l'app tournait toujours avec l'ancien code/l'ancien .env de l'UAT après un
+            # rsync réussi, provoquant des redirections vers l'ancien sous-domaine UAT lors
+            # du login). On gère donc le process nous-mêmes avec pm2, comme pour l'UAT.
+            command -v pm2 >/dev/null 2>&1 || npm install -g pm2
+            # L'instance Node.js unique de ce compte (limite du plan) a été réaffectée de
+            # l'UAT vers la prod le 04/08/2026 : on tue l'ancien process pixleh-uat s'il
+            # tourne encore (même port), en plus du process prod lui-même s'il existe déjà.
+            pm2 delete pixleh-uat 2>/dev/null || true
+            pm2 delete pixleh-prod 2>/dev/null || true
             npm ci --omit=dev
             npx prisma generate
             # Le projet n'a pas d'historique de migrations Prisma (prisma/migrations
@@ -96,7 +104,6 @@ jobs:
             # `migrate deploy`. En CI non interactif, `db push` échoue plutôt que
             # d'appliquer silencieusement un changement destructeur — comportement voulu.
             npx prisma db push
-            # Convention Passenger (utilisée par "Setup Node.js App" de cPanel) :
-            # toucher tmp/restart.txt redémarre l'application au prochain hit.
-            mkdir -p tmp
-            touch tmp/restart.txt
+            export NODE_ENV=production
+            pm2 start server.js --name pixleh-prod
+            pm2 save
