@@ -34,6 +34,10 @@ jobs:
             echo "::error::SSH_APP_PATH n'est pas configuré (secret vide) — abandon du déploiement pour éviter d'écraser le mauvais dossier (rsync --delete vers un chemin vide écrirait dans le répertoire personnel du compte SSH)."
             exit 1
           fi
+          if [ -z "${{ secrets.SSH_APP_PORT }}" ]; then
+            echo "::error::SSH_APP_PORT n'est pas configuré (secret vide) — sans lui server.js retombe sur le port 3000 par défaut (EACCES sur ce compte, boucle de crash), voir commentaire dans l'étape pm2 ci-dessous."
+            exit 1
+          fi
 
       - name: Installer les dépendances (pour build le .next ici, pas sur le serveur mutualisé)
         run: npm ci
@@ -104,6 +108,12 @@ jobs:
             # `migrate deploy`. En CI non interactif, `db push` échoue plutôt que
             # d'appliquer silencieusement un changement destructeur — comportement voulu.
             npx prisma db push
+            # server.js lit process.env.PORT AVANT que Next.js ne charge le .env (ligne 16,
+            # bien avant app.prepare()) — le PORT du .env est donc ignoré à ce stade. Il faut
+            # l'exporter explicitement ici, comme pour l'UAT (bug découvert le 04/08/2026 :
+            # sans ça, l'app retombe sur le port 3000 par défaut, EACCES sur ce compte, boucle
+            # de crash pm2).
+            export PORT="${{ secrets.SSH_APP_PORT }}"
             export NODE_ENV=production
             pm2 start server.js --name pixleh-prod
             pm2 save
