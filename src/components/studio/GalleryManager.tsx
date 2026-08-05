@@ -2308,12 +2308,17 @@ export function GalleryManager({
           />
 
           <p className="mb-1.5 mt-4 text-xs font-medium text-gray-600">{t("gm.setVisibilityLabel")}</p>
+          {/* PORTFOLIO retiré ici (05/08/2026, demande d'Adriel) — même logique que le
+              "Visible par" global de la création de galerie (voir NewGalleryForm.tsx) : la
+              visibilité portfolio d'un set personnalisé n'est plus éditable via cette case à
+              cocher, seul le set "Portfolio" auto-créé garde son interrupteur dédié
+              (togglePortfolioVisibility ci-dessus) pour éviter d'avoir deux façons différentes
+              de piloter le portfolio public. */}
           <div className="space-y-1.5">
             {(
               [
                 { key: "CLIENT", label: t("gm.setVisibilityClient") },
                 { key: "GUEST", label: t("gm.setVisibilityGuest") },
-                { key: "PORTFOLIO", label: t("gm.setVisibilityPortfolio") },
               ] as { key: SetVisibility; label: string }[]
             ).map((opt) => (
               <label key={opt.key} className="flex items-center gap-2 text-sm text-gray-700">
