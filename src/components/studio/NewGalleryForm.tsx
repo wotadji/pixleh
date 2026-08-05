@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { MultiSearchableSelect } from "@/components/ui/MultiSearchableSelect";
+import { generateGalleryCode } from "@/lib/galleryCode";
 
 interface ClientOption {
   id: string;
@@ -25,6 +27,10 @@ export function NewGalleryForm({ existingTags = [] }: { existingTags?: string[] 
     allowFavorites: true,
     showWatermark: true,
   });
+  // Clients additionnels : accès en lecture seule à la galerie depuis leur espace client
+  // (voir modèle GalleryClientAccess) — jamais le client principal ci-dessus (form.clientId),
+  // dédupliqué automatiquement au changement de client principal (voir plus bas).
+  const [additionalClientIds, setAdditionalClientIds] = useState<string[]>([]);
   // "Visible par" : pris en compte tant qu'aucun set n'est créé dans la galerie — dès
   // qu'un set est créé, c'est sa propre visibilité qui prend le relais (voir
   // Gallery.defaultVisibility dans schema.prisma).
@@ -62,6 +68,7 @@ export function NewGalleryForm({ existingTags = [] }: { existingTags?: string[] 
         password: form.password || null,
         categoryTag: form.categoryTag.trim() || null,
         defaultVisibility: visibility,
+        additionalClientIds,
       }),
     });
     setLoading(false);
@@ -93,12 +100,27 @@ export function NewGalleryForm({ existingTags = [] }: { existingTags?: string[] 
           <label className="mb-1 block text-sm font-medium">{t("galleryForm.clientLabel")}</label>
           <SearchableSelect
             value={form.clientId}
-            onChange={(clientId) => setForm({ ...form, clientId })}
+            onChange={(clientId) => {
+              // Le client principal ne peut pas apparaître aussi dans les additionnels.
+              setForm({ ...form, clientId });
+              if (clientId) setAdditionalClientIds((ids) => ids.filter((id) => id !== clientId));
+            }}
             placeholder={t("common.noClientOption")}
             searchPlaceholder={t("common.searchPlaceholder")}
             emptyOptionLabel={t("common.noClientOption")}
             options={clients.map((c) => ({ value: c.id, label: c.name }))}
           />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium">{t("galleryForm.additionalClientsLabel")}</label>
+          <MultiSearchableSelect
+            values={additionalClientIds}
+            onChange={setAdditionalClientIds}
+            placeholder={t("galleryForm.additionalClientsPlaceholder")}
+            searchPlaceholder={t("common.searchPlaceholder")}
+            options={clients.filter((c) => c.id !== form.clientId).map((c) => ({ value: c.id, label: c.name }))}
+          />
+          <p className="mt-1 text-xs text-gray-500">{t("galleryForm.additionalClientsHint")}</p>
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium">{t("gs.categoryTag")}</label>
@@ -139,12 +161,23 @@ export function NewGalleryForm({ existingTags = [] }: { existingTags?: string[] 
           )}
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium">{t("galleryForm.passwordLabel")}</label>
-          <input
-            className="input"
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-          />
+          <label className="mb-1 block text-sm font-medium">{t("gs.password")}</label>
+          <div className="flex items-center gap-2">
+            <input
+              className="input flex-1"
+              placeholder={t("gs.passwordPlaceholder")}
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+            />
+            <button
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, password: generateGalleryCode() }))}
+              className="btn-secondary shrink-0 whitespace-nowrap text-xs"
+            >
+              {t("gs.generatePassword")}
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-gray-500">{t("gs.passwordHint")}</p>
         </div>
         <div>
           <p className="mb-1 block text-sm font-medium">{t("gm.setVisibilityLabel")}</p>

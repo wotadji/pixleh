@@ -66,10 +66,60 @@ export default async function ClientPortalPage() {
     orderBy: { createdAt: "desc" },
   });
 
+  // Galeries en accès secondaire (lecture seule, voir modèle GalleryClientAccess) : ce Client
+  // n'est pas le client principal mais a reçu un accès de consultation depuis /dashboard/galleries
+  // > Nouvelle galerie > "Clients additionnels". Requête à part (comme publishedAt plus bas) : ce
+  // modèle est trop récent pour le Prisma Client généré du sandbox, pas de relation typée
+  // `client.galleryAccess` disponible tant qu'Adriel n'a pas relancé `prisma generate && prisma
+  // db push` en local.
+  const clientRowIds = clientRows.map((row) => row.id);
+  const accessRows = clientRowIds.length
+    ? await prisma.$queryRaw<{ clientId: string; galleryId: string }[]>`
+        SELECT "clientId", "galleryId" FROM "GalleryClientAccess" WHERE "clientId" = ANY(${clientRowIds})
+      `
+    : [];
+  const additionalGalleryIdsByClientRowId = new Map<string, string[]>();
+  for (const r of accessRows) {
+    const list = additionalGalleryIdsByClientRowId.get(r.clientId) || [];
+    list.push(r.galleryId);
+    additionalGalleryIdsByClientRowId.set(r.clientId, list);
+  }
+  const additionalGalleries = accessRows.length
+    ? await prisma.gallery.findMany({
+        where: { id: { in: accessRows.map((r) => r.galleryId) } },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          slug: true,
+          eventDate: true,
+          coverPhotoId: true,
+          downloadLimit: true,
+          guests: { select: { status: true } },
+          photos: { orderBy: { position: "asc" }, take: 1, select: { id: true, updatedAt: true } },
+        },
+      })
+    : [];
+  const additionalGalleryById = new Map(additionalGalleries.map((g) => [g.id, g]));
+
+  // Chaque ligne Client combine désormais ses galeries "principales" (row.galleries) et ses
+  // galeries en accès secondaire — dédupliquées (un client ne devrait normalement pas être à
+  // la fois principal et additionnel sur la même galerie, voir POST /api/galleries, mais on
+  // reste défensif ici).
+  const combinedByRowId = new Map(
+    clientRows.map((row) => {
+      const seen = new Set(row.galleries.map((g) => g.id));
+      const additional = (additionalGalleryIdsByClientRowId.get(row.id) || [])
+        .map((id) => additionalGalleryById.get(id))
+        .filter((g): g is NonNullable<typeof g> => Boolean(g) && !seen.has(g!.id));
+      return [row.id, [...row.galleries, ...additional]];
+    })
+  );
+
   // `coverPhotoId` n'est pas une relation Prisma : on va chercher les photos de couverture
   // choisies explicitement en une seule requête à part (même patron que /dashboard/galleries).
-  const coverIds = clientRows
-    .flatMap((row) => row.galleries.map((g) => g.coverPhotoId))
+  const coverIds = Array.from(combinedByRowId.values())
+    .flatMap((galleries) => galleries.map((g) => g.coverPhotoId))
     .filter((id): id is string => Boolean(id));
   const coverPhotos = coverIds.length
     ? await prisma.photo.findMany({ where: { id: { in: coverIds } }, select: { id: true, updatedAt: true } })
@@ -78,7 +128,7 @@ export default async function ClientPortalPage() {
 
   // Voir la note en tête de fichier : `publishedAt` n'est pas encore dans le Prisma Client
   // généré du sandbox, donc récupéré à part via $queryRaw plutôt que dans le `select` ci-dessus.
-  const galleryIds = clientRows.flatMap((row) => row.galleries.map((g) => g.id));
+  const galleryIds = Array.from(combinedByRowId.values()).flatMap((galleries) => galleries.map((g) => g.id));
   const publishedRows = galleryIds.length
     ? await prisma.$queryRaw<{ id: string; publishedAt: Date | null }[]>`
         SELECT "id", "publishedAt" FROM "Gallery" WHERE "id" = ANY(${galleryIds})
@@ -99,7 +149,7 @@ export default async function ClientPortalPage() {
     studioId: row.studio.id,
     studioName: row.studio.name,
     studioLogoUrl: row.studio.logoUrl,
-    galleries: row.galleries.map((g) => {
+    galleries: (combinedByRowId.get(row.id) || []).map((g) => {
       const cover = (g.coverPhotoId && coverById.get(g.coverPhotoId)) || g.photos[0] || null;
       return {
         id: g.id,

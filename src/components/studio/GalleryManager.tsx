@@ -22,6 +22,7 @@ import {
 } from "@/lib/galleryDesign";
 import { sortPhotos, resolvePhotoSortKey, formatFileSize, type PhotoSortKey } from "@/lib/photoSort";
 import { formatDuration } from "@/lib/videoEmbed";
+import { generateGalleryCode as generateGalleryPassword } from "@/lib/galleryCode";
 
 /**
  * Hash SHA-256 (hex) d'un fichier, calculé côté navigateur via Web Crypto — utilisé pour
@@ -30,20 +31,6 @@ import { formatDuration } from "@/lib/videoEmbed";
  * façon son propre hash à l'upload réel ; celui-ci ne sert qu'à proposer le bon choix
  * (ignorer/écraser/conserver) dans l'UI.
  */
-/**
- * Mot de passe de galerie aléatoire (bouton "Générer" à côté du champ, Réglages) — alphabet
- * réduit aux caractères non ambigus (pas de 0/O ni 1/l/I) puisque ce mot de passe est
- * destiné à être lu et retapé à la main par le client, pas mémorisé comme un mot de passe
- * de compte. Ne remplace le champ qu'au clic, jamais automatiquement : le studio garde la
- * main pour saisir son propre mot de passe s'il préfère.
- */
-function generateGalleryPassword(length = 8): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
-  let out = "";
-  for (let i = 0; i < length; i++) out += chars[Math.floor(Math.random() * chars.length)];
-  return out;
-}
-
 async function sha256Hex(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   const digest = await crypto.subtle.digest("SHA-256", buffer);

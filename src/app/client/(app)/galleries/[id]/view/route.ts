@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getClientPortalSession } from "@/lib/clientSession";
 import { cookieNameFor, issueGalleryToken } from "@/lib/gallery-session";
+import { hasAdditionalGalleryAccess } from "@/lib/galleryClientAccess";
 
 export const runtime = "nodejs";
 
@@ -23,7 +24,11 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     where: { id: params.id },
     include: { client: true },
   });
-  if (!gallery || gallery.client?.email !== session.email || gallery.status === "DRAFT") {
+  // Client principal OU additionnel (voir GalleryClientAccess) — même accès en lecture au
+  // visionneur pour les deux, seul le principal pilote facturation/devis/notifications.
+  const isOwner = gallery?.client?.email === session.email;
+  const hasAccess = isOwner || (gallery ? await hasAdditionalGalleryAccess(gallery.id, session.email) : false);
+  if (!gallery || !hasAccess || gallery.status === "DRAFT") {
     return NextResponse.redirect(new URL("/client", _req.url));
   }
 

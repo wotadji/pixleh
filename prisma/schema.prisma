@@ -350,6 +350,10 @@ model Client {
   contracts  Contract[]
   invoices   Invoice[]
   messages   ClientMessage[]
+  /// Galeries où ce Client a un accès secondaire en lecture seule (voir modèle
+  /// GalleryClientAccess ci-dessous) — distinct de `galleries` ci-dessus, qui reste le client
+  /// PRINCIPAL de la galerie (facturation/devis/notifications).
+  galleryAccess GalleryClientAccess[]
 
   @@unique([studioId, email])
   @@index([studioId])
@@ -430,6 +434,30 @@ enum GalleryStatus {
   ARCHIVED
 }
 
+/// Accès secondaire en lecture seule à une galerie pour un Client qui n'est pas le client
+/// principal (Gallery.clientId) — chantier "plusieurs clients par galerie" (05/08/2026, demande
+/// d'Adriel : "je veux la possibilité quand on crée une galerie, qu'on ai la possibilité de
+/// mettre un ou plusieurs client"). Le client principal reste seul à piloter facturation/devis/
+/// notifications historiques (voir Gallery.client) ; une ligne GalleryClientAccess donne
+/// uniquement un accès de consultation depuis l'espace client (/client), au même titre que le
+/// client principal, sans aucun lien facturation/contrat. Un email est envoyé au client concerné
+/// à la création de la ligne (voir sendGalleryAdditionalAccessEmail dans notifications.ts).
+/// Ajouté après le dernier `prisma generate` du sandbox (même limitation que Gallery.publishedAt
+/// plus haut) : tant qu'Adriel n'a pas relancé `prisma generate && prisma db push` en local, ce
+/// modèle est lu/écrit via $queryRaw/$executeRaw plutôt que via l'API typée du Prisma Client
+/// généré, qui ne le connaît pas encore.
+model GalleryClientAccess {
+  id        String   @id @default(cuid())
+  galleryId String
+  gallery   Gallery  @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([galleryId, clientId])
+  @@index([clientId])
+}
+
 model Gallery {
   id              String        @id @default(cuid())
   studioId        String
@@ -503,6 +531,7 @@ model Gallery {
   orders          Order[]
   guests          GalleryGuest[]
   remarks         PhotoRemark[]
+  additionalClientAccess GalleryClientAccess[]
 
   @@index([studioId])
   @@index([clientId])

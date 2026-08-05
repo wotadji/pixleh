@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { getClientPortalSession } from "@/lib/clientSession";
 import { prisma } from "@/lib/prisma";
+import { hasAdditionalGalleryAccess } from "@/lib/galleryClientAccess";
 import { ClientGalleryDetailView } from "@/components/client-portal/ClientGalleryDetailView";
 
 export const dynamic = "force-dynamic";
@@ -20,10 +21,13 @@ export default async function ClientGalleryPage({ params }: { params: { id: stri
     },
   });
 
-  // Vérification d'appartenance : la galerie doit être rattachée à un Client dont l'email
-  // correspond à la session — jamais par studioId (l'espace client n'a pas de studio
-  // "courant", potentiellement plusieurs galeries de studios différents pour cet email).
-  if (!gallery || gallery.client?.email !== session.email) notFound();
+  // Vérification d'appartenance : la galerie doit être rattachée à un Client (principal OU
+  // additionnel, voir GalleryClientAccess) dont l'email correspond à la session — jamais par
+  // studioId (l'espace client n'a pas de studio "courant", potentiellement plusieurs galeries
+  // de studios différents pour cet email).
+  if (!gallery) notFound();
+  const isOwner = gallery.client?.email === session.email;
+  if (!isOwner && !(await hasAdditionalGalleryAccess(gallery.id, session.email))) notFound();
 
   return (
     <ClientGalleryDetailView

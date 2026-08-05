@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
+import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { requireStudioSession, handleApiError } from "@/lib/access";
 import { assertGalleryQuota } from "@/lib/quotas";
 import { gallerySchema } from "@/lib/validators";
 import { slugify, randomSuffix } from "@/lib/slug";
+import { sendGalleryAdditionalAccessEmail } from "@/lib/notifications";
 import type { SetVisibility } from "@prisma/client";
 
 export async function GET() {
@@ -75,6 +77,55 @@ export async function POST(req: Request) {
         },
       },
     });
+
+    // Clients additionnels (accès secondaire en lecture seule, voir modèle GalleryClientAccess
+    // dans schema.prisma) — jamais le client principal, dédupliqués, et vérifiés comme
+    // appartenant à ce studio avant insertion (on ne fait pas confiance à la liste d'ids
+    // envoyée par le client).
+    const additionalIds = Array.from(new Set(data.additionalClientIds || [])).filter(
+      (id) => id && id !== data.clientId
+    );
+    if (additionalIds.length > 0) {
+      const additionalClients = await prisma.client.findMany({
+        where: { id: { in: additionalIds }, studioId: session.user.studioId },
+        select: { id: true, name: true, email: true },
+      });
+
+      // $executeRaw plutôt qu'une API Prisma typée : le modèle GalleryClientAccess est trop
+      // récent pour le Prisma Client généré du sandbox (voir commentaire sur ce modèle dans
+      // schema.prisma) — même limitation que Gallery.publishedAt, tant qu'Adriel n'a pas
+      // relancé `prisma generate && prisma db push` en local.
+      for (const client of additionalClients) {
+        await prisma.$executeRaw`INSERT INTO "GalleryClientAccess" ("id", "galleryId", "clientId", "createdAt")
+          VALUES (${randomUUID()}, ${gallery.id}, ${client.id}, NOW())
+          ON CONFLICT ("galleryId", "clientId") DO NOTHING`;
+      }
+
+      // Email envoyé à chaque client additionnel — fire-and-forget : un échec d'envoi (SMTP
+      // non configuré, etc.) ne doit jamais faire échouer la création de la galerie elle-même
+      // (même patron que l'email "galerie prête" côté client principal).
+      if (additionalClients.length > 0) {
+        const studio = await prisma.studio.findUnique({
+          where: { id: session.user.studioId },
+          include: { settings: true },
+        });
+        if (studio) {
+          for (const client of additionalClients) {
+            sendGalleryAdditionalAccessEmail({
+              clientName: client.name,
+              clientEmail: client.email,
+              galleryTitle: gallery.title,
+              gallerySlug: gallery.slug,
+              galleryPassword: gallery.password,
+              studio: { name: studio.name, slug: studio.slug, logoUrl: studio.logoUrl, brandColor: studio.brandColor },
+              settings: studio.settings
+                ? { contactEmail: studio.settings.contactEmail, contactPhone: studio.settings.contactPhone }
+                : null,
+            }).catch((e) => console.error("Échec de l'email « accès galerie » (client additionnel) :", e));
+          }
+        }
+      }
+    }
 
     // Sans ça, la page /dashboard/galleries (Server Component) reste sur la version qu'elle
     // avait en cache côté client (Next.js Router Cache) : après création, l'utilisateur est

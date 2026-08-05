@@ -160,6 +160,55 @@ export async function sendGalleryReadyEmail(params: {
   });
 }
 
+/** Client ADDITIONNEL (accès secondaire en lecture seule, voir modèle GalleryClientAccess et
+ * POST /api/galleries) reçu à la création — distinct de sendGalleryReadyEmail (client PRINCIPAL,
+ * envoyé à la publication) : celui-ci part immédiatement à la création de la galerie (même si
+ * elle est encore en DRAFT), avec un message qui précise explicitement qu'il s'agit d'un accès
+ * secondaire sans lien avec la facturation. Fire-and-forget côté appelant (voir POST
+ * /api/galleries) : un échec d'envoi n'empêche jamais la création de la galerie elle-même. */
+export async function sendGalleryAdditionalAccessEmail(params: {
+  clientName: string;
+  clientEmail: string;
+  galleryTitle: string;
+  gallerySlug: string;
+  galleryPassword: string | null;
+  studio: { name: string; slug: string; logoUrl: string | null; brandColor: string | null };
+  settings: { contactEmail: string | null; contactPhone: string | null } | null;
+}): Promise<SendMailResult> {
+  const link = appUrl(`/g/${params.gallerySlug}`);
+  const signature = buildEmailSignature(params.studio, params.settings);
+  const passwordBlock = params.galleryPassword
+    ? `<p style="margin-top:12px;">Code d'accès : <strong>${escapeHtml(params.galleryPassword)}</strong></p>`
+    : "";
+
+  const html = wrapEmail(`
+    <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Vous avez reçu un accès à une galerie</h2>
+    <p>Bonjour ${escapeHtml(params.clientName)},</p>
+    <p><strong>${escapeHtml(params.studio.name)}</strong> vous a donné accès à la galerie
+    « ${escapeHtml(params.galleryTitle)} ». Vous pouvez la consulter à tout moment depuis votre espace client.</p>
+    ${passwordBlock}
+    <a href="${link}" style="${BUTTON_STYLE}">Voir la galerie</a>
+    <p style="margin-top:16px;font-size:12px;color:#9ca3af;">
+      Retrouvez toutes vos galeries dans
+      <a href="${appUrl("/client/login")}" style="color:#7c3aed;">votre espace client</a>.
+    </p>
+  `);
+
+  return sendMail({
+    to: params.clientEmail,
+    subject: `Accès à la galerie « ${params.galleryTitle} »`,
+    text: [
+      `Bonjour ${params.clientName}, ${params.studio.name} vous a donné accès à la galerie « ${params.galleryTitle} » : ${link}`,
+      params.galleryPassword ? `Code d'accès : ${params.galleryPassword}` : "",
+      `Retrouvez toutes vos galeries : ${appUrl("/client/login")}`,
+      signature.text,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+    html: `${html}${signature.html}`,
+  });
+}
+
 /** Envoyé au client quand le studio crée un contrat en le rattachant à un client (voir POST
  * /api/contracts) : contient le lien de signature (/c/[id]). Même patron que
  * sendGalleryReadyEmail (lien direct + signature de contact du studio). */

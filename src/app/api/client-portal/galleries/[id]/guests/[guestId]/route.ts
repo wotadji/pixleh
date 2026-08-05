@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getClientPortalSession } from "@/lib/clientSession";
 import { sendGuestAccessApprovedEmail } from "@/lib/notifications";
+import { hasAdditionalGalleryAccess } from "@/lib/galleryClientAccess";
 
 export const runtime = "nodejs";
 
@@ -24,7 +25,11 @@ export async function PATCH(
     where: { id: params.id },
     include: { client: true },
   });
-  if (!gallery || gallery.client?.email !== session.email) {
+  // Client principal OU additionnel (voir GalleryClientAccess) — même accès de gestion pour
+  // les deux depuis cette galerie, seul le principal pilote facturation/devis/notifications.
+  const isOwner = gallery?.client?.email === session.email;
+  const hasAccess = isOwner || (gallery ? await hasAdditionalGalleryAccess(gallery.id, session.email) : false);
+  if (!gallery || !hasAccess) {
     return NextResponse.json({ error: "Galerie introuvable" }, { status: 404 });
   }
 

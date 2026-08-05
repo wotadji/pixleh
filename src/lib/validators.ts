@@ -28,6 +28,9 @@ export const galleryDesignSchema = z.object({
 export const gallerySchema = z.object({
   title: z.string().min(1),
   clientId: z.string().optional().nullable(),
+  // Clients additionnels (accès secondaire en lecture seule, voir modèle GalleryClientAccess) —
+  // le client principal (clientId ci-dessus) reste seul à piloter facturation/devis/notifications.
+  additionalClientIds: z.array(z.string()).optional(),
   eventDate: z.string().optional().nullable(),
   password: z.string().optional().nullable(),
   allowDownload: z.boolean().optional(),
