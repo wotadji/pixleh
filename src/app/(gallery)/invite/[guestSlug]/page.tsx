@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { checkGuestAccess } from "@/lib/access";
 import { EmailGate } from "@/components/gallery/EmailGate";
 import { GalleryView } from "@/components/gallery/GalleryView";
+import { GuestPendingScreen, GuestRejectedScreen } from "@/components/gallery/GuestStatusScreens";
 import { sortPhotos, resolvePhotoSortKey } from "@/lib/photoSort";
 
 export const dynamic = "force-dynamic";
@@ -49,37 +50,10 @@ export default async function GuestGalleryPage({
     // `status` n'est présent que si une session invité existe déjà (email déjà saisi une
     // fois) — sans ça (première visite), on retombe sur le formulaire email normal.
     if (access.status === "PENDING") {
-      return (
-        <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
-          <h1 className="font-serif text-2xl font-semibold">Vous ne pouvez pas encore voir cette galerie</h1>
-          <p className="mt-3 text-sm leading-relaxed text-gray-600">
-            Merci pour votre intérêt pour « {gallery.title} ». {gallery.client ? (
-              <>
-                <strong>{gallery.client.name}</strong> ({gallery.client.email}) doit d&apos;abord
-                valider votre demande pour vous donner accès à la galerie.
-              </>
-            ) : (
-              <>Cette galerie est soumise à l&apos;approbation de son propriétaire.</>
-            )}{" "}
-            Nous avons transmis votre demande et vous recevrez un email dès que l&apos;accès vous
-            sera accordé.
-          </p>
-          <p className="mt-4 text-xs text-gray-400">
-            Vous pouvez fermer cette page — inutile de la rafraîchir, vous serez prévenu(e) par email.
-          </p>
-        </div>
-      );
+      return <GuestPendingScreen galleryTitle={gallery.title} client={gallery.client} />;
     }
     if (access.status === "REJECTED") {
-      return (
-        <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
-          <h1 className="font-serif text-2xl font-semibold">Accès non accordé</h1>
-          <p className="mt-3 text-sm leading-relaxed text-gray-600">
-            Le propriétaire de cette galerie n&apos;a pas donné suite à votre demande d&apos;accès.
-            Si vous pensez qu&apos;il s&apos;agit d&apos;une erreur, rapprochez-vous directement de lui.
-          </p>
-        </div>
-      );
+      return <GuestRejectedScreen />;
     }
     return <EmailGate guestSlug={params.guestSlug} title={gallery.title} />;
   }

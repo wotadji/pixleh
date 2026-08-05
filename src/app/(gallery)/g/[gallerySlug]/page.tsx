@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getStudioSession } from "@/lib/access";
+import { getStudioSession, checkGuestAccess } from "@/lib/access";
 import { getGallerySession } from "@/lib/gallery-session";
 import { GalleryEntryChooser } from "@/components/gallery/GalleryEntryChooser";
 import { GalleryView } from "@/components/gallery/GalleryView";
+import { GuestPendingScreen, GuestRejectedScreen } from "@/components/gallery/GuestStatusScreens";
 import { sortPhotos, resolvePhotoSortKey } from "@/lib/photoSort";
 import { resolveGalleryDesign } from "@/lib/galleryDesign";
 import { getActivePrintCatalog } from "@/lib/printCatalog";
@@ -39,6 +40,9 @@ export default async function GalleryEntryPage({
       // "products: true" retiré le 31/07/2026 — plus lu nulle part dans ce fichier depuis que
       // les tarifs d'impression viennent du catalogue plateforme (voir printProducts plus bas,
       // getActivePrintCatalog) plutôt que de Product rattachés à la galerie via GalleryProducts.
+      // Nom/email du client principal — affichés sur l'écran "en attente" si le mode invité
+      // est soumis à validation (voir plus bas, GuestPendingScreen).
+      client: { select: { name: true, email: true } },
     },
   });
 
@@ -67,17 +71,35 @@ export default async function GalleryEntryPage({
 
   let mode: "client" | "guest" | null = null;
   let clientRef: string | undefined;
+  let guestAllSetsAccess = true;
+  let guestAllowedCollectionIds: string[] = [];
 
   if (!asStudio) {
     const clientSession = getGallerySession(gallery.slug);
     if (clientSession && clientSession.galleryId === gallery.id) {
       mode = "client";
       clientRef = clientSession.clientRef;
-    } else if (gallery.guestSlug) {
-      const guestSession = getGallerySession(gallery.guestSlug);
-      if (guestSession && guestSession.galleryId === gallery.id) {
+    } else if (gallery.guestSlug && getGallerySession(gallery.guestSlug)?.galleryId === gallery.id) {
+      // Une session invité existe déjà (email déjà saisi une fois via GalleryEntryChooser,
+      // même si la demande est encore en attente — voir POST /api/guest-access, qui pose le
+      // cookie quel que soit le statut) : on relit le statut réel en base plutôt que de se
+      // fier au cookie, qui ne prouve que l'identité (clientRef), jamais l'état d'approbation
+      // courant (peut changer après coup via /approve-guest/[token]). Corrige un bug remonté
+      // par Adriel le 05/08/2026 : un invité PENDING atterrissait ici sur une galerie sans
+      // aucune photo (page blanche) plutôt que de voir un message explicite, faute de ce
+      // contrôle — même logique que /invite/[guestSlug]/page.tsx.
+      const guestAccess = await checkGuestAccess(gallery);
+      if (guestAccess.status === "PENDING") {
+        return <GuestPendingScreen galleryTitle={gallery.title} client={gallery.client} />;
+      }
+      if (guestAccess.status === "REJECTED") {
+        return <GuestRejectedScreen />;
+      }
+      if (guestAccess.granted) {
         mode = "guest";
-        clientRef = guestSession.clientRef;
+        clientRef = guestAccess.clientRef;
+        guestAllSetsAccess = guestAccess.allSetsAccess ?? true;
+        guestAllowedCollectionIds = guestAccess.allowedCollectionIds ?? [];
       }
     }
   }
@@ -128,7 +150,16 @@ export default async function GalleryEntryPage({
   let allowRemarks = true;
 
   if (!asStudio && mode === "guest") {
-    if (gallery.collections.length === 0) {
+    // access.allSetsAccess === false : ce visiteur précis a reçu un accès limité à certains
+    // sets choisis par le client au moment de l'approbation (voir /approve-guest/[token]) —
+    // ça remplace entièrement la logique GUEST habituelle, même traitement que
+    // /invite/[guestSlug]/page.tsx (ces deux pages doivent rester cohérentes).
+    if (guestAllSetsAccess === false) {
+      const allowedIds = new Set(guestAllowedCollectionIds);
+      const allowedSets = gallery.collections.filter((c) => allowedIds.has(c.id));
+      visibleCollections = allowedSets.map((c) => ({ id: c.id, title: c.title }));
+      visiblePhotos = gallery.photos.filter((p) => p.collectionId && allowedIds.has(p.collectionId));
+    } else if (gallery.collections.length === 0) {
       visiblePhotos = gallery.defaultVisibility.includes("GUEST") ? gallery.photos : [];
       visibleCollections = [];
     } else {
