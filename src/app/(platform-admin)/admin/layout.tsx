@@ -25,6 +25,10 @@ export default async function PlatformAdminLayout({ children }: { children: Reac
     // avec filtre par studio — voir /api/admin/orders. Complète /dashboard/orders (vue studio
     // sur ses propres commandes), ne la remplace pas.
     { href: "/admin/orders", label: "Commandes" },
+    // "Invités" ajouté le 05/08/2026 (demande d'Adriel) — vue transverse aux GalleryGuest de
+    // tous les studios, avec filtre par studio (voir /api/admin/guests). Complète
+    // /dashboard/guests (vue studio sur ses propres invités), ne la remplace pas.
+    { href: "/admin/guests", label: "Invités" },
     { href: "/admin/site", label: "Contenu du site" },
     { href: "/admin/plans", label: "Plans tarifaires" },
     { href: "/admin/print-catalog", label: "Catalogue impression" },

@@ -11,6 +11,7 @@ const ICONS: Record<string, JSX.Element> = {
   "/admin": <IconGrid />,
   "/admin/studios": <IconBuilding />,
   "/admin/orders": <IconBag />,
+  "/admin/guests": <IconGuest />,
   "/admin/site": <IconLayout />,
   "/admin/plans": <IconTag />,
   "/admin/print-catalog": <IconPrinter />,
@@ -25,6 +26,7 @@ const LABEL_KEYS: Record<string, string> = {
   "/admin": "admin.nav.overview",
   "/admin/studios": "admin.nav.studios",
   "/admin/orders": "admin.nav.orders",
+  "/admin/guests": "admin.nav.guests",
   "/admin/site": "admin.nav.site",
   "/admin/plans": "admin.nav.plans",
   "/admin/print-catalog": "admin.nav.printCatalog",
@@ -103,6 +105,16 @@ function IconBag() {
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M6 8h12l1 12.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20.5L6 8Z" strokeLinejoin="round" />
       <path d="M9 8V6a3 3 0 0 1 6 0v2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconGuest() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M4.5 20c0-4.1 3.4-7.5 7.5-7.5s7.5 3.4 7.5 7.5" strokeLinecap="round" />
+      <path d="M9 9.5l1.5 1.5L15 7" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
