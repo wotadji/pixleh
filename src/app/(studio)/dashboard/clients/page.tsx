@@ -6,6 +6,7 @@ import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { RichTextEditor } from "@/components/studio/RichTextEditor";
 import { IconWarning } from "@/components/studio/OverviewIcons";
+import { Modal } from "@/components/ui/Modal";
 
 interface AttachmentDTO {
   id: string;
@@ -89,6 +90,14 @@ export default function ClientsPage() {
   const [addForm, setAddForm] = useState({ name: "", email: "", phone: "" });
   const [addLoading, setAddLoading] = useState(false);
 
+  // Édition des coordonnées d'un client existant (bouton "Modifier" dans l'en-tête de la
+  // conversation) — demande d'Adriel le 05/08/2026. Formulaire distinct de "Nouveau client"
+  // ci-dessus, avec en plus le champ Notes (historique pré-migration, en lecture/écriture ici).
+  const [editingClient, setEditingClient] = useState<ClientDTO | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", notes: "" });
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Sentinelle en bas du fil de discussion (voir le JSX plus bas) — scrollée en vue à chaque
   // changement de conversation ou de nouveau message, pour toujours ouvrir/rester sur les
@@ -130,6 +139,40 @@ export default function ClientsPage() {
     setAddLoading(false);
     setShowAddForm(false);
     load();
+  }
+
+  function openEditModal(c: ClientDTO) {
+    setEditingClient(c);
+    setEditForm({ name: c.name, email: c.email, phone: c.phone || "", notes: c.notes || "" });
+    setEditError(null);
+  }
+
+  async function handleEditSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingClient) return;
+    setEditLoading(true);
+    setEditError(null);
+    try {
+      const res = await fetch(`/api/clients/${editingClient.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editForm.name,
+          email: editForm.email,
+          phone: editForm.phone || null,
+          notes: editForm.notes || null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setEditError(res.status === 409 ? t("clients.editModal.emailConflict") : t("clients.sendFailedError"));
+        return;
+      }
+      setClients((prev) => prev.map((x) => (x.id === editingClient.id ? { ...x, ...data.client } : x)));
+      setEditingClient(null);
+    } finally {
+      setEditLoading(false);
+    }
   }
 
   async function selectClient(c: ClientDTO) {
@@ -413,6 +456,9 @@ export default function ClientsPage() {
                       {t("clients.validate")}
                     </button>
                   )}
+                  <button type="button" onClick={() => openEditModal(selected)} className="btn-secondary text-xs">
+                    {t("clients.edit")}
+                  </button>
                 </div>
               </div>
 
@@ -553,6 +599,62 @@ export default function ClientsPage() {
           )}
         </div>
       </div>
+
+      <Modal
+        open={!!editingClient}
+        onClose={() => setEditingClient(null)}
+        title={t("clients.editModal.title")}
+        footer={
+          <>
+            <button type="button" onClick={() => setEditingClient(null)} className="btn-secondary text-sm">
+              {t("billing.confirmDowngrade.cancel")}
+            </button>
+            <button type="submit" form="edit-client-form" disabled={editLoading} className="btn-primary text-sm">
+              {editLoading ? t("clients.reply.sending") : t("common.save")}
+            </button>
+          </>
+        }
+      >
+        <form id="edit-client-form" onSubmit={handleEditSubmit} className="space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">{t("clients.nameLabel")}</label>
+            <input
+              required
+              className="input w-full"
+              value={editForm.name}
+              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">{t("clients.emailLabel")}</label>
+            <input
+              required
+              type="email"
+              className="input w-full"
+              value={editForm.email}
+              onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">{t("clients.phoneLabel")}</label>
+            <input
+              className="input w-full"
+              value={editForm.phone}
+              onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">{t("clients.notesLabel")}</label>
+            <textarea
+              className="input w-full"
+              rows={3}
+              value={editForm.notes}
+              onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+            />
+          </div>
+          {editError && <p className="text-xs font-medium text-red-600">{editError}</p>}
+        </form>
+      </Modal>
     </div>
   );
 }
