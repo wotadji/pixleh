@@ -106,9 +106,10 @@ interface GalleryDTO {
   downloadLimit: number | null;
   guestSlug: string | null;
   allowGuestDownload: boolean;
-  /** Champ conservé en base (schema.prisma) mais plus lu par la logique d'accès invité :
-   * l'approbation se déduit désormais automatiquement de "Visible pour mes invités" sur
-   * les sets (voir /api/guest-access/route.ts). Non éditable dans cette UI. */
+  /** Si activé, toute nouvelle demande d'accès invité (lien /invite/[guestSlug]) reste en
+   * attente (GalleryGuest.status = PENDING) tant que le client (Gallery.client) ne l'a pas
+   * explicitement approuvée — voir POST /api/guest-access. Réglage manuel (interrupteur dans
+   * l'onglet Réglages, section "Lien invité"). */
   requireGuestApproval: boolean;
   allowFavorites: boolean;
   showWatermark: boolean;
@@ -1942,14 +1943,24 @@ export function GalleryManager({
                   </span>
                 </label>
 
-                {/* L'approbation des invités n'est plus un réglage manuel : elle se déduit
-                    automatiquement de "Visible pour mes invités" sur les sets (voir onglet
-                    Photos > visibilité des sets, et /api/guest-access). Simple texte
-                    informatif, non interactif — demandé par Adriel le 29/07/2026. */}
-                <div className="mt-3 rounded-md bg-gray-50 px-3 py-2 text-sm">
-                  <span className="block font-medium text-gray-900">{t("gs.requireGuestApproval")}</span>
-                  <span className="mt-0.5 block text-xs text-gray-500">{t("gs.requireGuestApprovalHint")}</span>
-                </div>
+                {/* Interrupteur explicite (05/08/2026, demande d'Adriel) — remplace le texte
+                    informatif introduit le 29/07/2026 : l'approbation automatique dérivée de
+                    "Visible pour mes invités" sur les sets n'était pas assez lisible pour le
+                    studio, qui veut pouvoir activer/désactiver ce comportement directement. */}
+                <label className="mt-3 flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={settingsForm.requireGuestApproval}
+                    onChange={(e) =>
+                      setSettingsForm((f) => ({ ...f, requireGuestApproval: e.target.checked }))
+                    }
+                  />
+                  <span>
+                    <span className="block font-medium">{t("gs.requireGuestApproval")}</span>
+                    <span className="block text-xs text-gray-500">{t("gs.requireGuestApprovalHint")}</span>
+                  </span>
+                </label>
 
                 <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
                   {t("gs.visibilityDisclaimer")}

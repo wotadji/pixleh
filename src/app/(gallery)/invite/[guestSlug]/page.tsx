@@ -24,6 +24,9 @@ export default async function GuestGalleryPage({
       photos: { orderBy: { position: "asc" } },
       collections: true,
       studio: { select: { name: true, slug: true, logoUrl: true, settings: true } },
+      // Nom/email du client principal, affichés sur l'écran "en attente" ci-dessous (demande
+      // d'Adriel, 05/08/2026 : préciser QUI doit valider, pas juste "le propriétaire").
+      client: { select: { name: true, email: true } },
     },
   });
 
@@ -48,11 +51,18 @@ export default async function GuestGalleryPage({
     if (access.status === "PENDING") {
       return (
         <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
-          <h1 className="font-serif text-2xl font-semibold">Votre demande a bien été reçue</h1>
+          <h1 className="font-serif text-2xl font-semibold">Vous ne pouvez pas encore voir cette galerie</h1>
           <p className="mt-3 text-sm leading-relaxed text-gray-600">
-            Merci pour votre intérêt pour « {gallery.title} ». Cette galerie est soumise à
-            l&apos;approbation de son propriétaire : nous lui avons transmis votre demande et
-            vous recevrez un email dès que l&apos;accès vous sera accordé.
+            Merci pour votre intérêt pour « {gallery.title} ». {gallery.client ? (
+              <>
+                <strong>{gallery.client.name}</strong> ({gallery.client.email}) doit d&apos;abord
+                valider votre demande pour vous donner accès à la galerie.
+              </>
+            ) : (
+              <>Cette galerie est soumise à l&apos;approbation de son propriétaire.</>
+            )}{" "}
+            Nous avons transmis votre demande et vous recevrez un email dès que l&apos;accès vous
+            sera accordé.
           </p>
           <p className="mt-4 text-xs text-gray-400">
             Vous pouvez fermer cette page — inutile de la rafraîchir, vous serez prévenu(e) par email.

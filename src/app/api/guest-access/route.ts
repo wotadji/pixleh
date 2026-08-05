@@ -37,7 +37,7 @@ export async function POST(req: Request) {
 
   const gallery = await prisma.gallery.findUnique({
     where: { guestSlug },
-    include: { client: true, collections: true },
+    include: { client: true },
   });
   if (!gallery || gallery.status !== "PUBLISHED") {
     return NextResponse.json({ error: "Galerie introuvable" }, { status: 404 });
@@ -52,19 +52,14 @@ export async function POST(req: Request) {
     where: { galleryId: gallery.id, email: cleanEmail },
   });
   if (!guest) {
-    // L'approbation manuelle n'est plus un réglage à part (voir Gallery.requireGuestApproval,
-    // conservé en base mais plus lu ici) : elle se déduit désormais directement de "Visible
-    // pour mes invités" sur les sets — dès qu'AU MOINS un set est coché "Invité", l'accès
-    // reste immédiat et global pour tout le monde (comportement historique). Dès que PLUS
-    // AUCUN set n'est coché "Invité", toute nouvelle demande doit être validée
-    // individuellement par le client (voir sendClientGuestApprovalRequestEmail plus bas), qui
-    // choisit alors explicitement ce que CE visiteur précis peut voir (GalleryGuest.allSetsAccess
-    // / allowedCollections) — demandé par Adriel le 29/07/2026.
-    const hasGuestVisibleSet =
-      gallery.collections.length > 0
-        ? gallery.collections.some((c) => c.visibility.includes("GUEST"))
-        : gallery.defaultVisibility.includes("GUEST");
-    const needsApproval = !hasGuestVisibleSet;
+    // Approbation manuelle par le client, pilotée par Gallery.requireGuestApproval (bouton
+    // dédié dans le panel studio, voir Réglages > Lien invité) — demande d'Adriel (05/08/2026) :
+    // remise en place d'un réglage explicite après un essai d'approbation automatique dérivée
+    // de "Visible pour mes invités" sur les sets (29/07/2026), jugé pas assez lisible pour le
+    // studio ("faudra mettre un boutton pour activer ou pas si la lecture de la galerie par
+    // l'invité dois etre valider par le client ou pas"). Désactivé par défaut : accès immédiat
+    // dès saisie de l'email, comportement historique inchangé pour les galeries existantes.
+    const needsApproval = gallery.requireGuestApproval === true;
     guest = await prisma.galleryGuest.create({
       data: {
         galleryId: gallery.id,
