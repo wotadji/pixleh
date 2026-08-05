@@ -37,15 +37,25 @@ export async function processAndStoreUpload(params: {
   const ext = (metadata.format || "jpeg").replace("jpeg", "jpg");
 
   const originalKey = buildPhotoKey(studioId, galleryId, photoId, "original", ext);
-  await storage.put(originalKey, buffer);
-
-  const thumbBuffer = await buildThumbBuffer(image);
   const thumbKey = buildPhotoKey(studioId, galleryId, photoId, "thumb", "jpg");
-  await storage.put(thumbKey, thumbBuffer);
-
-  const previewBuffer = await image.clone().resize({ width: 2000, withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
   const previewKey = buildPhotoKey(studioId, galleryId, photoId, "preview", "jpg");
-  await storage.put(previewKey, previewBuffer);
+
+  // Les 3 variantes sont indépendantes (original tel quel, miniature, aperçu) — on génère
+  // d'abord les 2 buffers dérivés (rapide, CPU local), puis on envoie les 3 fichiers en
+  // parallèle plutôt que séquentiellement. Sur SFTP, chaque `put()` ouvre sa propre
+  // connexion (voir SftpStorage) : les faire l'un après l'autre ajoutait 2 handshakes
+  // complets "à vide" en plus du transfert. Correctif du 06/08/2026 (retour d'Adriel :
+  // upload d'une photo de 24 Mo ~7-8 min en prod).
+  const [thumbBuffer, previewBuffer] = await Promise.all([
+    buildThumbBuffer(image),
+    image.clone().resize({ width: 2000, withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer(),
+  ]);
+
+  await Promise.all([
+    storage.put(originalKey, buffer),
+    storage.put(thumbKey, thumbBuffer),
+    storage.put(previewKey, previewBuffer),
+  ]);
 
   return {
     storageKey: originalKey,

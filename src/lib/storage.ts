@@ -79,6 +79,12 @@ class SftpStorage implements StorageDriver {
       // bas, mais autant réduire aussi ce délai par défaut (20s) pour échouer plus vite
       // si l'hôte est injoignable.
       readyTimeout: 15_000,
+      // Débit constaté anormalement bas en prod le 06/08/2026 (retour d'Adriel : une photo
+      // de 24 Mo prend ~7-8 min, soit ~55 Ko/s) — on désactive la compression SSH côté
+      // client : elle ne sert à rien sur des JPEG déjà compressés (données quasi
+      // aléatoires) et peut coûter cher en CPU sur de l'hébergement mutualisé, ralentissant
+      // le débit réel plus qu'elle ne réduit les octets transmis.
+      algorithms: { compress: ["none"] },
     };
     if (process.env.SFTP_PRIVATE_KEY_PATH) {
       connectOptions.privateKey = await fs.readFile(process.env.SFTP_PRIVATE_KEY_PATH);
