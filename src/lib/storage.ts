@@ -3,6 +3,43 @@ import path from "path";
 import SftpClient from "ssh2-sftp-client";
 
 /**
+ * Délai max (ms) accordé à une opération SFTP individuelle (connexion, put, get, delete,
+ * exists, rmdir). Bug découvert le 06/08/2026 (retour d'Adriel : "en prod je n'arrive pas
+ * a uploader les images" / "il upload sans s'arreter pendant des heures") : la librairie
+ * ssh2 ne borne QUE la phase de handshake initiale via `readyTimeout` (20s par défaut) —
+ * une fois la connexion établie, un transfert qui se bloque (paquets perdus, coupure
+ * silencieuse par un pare-feu/NAT intermédiaire, ce qui est fréquent sur de l'hébergement
+ * mutualisé) n'a AUCUN timeout : la promesse de `put()`/`get()`/`exists()` ne se résout ni
+ * ne rejette jamais, et la requête d'upload reste bloquée indéfiniment (d'où le spinner
+ * bloqué à "1/1" pendant des heures, sans erreur). On borne donc explicitement chaque
+ * opération ici, plutôt que de compter sur la librairie sous-jacente.
+ */
+const SFTP_OP_TIMEOUT_MS = 45_000;
+
+class SftpTimeoutError extends Error {
+  constructor(op: string) {
+    super(`Opération SFTP "${op}" expirée après ${SFTP_OP_TIMEOUT_MS / 1000}s (connexion bloquée) — réessayez.`);
+    this.name = "SftpTimeoutError";
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, op: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new SftpTimeoutError(op)), SFTP_OP_TIMEOUT_MS);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      }
+    );
+  });
+}
+
+/**
  * Interface de stockage abstraite : permet de brancher n'importe quel backend
  * (ici SFTP vers votre serveur de fichiers illimité, ou disque local en dev)
  * sans changer le reste de l'application. Pour ajouter un backend S3 plus tard,
@@ -37,14 +74,34 @@ class SftpStorage implements StorageDriver {
       host: process.env.SFTP_HOST,
       port: parseInt(process.env.SFTP_PORT || "22", 10),
       username: process.env.SFTP_USERNAME,
+      // Ne borne QUE la phase de handshake (voir commentaire SFTP_OP_TIMEOUT_MS) — le
+      // vrai filet de sécurité contre un blocage après connexion est withTimeout() plus
+      // bas, mais autant réduire aussi ce délai par défaut (20s) pour échouer plus vite
+      // si l'hôte est injoignable.
+      readyTimeout: 15_000,
     };
     if (process.env.SFTP_PRIVATE_KEY_PATH) {
       connectOptions.privateKey = await fs.readFile(process.env.SFTP_PRIVATE_KEY_PATH);
     } else {
       connectOptions.password = process.env.SFTP_PASSWORD;
     }
-    await client.connect(connectOptions);
+    await withTimeout(client.connect(connectOptions), "connect");
     return client;
+  }
+
+  /** Ferme proprement la connexion, sans jamais bloquer l'appelant indéfiniment : si
+   * `client.end()` (fermeture "gracieuse", qui attend l'événement 'close') traîne, on
+   * force la destruction du socket sous-jacent plutôt que de laisser la requête pendre. */
+  private async safeEnd(client: SftpClient): Promise<void> {
+    try {
+      await withTimeout(client.end(), "end");
+    } catch {
+      try {
+        (client as unknown as { client?: { destroy?: () => void } }).client?.destroy?.();
+      } catch {
+        // best-effort — rien d'autre à faire si même destroy() échoue.
+      }
+    }
   }
 
   private fullPath(key: string) {
@@ -56,23 +113,23 @@ class SftpStorage implements StorageDriver {
     try {
       const target = this.fullPath(key);
       const dir = path.posix.dirname(target);
-      const dirExists = await client.exists(dir);
+      const dirExists = await withTimeout(client.exists(dir), "exists(dir)");
       if (!dirExists) {
-        await client.mkdir(dir, true);
+        await withTimeout(client.mkdir(dir, true), "mkdir");
       }
-      await client.put(data, target);
+      await withTimeout(client.put(data, target), "put");
     } finally {
-      await client.end();
+      await this.safeEnd(client);
     }
   }
 
   async get(key: string): Promise<Buffer> {
     const client = await this.connect();
     try {
-      const result = await client.get(this.fullPath(key));
+      const result = await withTimeout(client.get(this.fullPath(key)), "get");
       return Buffer.isBuffer(result) ? result : Buffer.from(result as string);
     } finally {
-      await client.end();
+      await this.safeEnd(client);
     }
   }
 
@@ -80,21 +137,21 @@ class SftpStorage implements StorageDriver {
     const client = await this.connect();
     try {
       const target = this.fullPath(key);
-      if (await client.exists(target)) {
-        await client.delete(target);
+      if (await withTimeout(client.exists(target), "exists")) {
+        await withTimeout(client.delete(target), "delete");
       }
     } finally {
-      await client.end();
+      await this.safeEnd(client);
     }
   }
 
   async exists(key: string): Promise<boolean> {
     const client = await this.connect();
     try {
-      const result = await client.exists(this.fullPath(key));
+      const result = await withTimeout(client.exists(this.fullPath(key)), "exists");
       return result !== false;
     } finally {
-      await client.end();
+      await this.safeEnd(client);
     }
   }
 
@@ -102,11 +159,11 @@ class SftpStorage implements StorageDriver {
     const client = await this.connect();
     try {
       const target = this.fullPath(prefixKey);
-      if (await client.exists(target)) {
-        await client.rmdir(target, true);
+      if (await withTimeout(client.exists(target), "exists")) {
+        await withTimeout(client.rmdir(target, true), "rmdir");
       }
     } finally {
-      await client.end();
+      await this.safeEnd(client);
     }
   }
 }
