@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { SocialLoginButtons } from "@/components/auth/SocialLoginButtons";
 import { OrDivider } from "@/components/auth/OrDivider";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 function LoginForm() {
   const router = useRouter();
@@ -112,8 +113,7 @@ function LoginForm() {
                 Mot de passe oublié ?
               </Link>
             </div>
-            <input
-              type="password"
+            <PasswordInput
               required
               className="input"
               value={password}

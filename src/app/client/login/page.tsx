@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 type Step = "email" | "password" | "create-password" | "check-inbox";
 
@@ -131,8 +132,7 @@ function ClientLoginInner() {
       {step === "password" && (
         <form onSubmit={handlePasswordSubmit} className="mt-6 space-y-4">
           <p className="text-sm text-gray-600">{email}</p>
-          <input
-            type="password"
+          <PasswordInput
             required
             autoFocus
             className="input"
@@ -162,8 +162,7 @@ function ClientLoginInner() {
           <p className="text-sm text-gray-600">
             Première connexion pour {email} — créez un mot de passe pour votre espace.
           </p>
-          <input
-            type="password"
+          <PasswordInput
             required
             autoFocus
             className="input"
@@ -171,8 +170,7 @@ function ClientLoginInner() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          <input
-            type="password"
+          <PasswordInput
             required
             className="input"
             placeholder="Confirmer le mot de passe"

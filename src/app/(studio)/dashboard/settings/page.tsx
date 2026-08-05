@@ -9,6 +9,7 @@ import { BannerCropModal } from "@/components/studio/BannerCropModal";
 import { RichTextEditor } from "@/components/studio/RichTextEditor";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { Modal } from "@/components/ui/Modal";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 interface BookingTypeDTO {
   id: string;
@@ -703,8 +704,7 @@ export default function SettingsPage() {
               <label className="mb-1 block text-xs font-medium text-gray-600">
                 {t("settings.currentPasswordLabel")}
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 required
                 className="input w-full"
                 value={currentPassword}
@@ -716,8 +716,7 @@ export default function SettingsPage() {
                 <label className="mb-1 block text-xs font-medium text-gray-600">
                   {t("settings.newPasswordLabel")}
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   minLength={8}
                   className="input w-full"
@@ -729,8 +728,7 @@ export default function SettingsPage() {
                 <label className="mb-1 block text-xs font-medium text-gray-600">
                   {t("settings.confirmPasswordLabel")}
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   minLength={8}
                   className="input w-full"
@@ -1066,8 +1064,7 @@ export default function SettingsPage() {
         <div className="mt-4 space-y-3">
           <div>
             <label className="mb-1 block text-sm font-medium">{t("settings.deleteModalPasswordLabel")}</label>
-            <input
-              type="password"
+            <PasswordInput
               className="input"
               value={deletePassword}
               onChange={(e) => setDeletePassword(e.target.value)}

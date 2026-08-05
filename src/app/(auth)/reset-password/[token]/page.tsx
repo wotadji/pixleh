@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 export default function ResetPasswordPage({ params }: { params: { token: string } }) {
   const router = useRouter();
@@ -48,8 +49,7 @@ export default function ResetPasswordPage({ params }: { params: { token: string 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
             <label className="mb-1 block text-sm font-medium">Nouveau mot de passe</label>
-            <input
-              type="password"
+            <PasswordInput
               required
               minLength={8}
               className="input"
@@ -59,8 +59,7 @@ export default function ResetPasswordPage({ params }: { params: { token: string 
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium">Confirmer le mot de passe</label>
-            <input
-              type="password"
+            <PasswordInput
               required
               minLength={8}
               className="input"

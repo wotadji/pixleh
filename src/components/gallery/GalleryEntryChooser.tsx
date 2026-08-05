@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 /**
  * Écran d'accueil d'une galerie (/g/[gallerySlug]) affiché tant que le visiteur n'a choisi
@@ -185,10 +186,10 @@ export function GalleryEntryChooser({
             <p className="text-center text-sm text-white/90">
               Cette galerie est protégée. Saisissez le mot de passe fourni par le photographe.
             </p>
-            <input
-              type="password"
+            <PasswordInput
               required
               autoFocus
+              variant="dark"
               placeholder="Mot de passe"
               value={value}
               onChange={(e) => setValue(e.target.value)}

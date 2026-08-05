@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 /**
  * Formulaire Paramètres (/client/settings) : nom (libre) + changement de mot de passe
@@ -110,23 +111,20 @@ export function ClientSettingsForm({
         </p>
         <div className="mt-3 space-y-2">
           {hasPassword && (
-            <input
-              type="password"
+            <PasswordInput
               className="input w-full"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               placeholder={t("client.settings.password.current")}
             />
           )}
-          <input
-            type="password"
+          <PasswordInput
             className="input w-full"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             placeholder={t("client.settings.password.new")}
           />
-          <input
-            type="password"
+          <PasswordInput
             className="input w-full"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}

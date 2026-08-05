@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { SocialLoginButtons } from "@/components/auth/SocialLoginButtons";
 import { OrDivider } from "@/components/auth/OrDivider";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 // useSearchParams() (pour ?plan=&interval=, voir plus bas) doit être encapsulé dans un
 // <Suspense> pour ne pas faire basculer toute la page en rendu 100% client côté build —
@@ -139,8 +140,7 @@ function RegisterForm() {
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium">Mot de passe</label>
-            <input
-              type="password"
+            <PasswordInput
               required
               minLength={8}
               className="input"

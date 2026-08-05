@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 export function PasswordGate({ slug, title }: { slug: string; title: string }) {
   const router = useRouter();
@@ -34,8 +35,7 @@ export function PasswordGate({ slug, title }: { slug: string; title: string }) {
         Cette galerie est protégée. Saisissez le mot de passe fourni par le photographe.
       </p>
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-        <input
-          type="password"
+        <PasswordInput
           required
           autoFocus
           className="input"
