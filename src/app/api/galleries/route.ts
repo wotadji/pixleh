@@ -6,7 +6,6 @@ import { requireStudioSession, handleApiError } from "@/lib/access";
 import { assertGalleryQuota } from "@/lib/quotas";
 import { gallerySchema } from "@/lib/validators";
 import { slugify, randomSuffix } from "@/lib/slug";
-import { sendGalleryAdditionalAccessEmail } from "@/lib/notifications";
 import type { SetVisibility } from "@prisma/client";
 
 export async function GET() {
@@ -81,14 +80,18 @@ export async function POST(req: Request) {
     // Clients additionnels (accès secondaire en lecture seule, voir modèle GalleryClientAccess
     // dans schema.prisma) — jamais le client principal, dédupliqués, et vérifiés comme
     // appartenant à ce studio avant insertion (on ne fait pas confiance à la liste d'ids
-    // envoyée par le client).
+    // envoyée par le client). L'accès est créé tout de suite, mais l'email de notification
+    // NE part PAS ici (demande d'Adriel, 05/08/2026 : "le send mail [...] doit se faire quand
+    // on clique sur publier pas a la creation de la galerie") — il part uniquement à la
+    // transition vers PUBLISHED, voir PATCH /api/galleries/[id], même moment que l'email du
+    // client principal (sendGalleryReadyEmail).
     const additionalIds = Array.from(new Set(data.additionalClientIds || [])).filter(
       (id) => id && id !== data.clientId
     );
     if (additionalIds.length > 0) {
       const additionalClients = await prisma.client.findMany({
         where: { id: { in: additionalIds }, studioId: session.user.studioId },
-        select: { id: true, name: true, email: true },
+        select: { id: true },
       });
 
       // $executeRaw plutôt qu'une API Prisma typée : le modèle GalleryClientAccess est trop
@@ -99,31 +102,6 @@ export async function POST(req: Request) {
         await prisma.$executeRaw`INSERT INTO "GalleryClientAccess" ("id", "galleryId", "clientId", "createdAt")
           VALUES (${randomUUID()}, ${gallery.id}, ${client.id}, NOW())
           ON CONFLICT ("galleryId", "clientId") DO NOTHING`;
-      }
-
-      // Email envoyé à chaque client additionnel — fire-and-forget : un échec d'envoi (SMTP
-      // non configuré, etc.) ne doit jamais faire échouer la création de la galerie elle-même
-      // (même patron que l'email "galerie prête" côté client principal).
-      if (additionalClients.length > 0) {
-        const studio = await prisma.studio.findUnique({
-          where: { id: session.user.studioId },
-          include: { settings: true },
-        });
-        if (studio) {
-          for (const client of additionalClients) {
-            sendGalleryAdditionalAccessEmail({
-              clientName: client.name,
-              clientEmail: client.email,
-              galleryTitle: gallery.title,
-              gallerySlug: gallery.slug,
-              galleryPassword: gallery.password,
-              studio: { name: studio.name, slug: studio.slug, logoUrl: studio.logoUrl, brandColor: studio.brandColor },
-              settings: studio.settings
-                ? { contactEmail: studio.settings.contactEmail, contactPhone: studio.settings.contactPhone }
-                : null,
-            }).catch((e) => console.error("Échec de l'email « accès galerie » (client additionnel) :", e));
-          }
-        }
       }
     }
 

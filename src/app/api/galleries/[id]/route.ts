@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireStudioSession, AccessError, handleApiError } from "@/lib/access";
 import { gallerySchema } from "@/lib/validators";
-import { sendGalleryReadyEmail } from "@/lib/notifications";
+import { sendGalleryReadyEmail, sendGalleryAdditionalAccessEmail } from "@/lib/notifications";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -125,27 +125,57 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       await prisma.$executeRaw`UPDATE "Gallery" SET "publishedAt" = NOW() WHERE id = ${gallery.id}`;
     }
 
-    // Email "galerie prête" au client — uniquement sur la TRANSITION vers PUBLISHED (pas à
-    // chaque sauvegarde d'une galerie déjà publiée, ex: un simple changement de design), et
-    // seulement si un client est rattaché avec une adresse email (voir Gallery.clientId,
-    // nullable — une galerie peut très bien n'avoir aucun client, ex: portfolio public pur).
-    if (body.status === "PUBLISHED" && gallery.status !== "PUBLISHED" && gallery.client?.email) {
-      const studio = await prisma.studio.findUnique({
-        where: { id: session.user.studioId },
-        include: { settings: true },
-      });
-      if (studio) {
-        sendGalleryReadyEmail({
-          clientName: gallery.client.name,
-          clientEmail: gallery.client.email,
-          galleryTitle: updated.title,
-          gallerySlug: updated.slug,
-          galleryPassword: updated.password,
-          studio: { name: studio.name, slug: studio.slug, logoUrl: studio.logoUrl, brandColor: studio.brandColor },
-          settings: studio.settings
+    // Emails "galerie prête" — uniquement sur la TRANSITION vers PUBLISHED (pas à chaque
+    // sauvegarde d'une galerie déjà publiée, ex: un simple changement de design). Client
+    // PRINCIPAL (Gallery.clientId) ET clients ADDITIONNELS (voir GalleryClientAccess) reçoivent
+    // leur email au même moment — demande d'Adriel (05/08/2026) : "le send mail [...] doit se
+    // faire quand on clique sur publier pas a la creation de la galerie" (avant ce changement,
+    // les additionnels étaient notifiés dès POST /api/galleries, incohérent avec le principal).
+    const isPublishing = body.status === "PUBLISHED" && gallery.status !== "PUBLISHED";
+    if (isPublishing) {
+      // $queryRaw : GalleryClientAccess est trop récent pour le Prisma Client généré du
+      // sandbox (voir commentaire sur ce modèle dans schema.prisma).
+      const additionalClients = await prisma.$queryRaw<{ name: string; email: string }[]>`
+        SELECT c.name, c.email FROM "GalleryClientAccess" gca
+        JOIN "Client" c ON c.id = gca."clientId"
+        WHERE gca."galleryId" = ${gallery.id}
+      `;
+
+      if (gallery.client?.email || additionalClients.length > 0) {
+        const studio = await prisma.studio.findUnique({
+          where: { id: session.user.studioId },
+          include: { settings: true },
+        });
+        if (studio) {
+          const studioInfo = { name: studio.name, slug: studio.slug, logoUrl: studio.logoUrl, brandColor: studio.brandColor };
+          const settingsInfo = studio.settings
             ? { contactEmail: studio.settings.contactEmail, contactPhone: studio.settings.contactPhone }
-            : null,
-        }).catch((e) => console.error("Échec de l'email « galerie prête » :", e));
+            : null;
+
+          if (gallery.client?.email) {
+            sendGalleryReadyEmail({
+              clientName: gallery.client.name,
+              clientEmail: gallery.client.email,
+              galleryTitle: updated.title,
+              gallerySlug: updated.slug,
+              galleryPassword: updated.password,
+              studio: studioInfo,
+              settings: settingsInfo,
+            }).catch((e) => console.error("Échec de l'email « galerie prête » :", e));
+          }
+
+          for (const client of additionalClients) {
+            sendGalleryAdditionalAccessEmail({
+              clientName: client.name,
+              clientEmail: client.email,
+              galleryTitle: updated.title,
+              gallerySlug: updated.slug,
+              galleryPassword: updated.password,
+              studio: studioInfo,
+              settings: settingsInfo,
+            }).catch((e) => console.error("Échec de l'email « accès galerie » (client additionnel) :", e));
+          }
+        }
       }
     }
 
