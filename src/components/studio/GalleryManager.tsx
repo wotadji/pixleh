@@ -146,6 +146,13 @@ export function GalleryManager({
   };
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
+  // Statistiques de progression de l'upload en cours (barre + % + temps restant estimé),
+  // demandé par Adriel le 06/08/2026 ("comme pour l'upload de google drive") — distinct de
+  // `progress` (texte simple utilisé pour la phase de vérification des doublons, avant que
+  // l'upload à proprement parler ne démarre). Basé sur les octets réellement envoyés (voir
+  // uploadFiles/xhrPostFormData plus bas), pas seulement le nombre de fichiers, pour rester
+  // exact même quand les fichiers ont des tailles très différentes.
+  const [uploadStats, setUploadStats] = useState<{ percent: number; etaSeconds: number | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeSet, setActiveSet] = useState<string | null>(null); // null = "Toutes les photos"
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
@@ -226,6 +233,12 @@ export function GalleryManager({
   // booléen pour couper aussi le batch en cours d'envoi (`fetch`), pas seulement empêcher le
   // suivant de démarrer.
   const uploadAbortRef = useRef<AbortController | null>(null);
+  // Suivi des octets envoyés par lot (clé = index de lot), pour calculer une progression
+  // globale en octets (pas juste en nombre de fichiers) — voir uploadFiles/uploadStats.
+  const uploadBytesByBatchRef = useRef<Map<number, number>>(new Map());
+  const uploadTotalBytesRef = useRef<number>(0);
+  const uploadStartedAtRef = useRef<number>(0);
+  const uploadStatsThrottleRef = useRef<number>(0);
   // Doublons détectés AVANT l'envoi (voir beginUpload/check-duplicates) : tant que ce state
   // est renseigné, l'upload est en pause en attendant que le studio choisisse Ignorer /
   // Écraser / Conserver dans la modale correspondante.
@@ -305,12 +318,60 @@ export function GalleryManager({
     return () => clearTimeout(timer);
   }, [error]);
 
+  // Envoie un lot en `multipart/form-data` via XMLHttpRequest plutôt que `fetch` : c'est le
+  // seul moyen standard d'obtenir une progression en octets réels pendant l'envoi
+  // (`xhr.upload.onprogress`) — `fetch` n'expose pas d'équivalent pour le corps de requête
+  // envoyé par le navigateur. Le reste du comportement (parsing JSON de la réponse,
+  // annulation via AbortSignal) reproduit fidèlement ce que faisait `fetch` avant.
+  function xhrPostFormData(
+    url: string,
+    formData: FormData,
+    signal: AbortSignal,
+    onProgress: (loadedBytes: number) => void
+  ): Promise<{ ok: boolean; status: number; data: unknown }> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", url);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress(e.loaded);
+      };
+      const onAbort = () => xhr.abort();
+      const cleanup = () => signal.removeEventListener("abort", onAbort);
+      xhr.onload = () => {
+        cleanup();
+        let data: unknown = {};
+        try {
+          data = JSON.parse(xhr.responseText);
+        } catch {
+          // Réponse non-JSON (erreur serveur brute, timeout de proxy...) — laissé vide,
+          // géré comme une erreur générique par l'appelant via `ok`.
+        }
+        resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data });
+      };
+      xhr.onerror = () => {
+        cleanup();
+        reject(new Error("network"));
+      };
+      xhr.onabort = () => {
+        cleanup();
+        reject(new DOMException("Upload annulé", "AbortError"));
+      };
+      signal.addEventListener("abort", onAbort);
+      xhr.send(formData);
+    });
+  }
+
   const uploadFiles = useCallback(
     async (files: File[], duplicateAction: "skip" | "replace" | "keep" = "skip") => {
       setUploading(true);
       setError(null);
       const controller = new AbortController();
       uploadAbortRef.current = controller;
+      uploadBytesByBatchRef.current = new Map();
+      uploadTotalBytesRef.current = files.reduce((sum, f) => sum + f.size, 0);
+      uploadStartedAtRef.current = Date.now();
+      uploadStatsThrottleRef.current = 0;
+      setUploadStats({ percent: 0, etaSeconds: null });
       const BATCH_SIZE = 5;
       // Un lot ne dépasse jamais ~40 Mo au total : au-delà, un gros fichier (photo HD)
       // part seul dans sa propre requête plutôt que de s'entasser avec d'autres dans le
@@ -350,18 +411,44 @@ export function GalleryManager({
       let completedFiles = 0;
       let stopped = false;
 
-      async function runBatch(batch: File[]) {
+      // Recalcule % + temps restant estimé à partir des octets réellement envoyés (tous
+      // lots confondus), avec un léger throttle (200ms) car `xhr.upload.onprogress` peut se
+      // déclencher très fréquemment — inutile de re-render à chaque appel. Le temps restant
+      // n'est affiché qu'une fois qu'on a un minimum de recul (>1,5s écoulées et au moins un
+      // octet envoyé), sinon l'estimation initiale est trop bruitée pour être utile.
+      function updateUploadStats(force = false) {
+        const now = Date.now();
+        if (!force && now - uploadStatsThrottleRef.current < 200) return;
+        uploadStatsThrottleRef.current = now;
+        const loaded = Array.from(uploadBytesByBatchRef.current.values()).reduce((a, b) => a + b, 0);
+        const total = uploadTotalBytesRef.current || 1;
+        const percent = Math.min(100, Math.round((loaded / total) * 100));
+        const elapsedSec = (now - uploadStartedAtRef.current) / 1000;
+        let etaSeconds: number | null = null;
+        if (elapsedSec > 1.5 && loaded > 0) {
+          const throughput = loaded / elapsedSec;
+          if (throughput > 0) etaSeconds = Math.max(0, (total - loaded) / throughput);
+        }
+        setUploadStats({ percent, etaSeconds });
+      }
+
+      async function runBatch(batch: File[], batchIndex: number) {
+        const batchBytes = batch.reduce((sum, f) => sum + f.size, 0);
         const formData = new FormData();
         batch.forEach((f) => formData.append("files", f));
         if (activeSet) formData.append("collectionId", activeSet);
         formData.append("duplicateAction", duplicateAction);
         try {
-          const res = await fetch(`/api/galleries/${gallery.id}/photos`, {
-            method: "POST",
-            body: formData,
-            signal: controller.signal,
-          });
-          const data = await res.json().catch(() => ({}));
+          const res = await xhrPostFormData(
+            `/api/galleries/${gallery.id}/photos`,
+            formData,
+            controller.signal,
+            (loadedBytes) => {
+              uploadBytesByBatchRef.current.set(batchIndex, loadedBytes);
+              updateUploadStats();
+            }
+          );
+          const data = (res.data ?? {}) as { photos?: unknown[]; skipped?: unknown[]; rejected?: unknown[]; error?: unknown };
           if (!res.ok) {
             errors.push(data?.error ? JSON.stringify(data.error) : `${t("gm.httpError")} ${res.status}`);
           } else {
@@ -379,8 +466,13 @@ export function GalleryManager({
           errors.push(e instanceof Error ? e.message : t("gm.networkError"));
         } finally {
           // Les lots se terminent dans un ordre imprévisible en parallèle — on avance le
-          // compteur au fil des complétions plutôt que par index de lot.
+          // compteur au fil des complétions plutôt que par index de lot. On force aussi ce
+          // lot à 100% de ses propres octets (même en cas d'erreur/annulation avant le
+          // dernier événement de progression) pour que la barre ne reste jamais bloquée
+          // juste sous 100% à la fin.
           completedFiles += batch.length;
+          uploadBytesByBatchRef.current.set(batchIndex, batchBytes);
+          updateUploadStats(true);
           setProgress(`${Math.min(completedFiles, files.length)} / ${files.length} ${t("gm.photosUploaded")}`);
         }
       }
@@ -395,8 +487,9 @@ export function GalleryManager({
             stopped = true;
             return;
           }
+          const batchIndex = cursor;
           const batch = batches[cursor++];
-          await runBatch(batch);
+          await runBatch(batch, batchIndex);
         }
       }
       await Promise.all(Array.from({ length: Math.min(CONCURRENCY, batches.length) }, () => worker()));
@@ -404,6 +497,7 @@ export function GalleryManager({
       uploadAbortRef.current = null;
       setUploading(false);
       setProgress(null);
+      setUploadStats(null);
       // Priorité d'affichage : une interruption manuelle ou une vraie erreur réseau/serveur
       // prime sur les simples constats (doublons ignorés, fichiers refusés) — mais ceux-ci
       // peuvent se cumuler avec le message principal plutôt que de s'écraser entre eux.
@@ -1325,7 +1419,32 @@ export function GalleryManager({
               {uploading && (
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-white/90 text-gray-700">
                   <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-brand-500" />
-                  <p className="text-sm font-medium">{progress}</p>
+                  {/* Barre de progression + % + temps restant estimé pendant l'envoi
+                      proprement dit (voir uploadFiles/uploadStats) — demandé par Adriel le
+                      06/08/2026 ("comme pour l'upload de google drive"). Pendant la phase de
+                      vérification des doublons (avant que l'upload ne démarre), uploadStats
+                      est encore `null` : on retombe alors sur le simple texte `progress`. */}
+                  {uploadStats ? (
+                    <div className="w-64">
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                        <div
+                          className="h-full rounded-full bg-brand-500 transition-[width] duration-300 ease-out"
+                          style={{ width: `${uploadStats.percent}%` }}
+                        />
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+                        <span className="font-semibold text-gray-700">{uploadStats.percent}%</span>
+                        <span>
+                          {uploadStats.etaSeconds === null
+                            ? t("gm.timeRemainingCalculating")
+                            : `${t("gm.timeRemainingLabel")} ${formatDuration(uploadStats.etaSeconds) ?? "0:00"}`}
+                        </span>
+                      </div>
+                      {progress && <p className="mt-1.5 text-center text-xs text-gray-400">{progress}</p>}
+                    </div>
+                  ) : (
+                    <p className="text-sm font-medium">{progress}</p>
+                  )}
                   <button
                     type="button"
                     onClick={stopUpload}
