@@ -48,8 +48,21 @@ export function rateLimit(
   return { allowed: true };
 }
 
-/** IP du client, en tenant compte d'un éventuel proxy/reverse-proxy (Nginx, cPanel...). */
+/**
+ * IP du client, en tenant compte d'un éventuel proxy/reverse-proxy (Nginx, cPanel, CDN).
+ *
+ * `cf-connecting-ip` est prioritaire : c'est l'en-tête que Cloudflare définit lui-même à
+ * l'IP réelle du visiteur, et Cloudflare ÉCRASE systématiquement toute valeur de cet
+ * en-tête envoyée par le client avant de la (re)définir à l'edge — donc contrairement à
+ * `x-forwarded-for` (qu'un client peut pré-remplir avec une valeur forgée avant même
+ * d'atteindre Cloudflare, ce qui tromperait un simple `split(",")[0]`), il n'est pas
+ * usurpable une fois le trafic passé par Cloudflare. Préparé le 06/08/2026 en vue de la
+ * mise en place d'un CDN Cloudflare devant pixleh.com (retour d'Adriel : bande passante
+ * anormalement bride côté hébergeur).
+ */
 export function getClientIp(req: Request): string {
+  const cfIp = req.headers.get("cf-connecting-ip");
+  if (cfIp) return cfIp.trim();
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) return forwarded.split(",")[0].trim();
   return req.headers.get("x-real-ip") || "unknown";
