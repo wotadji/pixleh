@@ -335,12 +335,14 @@ export function GalleryManager({
         if (current.length > 0) batches.push(current);
       }
       // Envoi de plusieurs lots EN PARALLÈLE (pas un par un) : mesuré le 06/08/2026 sur la
-      // prod (retour d'Adriel, débit plafonné à ~400 Ko/s mais PAR CONNEXION — 4 connexions
-      // simultanées obtiennent chacune leur plein débit, soit ~4x le débit total). Chaque
-      // lot garde sa propre requête HTTP donc sa propre connexion ; CONCURRENCY contrôle
-      // combien de lots sont en vol en même temps. Valeur alignée sur le test réel (4
-      // connexions simultanées, chacune à débit plein).
-      const CONCURRENCY = 4;
+      // prod (retour d'Adriel). Un test rapide (petit fichier, 4 connexions) avait suggéré
+      // un plafond par connexion (~400 Ko/s chacune) plutôt qu'un plafond global — mais un
+      // vrai test soutenu (23 photos de 24 Mo, CONCURRENCY=4) n'a obtenu que ~920 Ko/s
+      // cumulés (~2,3x, pas ~4x) : le lien semble avoir une capacité totale à peu près fixe
+      // en régime établi, quel que soit le nombre de connexions. On pousse quand même un
+      // peu plus (6) pour voir s'il reste de la marge — au-delà, la vraie solution est de
+      // découper les gros fichiers eux-mêmes en morceaux, pas d'ajouter des connexions.
+      const CONCURRENCY = 6;
       const errors: string[] = [];
       let uploadedCount = 0;
       let skippedCount = 0;
