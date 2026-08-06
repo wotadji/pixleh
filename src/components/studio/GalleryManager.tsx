@@ -312,20 +312,43 @@ export function GalleryManager({
       const controller = new AbortController();
       uploadAbortRef.current = controller;
       const BATCH_SIZE = 5;
+      // Un lot ne dépasse jamais ~40 Mo au total : au-delà, un gros fichier (photo HD)
+      // part seul dans sa propre requête plutôt que de s'entasser avec d'autres dans le
+      // même envoi. Utile en combinaison avec CONCURRENCY ci-dessous — voir le commentaire
+      // plus bas pour le contexte complet.
+      const MAX_BATCH_BYTES = 40 * 1024 * 1024;
+      const batches: File[][] = [];
+      {
+        let current: File[] = [];
+        let currentBytes = 0;
+        for (const f of files) {
+          const wouldOverflow =
+            current.length > 0 && (current.length >= BATCH_SIZE || currentBytes + f.size > MAX_BATCH_BYTES);
+          if (wouldOverflow) {
+            batches.push(current);
+            current = [];
+            currentBytes = 0;
+          }
+          current.push(f);
+          currentBytes += f.size;
+        }
+        if (current.length > 0) batches.push(current);
+      }
+      // Envoi de plusieurs lots EN PARALLÈLE (pas un par un) : mesuré le 06/08/2026 sur la
+      // prod (retour d'Adriel, débit plafonné à ~400 Ko/s mais PAR CONNEXION — 4 connexions
+      // simultanées obtiennent chacune leur plein débit, soit ~4x le débit total). Chaque
+      // lot garde sa propre requête HTTP donc sa propre connexion ; CONCURRENCY contrôle
+      // combien de lots sont en vol en même temps. Valeur alignée sur le test réel (4
+      // connexions simultanées, chacune à débit plein).
+      const CONCURRENCY = 4;
       const errors: string[] = [];
       let uploadedCount = 0;
       let skippedCount = 0;
       let rejectedCount = 0;
+      let completedFiles = 0;
       let stopped = false;
-      for (let i = 0; i < files.length; i += BATCH_SIZE) {
-        if (controller.signal.aborted) {
-          stopped = true;
-          break;
-        }
-        const batch = files.slice(i, i + BATCH_SIZE);
-        setProgress(
-          `${Math.min(i + BATCH_SIZE, files.length)} / ${files.length} ${t("gm.photosUploaded")}`
-        );
+
+      async function runBatch(batch: File[]) {
         const formData = new FormData();
         batch.forEach((f) => formData.append("files", f));
         if (activeSet) formData.append("collectionId", activeSet);
@@ -349,11 +372,33 @@ export function GalleryManager({
             // Envoi interrompu volontairement (bouton "Arrêter") — pas une erreur à signaler,
             // seulement à s'arrêter proprement et rafraîchir ce qui a déjà été uploadé.
             stopped = true;
-            break;
+            return;
           }
           errors.push(e instanceof Error ? e.message : t("gm.networkError"));
+        } finally {
+          // Les lots se terminent dans un ordre imprévisible en parallèle — on avance le
+          // compteur au fil des complétions plutôt que par index de lot.
+          completedFiles += batch.length;
+          setProgress(`${Math.min(completedFiles, files.length)} / ${files.length} ${t("gm.photosUploaded")}`);
         }
       }
+
+      // Petit pool à concurrence bornée : chaque "worker" prend le prochain lot disponible
+      // dès qu'il est libre, jusqu'à épuisement de la file — CONCURRENCY lots au plus en
+      // vol simultanément.
+      let cursor = 0;
+      async function worker() {
+        while (cursor < batches.length) {
+          if (controller.signal.aborted) {
+            stopped = true;
+            return;
+          }
+          const batch = batches[cursor++];
+          await runBatch(batch);
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, batches.length) }, () => worker()));
+
       uploadAbortRef.current = null;
       setUploading(false);
       setProgress(null);
