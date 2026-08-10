@@ -13,10 +13,16 @@ on:
     workflows: ["CI"]
     types: [completed]
     branches: [main]
+  # Filet de sécurité manuel : le déclenchement automatique via workflow_run s'est
+  # révélé instable sur ce repo (voir incident du 07/08/2026 — CI se déclenchait avec
+  # un fort délai, et Deploy ne s'est pas enchaîné après un run CI pourtant réussi).
+  # Permet de lancer un déploiement à la demande depuis l'onglet Actions → Deploy →
+  # "Run workflow", sans dépendre du chaînage automatique.
+  workflow_dispatch:
 
 jobs:
   deploy:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
