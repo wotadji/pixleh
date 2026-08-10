@@ -153,6 +153,15 @@ export function GalleryManager({
   // uploadFiles/xhrPostFormData plus bas), pas seulement le nombre de fichiers, pour rester
   // exact même quand les fichiers ont des tailles très différentes.
   const [uploadStats, setUploadStats] = useState<{ percent: number; etaSeconds: number | null } | null>(null);
+  // Miroir local de gallery.photos, complété au fil des lots qui terminent PENDANT l'upload
+  // (voir runBatch) — permet aux photos déjà envoyées d'apparaître progressivement dans la
+  // grille sans attendre router.refresh() (qui n'intervient qu'une fois tout le lot terminé,
+  // voir la fin de uploadFiles), comme le fait Google Drive. Resynchronisé sur gallery.photos
+  // dès que le Server Component parent renvoie une version à jour (après router.refresh()).
+  const [localPhotos, setLocalPhotos] = useState<PhotoDTO[]>(gallery.photos);
+  useEffect(() => {
+    setLocalPhotos(gallery.photos);
+  }, [gallery.photos]);
   const [error, setError] = useState<string | null>(null);
   const [activeSet, setActiveSet] = useState<string | null>(null); // null = "Toutes les photos"
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
@@ -448,13 +457,19 @@ export function GalleryManager({
               updateUploadStats();
             }
           );
-          const data = (res.data ?? {}) as { photos?: unknown[]; skipped?: unknown[]; rejected?: unknown[]; error?: unknown };
+          const data = (res.data ?? {}) as { photos?: PhotoDTO[]; skipped?: unknown[]; rejected?: unknown[]; error?: unknown };
           if (!res.ok) {
             errors.push(data?.error ? JSON.stringify(data.error) : `${t("gm.httpError")} ${res.status}`);
           } else {
             uploadedCount += Array.isArray(data.photos) ? data.photos.length : batch.length;
             if (Array.isArray(data.skipped)) skippedCount += data.skipped.length;
             if (Array.isArray(data.rejected)) rejectedCount += data.rejected.length;
+            // Affichage progressif (style Google Drive) : ce lot vient de se terminer, ses
+            // photos apparaissent dans la grille tout de suite, sans attendre les autres
+            // lots ni le router.refresh() de fin d'upload.
+            if (Array.isArray(data.photos) && data.photos.length > 0) {
+              setLocalPhotos((prev) => [...prev, ...data.photos!]);
+            }
           }
         } catch (e) {
           if (e instanceof DOMException && e.name === "AbortError") {
@@ -1023,11 +1038,11 @@ export function GalleryManager({
   }
 
   const filteredPhotos = useMemo(() => {
-    const base = gallery.photos.filter((p) => (activeSet ? p.collectionId === activeSet : true));
+    const base = localPhotos.filter((p) => (activeSet ? p.collectionId === activeSet : true));
     // Même helper que la galerie publique (/g/[slug]) : le tri choisi ici est ce que le
     // client voit, pas juste un tri d'affichage local à ce panel.
     return sortPhotos(base, sortBy);
-  }, [gallery.photos, activeSet, sortBy]);
+  }, [localPhotos, activeSet, sortBy]);
 
   /** Change le tri ET le persiste en base (Gallery.photoSortOrder) pour qu'il s'applique
    * aussi côté galerie publiée et lien invité, pas seulement dans cette vue admin. */
@@ -1041,18 +1056,18 @@ export function GalleryManager({
     });
   }
 
-  const unsortedCount = gallery.photos.filter((p) => !p.collectionId).length;
+  const unsortedCount = localPhotos.filter((p) => !p.collectionId).length;
 
   const thumbUrl = (photoId: string) => {
     // Le paramètre ?v= (basé sur updatedAt) force le navigateur à recharger l'image dès
     // qu'elle est régénérée côté serveur (filigrane, recadrage...) — sans lui, le cache
     // HTTP continuerait de servir l'ancienne version indéfiniment.
-    const version = gallery.photos.find((p) => p.id === photoId)?.updatedAt;
+    const version = localPhotos.find((p) => p.id === photoId)?.updatedAt;
     const v = version ? new Date(version).getTime() : 0;
     return `/api/files/studios/${gallery.studioId}/galleries/${gallery.id}/${photoId}/thumb.jpg?v=${v}`;
   };
 
-  const activeCoverPhotoId = coverPhotoId || gallery.photos[0]?.id || null;
+  const activeCoverPhotoId = coverPhotoId || localPhotos[0]?.id || null;
   // Fond des vignettes de l'onglet Vidéo qui n'ont pas de miniature propre (upload direct,
   // pas de génération de vignette vidéo en v1) — la couverture de la galerie plutôt qu'un
   // aplat gris, comme côté galerie publique (voir VideoSection dans GalleryView.tsx).
@@ -1203,7 +1218,7 @@ export function GalleryManager({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {gallery.photos.length > 0 && (
+          {localPhotos.length > 0 && (
             <button
               onClick={regenerateThumbnails}
               disabled={regenLoading}
@@ -1235,9 +1250,14 @@ export function GalleryManager({
           <button onClick={handleShare} className="btn-secondary text-sm">
             {copied ? t("gm.linkCopied") : t("gm.share")}
           </button>
-          <button onClick={open} className="btn-primary text-sm">
-            {t("gm.addMedia")}
-          </button>
+          {/* Masqué pendant l'upload (demandé par Adriel le 11/08/2026) : évite de laisser
+              croire qu'on peut relancer un envoi par-dessus celui en cours, la barre de
+              progression prenant le relais visuellement à la place du bouton. */}
+          {!uploading && (
+            <button onClick={open} className="btn-primary text-sm">
+              {t("gm.addMedia")}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1295,7 +1315,7 @@ export function GalleryManager({
                 }`}
               >
                 <span>{t("gm.allPhotos")}</span>
-                <span className="text-xs text-gray-400">{gallery.photos.length}</span>
+                <span className="text-xs text-gray-400">{localPhotos.length}</span>
               </button>
               {unsortedCount > 0 && gallery.collections.length > 0 && (
                 <p className="px-3 pb-1 text-xs text-gray-400">
@@ -1312,7 +1332,7 @@ export function GalleryManager({
                 </button>
               </div>
               {gallery.collections.map((c) => {
-                const count = gallery.photos.filter((p) => p.collectionId === c.id).length;
+                const count = localPhotos.filter((p) => p.collectionId === c.id).length;
                 return (
                   <div key={c.id} className="group flex items-center">
                     <button
@@ -1416,42 +1436,54 @@ export function GalleryManager({
                 </div>
               )}
 
+              {/* Widget flottant façon Google Drive (demandé par Adriel le 11/08/2026) :
+                  auparavant un bandeau opaque `inset-0` cachait toute la grille pendant
+                  l'upload — désormais une carte compacte en bas à droite, qui laisse la
+                  grille visible en dessous pour que les photos déjà envoyées (voir
+                  localPhotos, alimenté au fil des lots dans runBatch) apparaissent
+                  progressivement pendant que le reste continue d'uploader. */}
               {uploading && (
-                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-white/90 text-gray-700">
-                  <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-brand-500" />
-                  {/* Barre de progression + % + temps restant estimé pendant l'envoi
-                      proprement dit (voir uploadFiles/uploadStats) — demandé par Adriel le
-                      06/08/2026 ("comme pour l'upload de google drive"). Pendant la phase de
-                      vérification des doublons (avant que l'upload ne démarre), uploadStats
-                      est encore `null` : on retombe alors sur le simple texte `progress`. */}
-                  {uploadStats ? (
-                    <div className="w-64">
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
-                        <div
-                          className="h-full rounded-full bg-brand-500 transition-[width] duration-300 ease-out"
-                          style={{ width: `${uploadStats.percent}%` }}
-                        />
+                <div className="absolute bottom-4 right-4 z-20 w-72 rounded-xl border border-gray-200 bg-white p-4 text-gray-700 shadow-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="h-6 w-6 shrink-0 animate-spin rounded-full border-4 border-gray-200 border-t-brand-500" />
+                    {/* Barre de progression + % + temps restant estimé pendant l'envoi
+                        proprement dit (voir uploadFiles/uploadStats) — demandé par Adriel le
+                        06/08/2026 ("comme pour l'upload de google drive"). Pendant la phase de
+                        vérification des doublons (avant que l'upload ne démarre), uploadStats
+                        est encore `null` : on retombe alors sur le simple texte `progress`. */}
+                    {uploadStats ? (
+                      <div className="min-w-0 flex-1">
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+                          <div
+                            className="h-full rounded-full bg-brand-500 transition-[width] duration-300 ease-out"
+                            style={{ width: `${uploadStats.percent}%` }}
+                          />
+                        </div>
+                        <div className="mt-1.5 flex items-center justify-between text-xs text-gray-500">
+                          <span className="font-semibold text-gray-700">{uploadStats.percent}%</span>
+                          <span>
+                            {uploadStats.etaSeconds === null
+                              ? t("gm.timeRemainingCalculating")
+                              : `${t("gm.timeRemainingLabel")} ${formatDuration(uploadStats.etaSeconds) ?? "0:00"}`}
+                          </span>
+                        </div>
                       </div>
-                      <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
-                        <span className="font-semibold text-gray-700">{uploadStats.percent}%</span>
-                        <span>
-                          {uploadStats.etaSeconds === null
-                            ? t("gm.timeRemainingCalculating")
-                            : `${t("gm.timeRemainingLabel")} ${formatDuration(uploadStats.etaSeconds) ?? "0:00"}`}
-                        </span>
-                      </div>
-                      {progress && <p className="mt-1.5 text-center text-xs text-gray-400">{progress}</p>}
-                    </div>
-                  ) : (
-                    <p className="text-sm font-medium">{progress}</p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={stopUpload}
-                    className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    {t("gm.stopUpload")}
-                  </button>
+                    ) : (
+                      <p className="min-w-0 flex-1 truncate text-sm font-medium">{progress}</p>
+                    )}
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    {progress && uploadStats && (
+                      <p className="min-w-0 flex-1 truncate text-xs text-gray-400">{progress}</p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={stopUpload}
+                      className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      {t("gm.stopUpload")}
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -1459,9 +1491,11 @@ export function GalleryManager({
               {filteredPhotos.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-gray-400">
                   <p>{activeSet ? t("gm.noPhotosInSet") : t("gm.noPhotosYet")}</p>
-                  <button onClick={open} className="btn-primary text-sm">
-                    {t("gm.addMedia")}
-                  </button>
+                  {!uploading && (
+                    <button onClick={open} className="btn-primary text-sm">
+                      {t("gm.addMedia")}
+                    </button>
+                  )}
                 </div>
               ) : (
                 <>
@@ -1708,7 +1742,7 @@ export function GalleryManager({
                           <button
                             type="button"
                             onClick={() => setCoverPickerOpen(true)}
-                            disabled={gallery.photos.length === 0}
+                            disabled={localPhotos.length === 0}
                             className="btn-secondary text-sm disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {t("design.choosePhoto")}
@@ -1841,7 +1875,7 @@ export function GalleryManager({
                       design={design}
                       title={gallery.title}
                       coverPhotoUrl={activeCoverPhotoId ? thumbUrl(activeCoverPhotoId) : null}
-                      photos={gallery.photos.slice(0, 6).map((p) => thumbUrl(p.id))}
+                      photos={localPhotos.slice(0, 6).map((p) => thumbUrl(p.id))}
                       t={t}
                     />
                   </div>
@@ -2599,7 +2633,7 @@ export function GalleryManager({
         title={t("design.coverPhotoLabel")}
       >
         <div className="grid max-h-[60vh] grid-cols-4 gap-2 overflow-y-auto sm:grid-cols-5">
-          {gallery.photos.map((p) => (
+          {localPhotos.map((p) => (
             <button
               key={p.id}
               onClick={() => chooseCoverPhoto(p.id)}
