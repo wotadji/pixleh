@@ -14,6 +14,16 @@ export default async function GalleryDetailPage({ params }: { params: { id: stri
   });
   if (!gallery) notFound();
 
+  // Clients additionnels déjà accordés (voir modèle GalleryClientAccess) — $queryRaw plutôt
+  // que l'API Prisma typée : ce modèle est trop récent pour le Prisma Client généré du
+  // sandbox (voir le commentaire sur ce modèle dans schema.prisma), même limitation que
+  // Gallery.publishedAt. Édité depuis l'onglet Réglages (demandé par Adriel le 11/08/2026),
+  // pas seulement à la création (voir NewGalleryForm).
+  const additionalClientRows = await prisma.$queryRaw<{ clientId: string }[]>`
+    SELECT "clientId" FROM "GalleryClientAccess" WHERE "galleryId" = ${gallery.id}
+  `;
+  const additionalClientIds = additionalClientRows.map((r) => r.clientId);
+
   // Tags déjà utilisés sur d'autres galeries du studio, pour l'autocomplétion du champ
   // "Catégorie / tag" (créer = taper un nom nouveau, réutiliser = choisir dans la liste).
   const tagRows = await prisma.gallery.findMany({
@@ -35,6 +45,7 @@ export default async function GalleryDetailPage({ params }: { params: { id: stri
         slug: gallery.slug,
         title: gallery.title,
         clientId: gallery.clientId,
+        additionalClientIds,
         status: gallery.status,
         eventDate: gallery.eventDate ? gallery.eventDate.toISOString() : null,
         password: gallery.password,

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
+import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { requireStudioSession, AccessError, handleApiError } from "@/lib/access";
 import { gallerySchema } from "@/lib/validators";
@@ -109,6 +110,81 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         ...(body.status && { status: body.status }),
       },
     });
+
+    // Clients additionnels (accès secondaire en lecture seule, voir modèle GalleryClientAccess
+    // dans schema.prisma) — éditable depuis l'onglet Réglages après création (demandé par
+    // Adriel le 11/08/2026), pas seulement à la création de la galerie (voir POST
+    // /api/galleries). On calcule un diff (ajouts/retraits) plutôt que de tout supprimer puis
+    // tout réinsérer, pour ne pas perdre `createdAt` sur les accès inchangés.
+    let newlyAddedClients: { id: string; name: string; email: string }[] = [];
+    if (data.additionalClientIds !== undefined) {
+      const effectiveClientId = data.clientId !== undefined ? data.clientId : gallery.clientId;
+      const requestedIds = Array.from(new Set(data.additionalClientIds)).filter(
+        (id) => id && id !== effectiveClientId
+      );
+      // On ne fait pas confiance à la liste d'ids envoyée par le client : seuls les clients
+      // appartenant réellement à ce studio sont retenus.
+      const validClients = requestedIds.length
+        ? await prisma.client.findMany({
+            where: { id: { in: requestedIds }, studioId: session.user.studioId },
+            select: { id: true, name: true, email: true },
+          })
+        : [];
+      const validClientsById = new Map(validClients.map((c) => [c.id, c]));
+
+      // $queryRaw/$executeRaw plutôt que l'API Prisma typée : GalleryClientAccess est trop
+      // récent pour le Prisma Client généré du sandbox (voir le commentaire sur ce modèle
+      // dans schema.prisma) — même limitation que Gallery.publishedAt plus bas.
+      const currentRows = await prisma.$queryRaw<{ clientId: string }[]>`
+        SELECT "clientId" FROM "GalleryClientAccess" WHERE "galleryId" = ${gallery.id}
+      `;
+      const currentIds = new Set(currentRows.map((r) => r.clientId));
+
+      const toAdd = [...validClientsById.keys()].filter((id) => !currentIds.has(id));
+      const toRemove = [...currentIds].filter((id) => !validClientsById.has(id));
+
+      for (const clientId of toAdd) {
+        await prisma.$executeRaw`INSERT INTO "GalleryClientAccess" ("id", "galleryId", "clientId", "createdAt")
+          VALUES (${randomUUID()}, ${gallery.id}, ${clientId}, NOW())
+          ON CONFLICT ("galleryId", "clientId") DO NOTHING`;
+      }
+      for (const clientId of toRemove) {
+        await prisma.$executeRaw`DELETE FROM "GalleryClientAccess" WHERE "galleryId" = ${gallery.id} AND "clientId" = ${clientId}`;
+      }
+
+      newlyAddedClients = toAdd
+        .map((id) => validClientsById.get(id))
+        .filter((c): c is { id: string; name: string; email: string } => !!c);
+    }
+
+    // Un client additionnel ajouté à une galerie DÉJÀ publiée doit recevoir son accès tout de
+    // suite : contrairement à la création (voir POST /api/galleries), il n'y aura pas de
+    // future transition vers PUBLISHED pour déclencher l'email plus bas. Si la galerie est
+    // encore en brouillon, l'email partira au moment de la publication comme d'habitude (voir
+    // isPublishing plus bas), pas ici.
+    if (newlyAddedClients.length > 0 && gallery.status === "PUBLISHED") {
+      const studio = await prisma.studio.findUnique({
+        where: { id: session.user.studioId },
+        include: { settings: true },
+      });
+      if (studio) {
+        const studioInfo = { name: studio.name, slug: studio.slug, logoUrl: studio.logoUrl, brandColor: studio.brandColor };
+        const settingsInfo = studio.settings
+          ? { contactEmail: studio.settings.contactEmail, contactPhone: studio.settings.contactPhone }
+          : null;
+        for (const client of newlyAddedClients) {
+          sendGalleryAdditionalAccessEmail({
+            clientName: client.name,
+            clientEmail: client.email,
+            galleryTitle: updated.title,
+            gallerySlug: updated.slug,
+            galleryPassword: updated.password,
+            studio: studioInfo,
+            settings: settingsInfo,
+          }).catch((e) => console.error("Échec de l'email « accès galerie » (client additionnel) :", e));
+        }
+      }
+    }
 
     // Le filigrane n'est plus "gravé" dans preview.jpg : il est appliqué à la volée au
     // moment de servir l'image ou de télécharger une photo (voir /api/files et les routes

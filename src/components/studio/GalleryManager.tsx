@@ -8,6 +8,7 @@ import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { Modal } from "@/components/ui/Modal";
 import { Spinner } from "@/components/ui/Spinner";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { MultiSearchableSelect } from "@/components/ui/MultiSearchableSelect";
 import { CoverFocalPointModal } from "@/components/studio/CoverFocalPointModal";
 import {
   COLOR_PALETTES,
@@ -98,6 +99,10 @@ interface GalleryDTO {
   slug: string;
   title: string;
   clientId: string | null;
+  /** Clients additionnels (accès secondaire en lecture seule, voir modèle GalleryClientAccess
+   * dans schema.prisma) — jamais le client principal ci-dessus. Éditable depuis l'onglet
+   * Réglages (voir additionalClientIds plus bas), pas seulement à la création de la galerie. */
+  additionalClientIds: string[];
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   eventDate: string | null;
   password: string | null;
@@ -281,6 +286,13 @@ export function GalleryManager({
   // sinon c'est la visibilité de chaque set qui prend le relais.
   const [visibility, setVisibility] = useState<SetVisibility[]>(
     gallery.defaultVisibility?.length ? gallery.defaultVisibility : ["CLIENT"]
+  );
+  // Clients additionnels (accès secondaire en lecture seule, voir modèle GalleryClientAccess)
+  // — même principe que `visibility` ci-dessus : un state séparé de `settingsForm`, envoyé
+  // avec le reste du formulaire Réglages (voir saveSettings). Éditable après création
+  // (demandé par Adriel le 11/08/2026), pas seulement au moment de NewGalleryForm.
+  const [additionalClientIds, setAdditionalClientIds] = useState<string[]>(
+    gallery.additionalClientIds || []
   );
   function toggleVisibility(v: SetVisibility) {
     setVisibility((prev) => {
@@ -1116,6 +1128,7 @@ export function GalleryManager({
         body: JSON.stringify({
           title: settingsForm.title.trim(),
           clientId: settingsForm.clientId || null,
+          additionalClientIds,
           password: settingsForm.password.trim() || null,
           allowDownload: settingsForm.allowDownload,
           downloadLimit: settingsForm.downloadLimit ? Number(settingsForm.downloadLimit) : null,
@@ -1905,12 +1918,31 @@ export function GalleryManager({
                 <label className="mb-1 block text-sm font-medium">{t("galleryForm.clientLabel")}</label>
                 <SearchableSelect
                   value={settingsForm.clientId}
-                  onChange={(clientId) => setSettingsForm((f) => ({ ...f, clientId }))}
+                  onChange={(clientId) => {
+                    // Le client principal ne peut pas apparaître aussi dans les additionnels
+                    // (même règle qu'à la création, voir NewGalleryForm).
+                    setSettingsForm((f) => ({ ...f, clientId }));
+                    if (clientId) setAdditionalClientIds((ids) => ids.filter((id) => id !== clientId));
+                  }}
                   placeholder={t("common.noClientOption")}
                   searchPlaceholder={t("common.searchPlaceholder")}
                   emptyOptionLabel={t("common.noClientOption")}
                   options={clients.map((c) => ({ value: c.id, label: c.name }))}
                 />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">{t("galleryForm.additionalClientsLabel")}</label>
+                <MultiSearchableSelect
+                  values={additionalClientIds}
+                  onChange={setAdditionalClientIds}
+                  placeholder={t("galleryForm.additionalClientsPlaceholder")}
+                  searchPlaceholder={t("common.searchPlaceholder")}
+                  options={clients
+                    .filter((c) => c.id !== settingsForm.clientId)
+                    .map((c) => ({ value: c.id, label: c.name }))}
+                />
+                <p className="mt-1 text-xs text-gray-500">{t("galleryForm.additionalClientsHint")}</p>
               </div>
 
               <div>
