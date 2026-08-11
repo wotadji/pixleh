@@ -245,7 +245,11 @@ export default function ContractsPage() {
                 </p>
               </div>
             </div>
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {/* ml-auto (pas juste justify-end du parent) : quand ce bloc passe à la ligne sur
+                mobile (flex-wrap), il devient seul sur sa ligne et justify-content du parent
+                n'a alors plus d'effet — ml-auto le colle à droite dans tous les cas, même
+                fix que la barre d'actions de GalleryManager (12/08/2026). */}
+            <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
               {c.amountCents !== null &&
                 (() => {
                   const billing = billingSummary(c.id);
