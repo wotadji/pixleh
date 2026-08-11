@@ -26,7 +26,10 @@ function formatMoney(cents: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(cents / 100);
 }
 
-const PAGE_SIZE = 8;
+// Nombre de contrats par page configurable — demande d'Adriel le 12/08/2026, même pattern
+// que le sélecteur ajouté sur /dashboard/guests (PAGE_SIZE_OPTIONS + DEFAULT_PAGE_SIZE).
+const PAGE_SIZE_OPTIONS = [8, 20, 50, 100];
+const DEFAULT_PAGE_SIZE = 8;
 
 // Même logique de pastille colorée que OrdersView/ClientOrdersView — cohérence visuelle
 // entre les listes du dashboard studio (30/07/2026, redesign demandé par Adriel).
@@ -69,6 +72,7 @@ export default function ContractsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ContractDTO["status"] | "ALL">("ALL");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   // Bascule "Contrats actifs" / "Archivés" (demandé par Adriel, 31/07/2026) : la liste
   // principale ne montre que les contrats non archivés par défaut, les archivés restent
   // consultables via ce bouton plutôt que supprimés.
@@ -142,11 +146,11 @@ export default function ContractsPage() {
   // page qui n'existe plus dans le résultat filtré.
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, showArchived]);
+  }, [search, statusFilter, showArchived, pageSize]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   if (pageLoading) return <PageSpinner />;
 
@@ -209,6 +213,21 @@ export default function ContractsPage() {
             ))}
           </select>
         </div>
+        {/* Nombre de contrats par page réglable — demande d'Adriel le 12/08/2026. */}
+        <label className="ml-auto flex items-center gap-2 text-sm text-gray-600">
+          {t("contracts.perPage")}
+          <select
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value))}
+            className="input w-auto py-1.5 text-sm"
+          >
+            {PAGE_SIZE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="mt-4 divide-y divide-gray-100 rounded-xl border border-gray-200">
