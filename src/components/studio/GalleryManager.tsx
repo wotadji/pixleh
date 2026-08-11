@@ -1230,7 +1230,13 @@ export function GalleryManager({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        {/* `ml-auto` (au lieu de compter uniquement sur le `justify-between` du parent) :
+            quand ce groupe de boutons passe à la ligne sur mobile (le `flex-wrap` du
+            conteneur), il devient seul sur sa ligne et `justify-between` n'a alors plus rien
+            à espacer — il retombait donc à gauche. `ml-auto` le pousse à droite dans tous les
+            cas, ligne partagée ou non — demande d'Adriel, 12/08/2026 ("mettre les menu icon
+            sur la droite"). */}
+        <div className="ml-auto flex items-center gap-2">
           {localPhotos.length > 0 && (
             <button
               onClick={regenerateThumbnails}
