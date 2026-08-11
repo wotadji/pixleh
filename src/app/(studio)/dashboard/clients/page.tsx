@@ -360,8 +360,17 @@ export default function ClientsPage() {
           discussion. Une valeur fixe généreuse (mais raisonnable) évite ce double scroll :
           seuls la liste de conversations et le fil défilent, jamais la page. */}
       <div className="mt-4 flex h-[620px] overflow-hidden rounded-xl border border-gray-200 bg-white">
-        {/* Colonne gauche : liste des conversations */}
-        <div className="flex w-full max-w-xs shrink-0 flex-col border-r border-gray-100">
+        {/* Colonne gauche : liste des conversations. Sur mobile, façon WhatsApp (demande
+            d'Adriel, 12/08/2026) : liste seule tant qu'aucune conversation n'est choisie,
+            masquée dès qu'on en sélectionne une (le fil prend alors tout l'écran) — avant,
+            les deux colonnes se battaient pour la largeur et le fil débordait hors champ. À
+            partir de md, comportement desktop inchangé : les deux colonnes toujours visibles
+            côte à côte. */}
+        <div
+          className={`w-full shrink-0 flex-col border-r border-gray-100 md:flex md:max-w-xs ${
+            selected ? "hidden md:flex" : "flex"
+          }`}
+        >
           <div className="space-y-2 border-b border-gray-100 p-3">
             <input
               type="search"
@@ -429,19 +438,37 @@ export default function ClientsPage() {
           </div>
         </div>
 
-        {/* Colonne droite : fil de la conversation sélectionnée */}
-        <div className="flex flex-1 flex-col bg-gray-50">
+        {/* Colonne droite : fil de la conversation sélectionnée. Cachée sur mobile tant que
+            rien n'est sélectionné (voir commentaire ci-dessus), toujours visible à partir de
+            md. */}
+        <div className={`flex-1 flex-col bg-gray-50 md:flex ${selected ? "flex" : "hidden md:flex"}`}>
           {!selected ? (
-            <div className="flex flex-1 items-center justify-center text-sm text-gray-400">{t("clients.selectConversation")}</div>
+            <div className="hidden flex-1 items-center justify-center text-sm text-gray-400 md:flex">
+              {t("clients.selectConversation")}
+            </div>
           ) : (
             <>
               <div className="flex items-center justify-between gap-3 border-b border-gray-100 bg-white p-4">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{selected.name}</p>
-                  <p className="truncate text-xs text-gray-500">
-                    {selected.email}
-                    {selected.phone ? ` · ${selected.phone}` : ""}
-                  </p>
+                <div className="flex min-w-0 items-center gap-1">
+                  {/* Bouton retour façon WhatsApp — mobile uniquement, revient à la liste au
+                      lieu de désélectionner sans rien afficher (il n'y a alors plus de colonne
+                      liste visible en dessous de md). */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(null)}
+                    aria-label={t("clients.backToList")}
+                    title={t("clients.backToList")}
+                    className="-ml-1.5 mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 md:hidden"
+                  >
+                    <IconArrowLeftClients />
+                  </button>
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{selected.name}</p>
+                    <p className="truncate text-xs text-gray-500">
+                      {selected.email}
+                      {selected.phone ? ` · ${selected.phone}` : ""}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <span
@@ -656,5 +683,13 @@ export default function ClientsPage() {
         </form>
       </Modal>
     </div>
+  );
+}
+
+function IconArrowLeftClients() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M19 12H5M11 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
