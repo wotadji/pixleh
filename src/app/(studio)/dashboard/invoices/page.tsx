@@ -94,6 +94,14 @@ export default function InvoicesPage() {
   const [archiving, setArchiving] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
   const [markPaidTarget, setMarkPaidTarget] = useState<InvoiceDTO | null>(null);
+  // Regroupement par contrat + modale de détail (montant à payer, facturé/payé, tableau des
+  // factures payées) — demande d'Adriel le 12/08/2026 : "un bouton avec une icône zoom [...]
+  // les informations sur la somme à payer (contrat), un tableau des factures payées [...]
+  // regrouper les factures par contrat". La pagination habituelle n'a pas de sens combinée au
+  // regroupement (les groupes sont par contrat, pas par nombre de lignes) : en mode groupé, on
+  // affiche tout `filtered` sans découpage par page.
+  const [groupByContract, setGroupByContract] = useState(false);
+  const [contractDetailId, setContractDetailId] = useState<string | null>(null);
 
   function load() {
     Promise.all([
@@ -192,6 +200,202 @@ export default function InvoicesPage() {
   const currentPage = Math.min(page, totalPages);
   const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
+  // Groupes par contrat (mode "Regrouper par contrat") — construits à partir de `filtered`
+  // (pas `paginated`) pour ne rien laisser de côté. Clé "NONE" pour les factures sans contrat
+  // lié, toujours affichée en dernier. Tri des contrats par titre, comme le filtre.
+  const grouped = useMemo(() => {
+    if (!groupByContract) return null;
+    const map = new Map<string, InvoiceDTO[]>();
+    for (const inv of filtered) {
+      const key = inv.contractId || "NONE";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(inv);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => {
+      if (a === "NONE") return 1;
+      if (b === "NONE") return -1;
+      return (contractSummaries[a]?.title || a).localeCompare(contractSummaries[b]?.title || b);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupByContract, filtered, contractSummaries]);
+
+  // Rendu d'une ligne facture — factorisé pour être réutilisé en vue liste (paginée) et en vue
+  // groupée par contrat, sans dupliquer tout le balisage (boutons d'action, statut...).
+  function renderInvoiceRow(inv: InvoiceDTO) {
+    const isPartial = inv.amountPaidCents > 0 && inv.amountPaidCents < inv.totalCents;
+    return (
+      <div key={inv.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <div
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+              inv.client || inv.guestClientName ? "bg-brand-50 text-brand-700" : "bg-gray-100 text-gray-400"
+            }`}
+          >
+            {inv.client?.name || inv.guestClientName ? (
+              initials(inv.client?.name || inv.guestClientName!)
+            ) : (
+              <IconInvoice small />
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="flex items-center gap-1.5 truncate font-medium text-gray-900">
+              {inv.number}
+              {inv.contractId &&
+                (contractSummaries[inv.contractId] ? (
+                  <>
+                    <ContractInfoBubble
+                      triggerLabel={t("invoices.linkedToContract")}
+                      title={contractSummaries[inv.contractId].title}
+                      lines={[
+                        {
+                          label: t("invoices.contractTotal"),
+                          value:
+                            contractSummaries[inv.contractId].amountCents != null
+                              ? formatMoney(contractSummaries[inv.contractId].amountCents!, inv.currency)
+                              : t("invoices.contractAmountUnset"),
+                        },
+                        {
+                          label: t("invoices.contractBilled"),
+                          value: `${formatMoney(contractSummaries[inv.contractId].billedCents, inv.currency)}${
+                            formatPercent(
+                              contractSummaries[inv.contractId].billedCents,
+                              contractSummaries[inv.contractId].amountCents
+                            )
+                              ? ` (${formatPercent(
+                                  contractSummaries[inv.contractId].billedCents,
+                                  contractSummaries[inv.contractId].amountCents
+                                )})`
+                              : ""
+                          }`,
+                        },
+                        {
+                          label: t("invoices.contractPaid"),
+                          value: `${formatMoney(contractSummaries[inv.contractId].paidCents, inv.currency)}${
+                            formatPercent(
+                              contractSummaries[inv.contractId].paidCents,
+                              contractSummaries[inv.contractId].amountCents
+                            )
+                              ? ` (${formatPercent(
+                                  contractSummaries[inv.contractId].paidCents,
+                                  contractSummaries[inv.contractId].amountCents
+                                )})`
+                              : ""
+                          }`,
+                        },
+                      ]}
+                    />
+                    {/* Bouton zoom : ouvre la modale complète (montant à payer, facturé/payé,
+                        tableau des factures payées du contrat) — demande d'Adriel, 12/08/2026,
+                        en complément de la bulle ci-dessus qui reste un aperçu rapide au clic. */}
+                    <button
+                      type="button"
+                      onClick={() => setContractDetailId(inv.contractId)}
+                      title={t("invoices.contractDetails")}
+                      aria-label={t("invoices.contractDetails")}
+                      className="flex h-4 w-4 items-center justify-center rounded-full text-gray-400 transition hover:text-brand-600"
+                    >
+                      <IconZoom />
+                    </button>
+                  </>
+                ) : (
+                  <span title={t("invoices.linkedToContract")} className="text-gray-400">
+                    <IconLink />
+                  </span>
+                ))}
+            </p>
+            <p className="truncate text-sm text-gray-500">
+              {inv.client?.name || inv.guestClientName || t("common.noClient")} · {formatDate(inv.createdAt, locale)}
+            </p>
+          </div>
+        </div>
+        {/* ml-auto + pas de shrink-0 : même correctif que /dashboard/contracts
+            (12/08/2026) — shrink-0 empêchait ce bloc de se réduire à la largeur de
+            l'écran une fois seul sur sa ligne (flex-wrap du parent), donc son propre
+            flex-wrap ne se déclenchait jamais et tous les boutons (Télécharger,
+            Marquer payée, Renvoyer, Archiver...) restaient sur une seule ligne trop
+            large, provoquant un défilement horizontal de toute la page. */}
+        <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
+          <div className="text-right">
+            <p className="font-medium text-gray-900">{formatMoney(inv.totalCents, inv.currency)}</p>
+            {isPartial && (
+              <p className="text-xs text-amber-600">
+                {t("invoices.paidOf")
+                  .replace("{paid}", formatMoney(inv.amountPaidCents, inv.currency))
+                  .replace("{total}", formatMoney(inv.totalCents, inv.currency))}
+              </p>
+            )}
+          </div>
+          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[inv.status]}`}>
+            {STATUS_LABELS[inv.status]}
+          </span>
+          {inv.status !== "PAID" && (
+            <Link
+              href={`/dashboard/invoices/${inv.id}/edit`}
+              className="rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+            >
+              {t("invoices.edit")}
+            </Link>
+          )}
+          <a
+            href={`/api/invoices/${inv.id}/pdf`}
+            className="flex items-center gap-1 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+          >
+            <IconDownload />
+            {t("invoices.download")}
+          </a>
+          <Link
+            href={`/i/${inv.id}`}
+            target="_blank"
+            className="rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100"
+          >
+            {t("invoices.viewLink")}
+          </Link>
+          {inv.status !== "PAID" && inv.status !== "CANCELLED" && (
+            <button
+              type="button"
+              onClick={() => setMarkPaidTarget(inv)}
+              className="rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-700 hover:bg-green-100"
+            >
+              {t("invoices.markPaid")}
+            </button>
+          )}
+          {inv.client && inv.status !== "PAID" && (
+            <button
+              type="button"
+              disabled={sending === inv.id}
+              onClick={() => resend(inv)}
+              className="flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+            >
+              {sending === inv.id && <IconSpinner />}
+              {sending === inv.id ? t("invoices.sending") : t("invoices.resend")}
+            </button>
+          )}
+          {inv.archived ? (
+            <button
+              type="button"
+              disabled={archiving === inv.id}
+              onClick={() => toggleArchived(inv, false)}
+              className="flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+            >
+              {archiving === inv.id && <IconSpinner />}
+              {archiving === inv.id ? t("invoices.unarchiving") : t("invoices.unarchive")}
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={archiving === inv.id}
+              onClick={() => toggleArchived(inv, true)}
+              className="flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+            >
+              {archiving === inv.id ? <IconSpinner /> : <IconArchive />}
+              {archiving === inv.id ? t("invoices.archiving") : t("invoices.archive")}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (pageLoading) return <PageSpinner />;
 
   return (
@@ -269,22 +473,41 @@ export default function InvoicesPage() {
               ))}
             </select>
           </div>
-        </div>
-        {/* Nombre de factures par page réglable — demande d'Adriel le 12/08/2026. */}
-        <label className="ml-auto flex items-center gap-2 text-sm text-gray-600">
-          {t("invoices.perPage")}
-          <select
-            value={pageSize}
-            onChange={(e) => setPageSize(Number(e.target.value))}
-            className="input w-auto py-1.5 text-sm"
+          {/* Regrouper par contrat — demande d'Adriel, 12/08/2026. Désactivé s'il n'y a aucune
+              facture liée à un contrat (rien à regrouper). */}
+          <button
+            type="button"
+            onClick={() => setGroupByContract((g) => !g)}
+            disabled={contractOptions.length === 0}
+            title={t("invoices.groupByContract")}
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
+              groupByContract
+                ? "border-brand-500 bg-brand-50 text-brand-700"
+                : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+            }`}
           >
-            {PAGE_SIZE_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
+            <IconGroup />
+            <span className="hidden sm:inline">{t("invoices.groupByContract")}</span>
+          </button>
+        </div>
+        {/* Nombre de factures par page réglable — demande d'Adriel le 12/08/2026. Sans objet
+            en vue groupée (pas de découpage par page), donc masqué dans ce mode. */}
+        {!groupByContract && (
+          <label className="ml-auto flex items-center gap-2 text-sm text-gray-600">
+            {t("invoices.perPage")}
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="input w-auto py-1.5 text-sm"
+            >
+              {PAGE_SIZE_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       <div className="mt-4 divide-y divide-gray-100 rounded-xl border border-gray-200">
@@ -304,169 +527,40 @@ export default function InvoicesPage() {
             </p>
           </div>
         )}
-        {paginated.map((inv) => {
-          const isPartial = inv.amountPaidCents > 0 && inv.amountPaidCents < inv.totalCents;
-          return (
-            <div key={inv.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
-              <div className="flex min-w-0 items-center gap-3">
-                <div
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                    inv.client || inv.guestClientName ? "bg-brand-50 text-brand-700" : "bg-gray-100 text-gray-400"
-                  }`}
-                >
-                  {inv.client?.name || inv.guestClientName ? (
-                    initials(inv.client?.name || inv.guestClientName!)
-                  ) : (
-                    <IconInvoice small />
+        {!groupByContract && paginated.map((inv) => renderInvoiceRow(inv))}
+        {groupByContract &&
+          grouped &&
+          grouped.map(([key, group]) => (
+            <div key={key}>
+              {/* En-tête de groupe : titre du contrat (ou "Sans contrat"), bouton zoom vers la
+                  modale de détail, nombre de factures dans le groupe. */}
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-gray-50 px-4 py-2.5">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <p className="truncate text-sm font-semibold text-gray-700">
+                    {key === "NONE" ? t("invoices.ungroupedContract") : contractSummaries[key]?.title || key}
+                  </p>
+                  {key !== "NONE" && contractSummaries[key] && (
+                    <button
+                      type="button"
+                      onClick={() => setContractDetailId(key)}
+                      title={t("invoices.contractDetails")}
+                      aria-label={t("invoices.contractDetails")}
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-gray-400 transition hover:text-brand-600"
+                    >
+                      <IconZoom />
+                    </button>
                   )}
                 </div>
-                <div className="min-w-0">
-                  <p className="flex items-center gap-1.5 truncate font-medium text-gray-900">
-                    {inv.number}
-                    {inv.contractId &&
-                      (contractSummaries[inv.contractId] ? (
-                        <ContractInfoBubble
-                          triggerLabel={t("invoices.linkedToContract")}
-                          title={contractSummaries[inv.contractId].title}
-                          lines={[
-                            {
-                              label: t("invoices.contractTotal"),
-                              value:
-                                contractSummaries[inv.contractId].amountCents != null
-                                  ? formatMoney(contractSummaries[inv.contractId].amountCents!, inv.currency)
-                                  : t("invoices.contractAmountUnset"),
-                            },
-                            {
-                              label: t("invoices.contractBilled"),
-                              value: `${formatMoney(contractSummaries[inv.contractId].billedCents, inv.currency)}${
-                                formatPercent(
-                                  contractSummaries[inv.contractId].billedCents,
-                                  contractSummaries[inv.contractId].amountCents
-                                )
-                                  ? ` (${formatPercent(
-                                      contractSummaries[inv.contractId].billedCents,
-                                      contractSummaries[inv.contractId].amountCents
-                                    )})`
-                                  : ""
-                              }`,
-                            },
-                            {
-                              label: t("invoices.contractPaid"),
-                              value: `${formatMoney(contractSummaries[inv.contractId].paidCents, inv.currency)}${
-                                formatPercent(
-                                  contractSummaries[inv.contractId].paidCents,
-                                  contractSummaries[inv.contractId].amountCents
-                                )
-                                  ? ` (${formatPercent(
-                                      contractSummaries[inv.contractId].paidCents,
-                                      contractSummaries[inv.contractId].amountCents
-                                    )})`
-                                  : ""
-                              }`,
-                            },
-                          ]}
-                        />
-                      ) : (
-                        <span title={t("invoices.linkedToContract")} className="text-gray-400">
-                          <IconLink />
-                        </span>
-                      ))}
-                  </p>
-                  <p className="truncate text-sm text-gray-500">
-                    {inv.client?.name || inv.guestClientName || t("common.noClient")} · {formatDate(inv.createdAt, locale)}
-                  </p>
-                </div>
-              </div>
-              {/* ml-auto + pas de shrink-0 : même correctif que /dashboard/contracts
-                  (12/08/2026) — shrink-0 empêchait ce bloc de se réduire à la largeur de
-                  l'écran une fois seul sur sa ligne (flex-wrap du parent), donc son propre
-                  flex-wrap ne se déclenchait jamais et tous les boutons (Télécharger,
-                  Marquer payée, Renvoyer, Archiver...) restaient sur une seule ligne trop
-                  large, provoquant un défilement horizontal de toute la page. */}
-              <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
-                <div className="text-right">
-                  <p className="font-medium text-gray-900">{formatMoney(inv.totalCents, inv.currency)}</p>
-                  {isPartial && (
-                    <p className="text-xs text-amber-600">
-                      {t("invoices.paidOf")
-                        .replace("{paid}", formatMoney(inv.amountPaidCents, inv.currency))
-                        .replace("{total}", formatMoney(inv.totalCents, inv.currency))}
-                    </p>
-                  )}
-                </div>
-                <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[inv.status]}`}>
-                  {STATUS_LABELS[inv.status]}
+                <span className="shrink-0 text-xs text-gray-400">
+                  {t("invoices.groupCount").replace("{count}", String(group.length))}
                 </span>
-                {inv.status !== "PAID" && (
-                  <Link
-                    href={`/dashboard/invoices/${inv.id}/edit`}
-                    className="rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
-                  >
-                    {t("invoices.edit")}
-                  </Link>
-                )}
-                <a
-                  href={`/api/invoices/${inv.id}/pdf`}
-                  className="flex items-center gap-1 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
-                >
-                  <IconDownload />
-                  {t("invoices.download")}
-                </a>
-                <Link
-                  href={`/i/${inv.id}`}
-                  target="_blank"
-                  className="rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100"
-                >
-                  {t("invoices.viewLink")}
-                </Link>
-                {inv.status !== "PAID" && inv.status !== "CANCELLED" && (
-                  <button
-                    type="button"
-                    onClick={() => setMarkPaidTarget(inv)}
-                    className="rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-700 hover:bg-green-100"
-                  >
-                    {t("invoices.markPaid")}
-                  </button>
-                )}
-                {inv.client && inv.status !== "PAID" && (
-                  <button
-                    type="button"
-                    disabled={sending === inv.id}
-                    onClick={() => resend(inv)}
-                    className="flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-                  >
-                    {sending === inv.id && <IconSpinner />}
-                    {sending === inv.id ? t("invoices.sending") : t("invoices.resend")}
-                  </button>
-                )}
-                {inv.archived ? (
-                  <button
-                    type="button"
-                    disabled={archiving === inv.id}
-                    onClick={() => toggleArchived(inv, false)}
-                    className="flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-                  >
-                    {archiving === inv.id && <IconSpinner />}
-                    {archiving === inv.id ? t("invoices.unarchiving") : t("invoices.unarchive")}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={archiving === inv.id}
-                    onClick={() => toggleArchived(inv, true)}
-                    className="flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-                  >
-                    {archiving === inv.id ? <IconSpinner /> : <IconArchive />}
-                    {archiving === inv.id ? t("invoices.archiving") : t("invoices.archive")}
-                  </button>
-                )}
               </div>
+              <div className="divide-y divide-gray-100">{group.map((inv) => renderInvoiceRow(inv))}</div>
             </div>
-          );
-        })}
+          ))}
       </div>
 
-      {filtered.length > 0 && (
+      {!groupByContract && filtered.length > 0 && (
         <div className="mt-4 flex items-center justify-center gap-4 text-sm">
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -489,7 +583,114 @@ export default function InvoicesPage() {
       )}
 
       <MarkPaidModal invoice={markPaidTarget} onClose={() => setMarkPaidTarget(null)} onDone={load} />
+      <ContractDetailModal
+        contractId={contractDetailId}
+        summary={contractDetailId ? contractSummaries[contractDetailId] || null : null}
+        invoices={invoices}
+        locale={locale}
+        onClose={() => setContractDetailId(null)}
+      />
     </div>
+  );
+}
+
+/**
+ * Modale de détail d'un contrat (montant à payer, cumul facturé/payé, tableau des factures
+ * payées) — demandé par Adriel, 12/08/2026 : "un bouton avec une icône zoom [...] les
+ * informations sur la somme à payer (contrat), un tableau des factures payées". Ouverte via
+ * IconZoom depuis une ligne facture liée à un contrat ou depuis l'en-tête d'un groupe (vue
+ * "Regrouper par contrat"). Réutilise ContractSummary (déjà calculé pour ContractInfoBubble) —
+ * pas de nouvel appel réseau.
+ */
+function ContractDetailModal({
+  contractId,
+  summary,
+  invoices,
+  locale,
+  onClose,
+}: {
+  contractId: string | null;
+  summary: ContractSummary | null;
+  invoices: InvoiceDTO[];
+  locale: string;
+  onClose: () => void;
+}) {
+  const { t } = useLanguage();
+  if (!contractId || !summary) return null;
+
+  const linkedInvoices = invoices.filter((i) => i.contractId === contractId);
+  const currency = linkedInvoices[0]?.currency || "EUR";
+  const paidInvoices = linkedInvoices
+    .filter((i) => i.status === "PAID")
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const remainingCents = summary.amountCents != null ? Math.max(0, summary.amountCents - summary.paidCents) : null;
+
+  return (
+    <Modal
+      open={!!contractId}
+      onClose={onClose}
+      title={summary.title}
+      footer={
+        <button type="button" onClick={onClose} className="btn-secondary text-sm">
+          {t("common.close")}
+        </button>
+      }
+    >
+      <div className="space-y-4">
+        <div className="grid grid-cols-3 gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 text-center">
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-gray-400">{t("invoices.contractTotal")}</p>
+            <p className="mt-0.5 text-sm font-semibold text-gray-900">
+              {summary.amountCents != null ? formatMoney(summary.amountCents, currency) : t("invoices.contractAmountUnset")}
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-gray-400">{t("invoices.contractBilled")}</p>
+            <p className="mt-0.5 text-sm font-semibold text-gray-900">{formatMoney(summary.billedCents, currency)}</p>
+          </div>
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-gray-400">{t("invoices.contractPaid")}</p>
+            <p className="mt-0.5 text-sm font-semibold text-green-700">{formatMoney(summary.paidCents, currency)}</p>
+          </div>
+        </div>
+        {remainingCents != null && remainingCents > 0 && (
+          <p className="text-sm text-gray-600">
+            {t("invoices.remainingDue")} : <strong className="text-gray-900">{formatMoney(remainingCents, currency)}</strong>
+          </p>
+        )}
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+            {t("invoices.paidInvoicesTable")}
+          </p>
+          {paidInvoices.length === 0 ? (
+            <p className="text-sm text-gray-400">{t("invoices.noPaidInvoices")}</p>
+          ) : (
+            <div className="overflow-hidden rounded-lg border border-gray-200">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    <th className="px-3 py-2">{t("invoices.colNumber")}</th>
+                    <th className="px-3 py-2">{t("invoices.colDate")}</th>
+                    <th className="px-3 py-2 text-right">{t("invoices.colAmount")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {paidInvoices.map((i) => (
+                    <tr key={i.id}>
+                      <td className="px-3 py-2 font-medium text-gray-900">{i.number}</td>
+                      <td className="px-3 py-2 text-gray-500">{formatDate(i.createdAt, locale)}</td>
+                      <td className="px-3 py-2 text-right font-medium text-gray-900">
+                        {formatMoney(i.totalCents, i.currency)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -645,6 +846,25 @@ function IconLink() {
       <path d="M9 15l6-6" strokeLinecap="round" />
       <path d="M11 5.5l1-1a3.5 3.5 0 0 1 5 5l-1 1" strokeLinecap="round" />
       <path d="M13 18.5l-1 1a3.5 3.5 0 0 1-5-5l1-1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconZoom() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.3-4.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconGroup() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 3 3 8l9 5 9-5-9-5Z" strokeLinejoin="round" />
+      <path d="M3 12l9 5 9-5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 16l9 5 9-5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
