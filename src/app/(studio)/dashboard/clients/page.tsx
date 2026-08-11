@@ -441,7 +441,11 @@ export default function ClientsPage() {
         {/* Colonne droite : fil de la conversation sélectionnée. Cachée sur mobile tant que
             rien n'est sélectionné (voir commentaire ci-dessus), toujours visible à partir de
             md. */}
-        <div className={`flex-1 flex-col bg-gray-50 md:flex ${selected ? "flex" : "hidden md:flex"}`}>
+        {/* min-w-0 : sans ça, un flex item garde par défaut min-width:auto — si le contenu du
+            fil (bulles, en-tête...) est intrinsèquement large, toute la colonne (et donc la
+            page) s'élargit au-delà de l'écran au lieu de rester bornée à sa largeur, coupant
+            visuellement le texte des messages sur mobile (remonté par Adriel, 12/08/2026). */}
+        <div className={`min-w-0 flex-1 flex-col bg-gray-50 md:flex ${selected ? "flex" : "hidden md:flex"}`}>
           {!selected ? (
             <div className="hidden flex-1 items-center justify-center text-sm text-gray-400 md:flex">
               {t("clients.selectConversation")}
@@ -489,7 +493,7 @@ export default function ClientsPage() {
                 </div>
               </div>
 
-              <div className="flex-1 space-y-2 overflow-y-auto p-4">
+              <div className="flex-1 space-y-2 overflow-y-auto overflow-x-hidden p-4">
                 {/* Historique pré-migration (ancien blob texte, plus alimenté) — affiché en
                     lecture seule au-dessus du fil structuré s'il en reste. */}
                 {selected.notes && (
