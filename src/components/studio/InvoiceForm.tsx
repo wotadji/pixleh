@@ -300,7 +300,7 @@ export function InvoiceForm({
         <div>
           <label className="mb-1.5 block text-sm font-medium text-gray-700">{t("invoiceForm.lineItemsLabel")}</label>
           <div className="overflow-hidden rounded-lg border border-gray-200">
-            <div className="grid grid-cols-[1fr_70px_100px_100px_32px] gap-2 bg-gray-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-gray-400">
+            <div className="hidden gap-2 bg-gray-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-gray-400 sm:grid sm:grid-cols-[1fr_70px_100px_100px_32px]">
               <span>{t("invoiceForm.description")}</span>
               <span className="text-center">{t("invoiceForm.quantity")}</span>
               <span className="text-right">{t("invoiceForm.unitPrice")}</span>
@@ -309,36 +309,59 @@ export function InvoiceForm({
             </div>
             <div className="divide-y divide-gray-100">
               {form.lineItems.map((item, i) => (
-                <div key={i} className="grid grid-cols-[1fr_70px_100px_100px_32px] items-center gap-2 px-3 py-2">
-                  <input
-                    placeholder={t("invoiceForm.descriptionPlaceholder")}
-                    className="input"
-                    value={item.description}
-                    onChange={(e) => updateItem(i, { description: e.target.value })}
-                  />
-                  <input
-                    type="number"
-                    min={1}
-                    className="input text-center"
-                    value={item.quantity}
-                    onChange={(e) => updateItem(i, { quantity: Math.max(1, Number(e.target.value) || 1) })}
-                  />
-                  <input
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    className="input text-right"
-                    value={item.unitPriceCents / 100}
-                    onChange={(e) => updateItem(i, { unitPriceCents: Math.round(Number(e.target.value) * 100) })}
-                  />
-                  <p className="text-right text-sm font-medium text-gray-700">
-                    {formatMoney(item.quantity * item.unitPriceCents)}
-                  </p>
+                <div
+                  key={i}
+                  className="flex flex-col gap-2 px-3 py-3 sm:grid sm:grid-cols-[1fr_70px_100px_100px_32px] sm:items-center sm:gap-2 sm:py-2"
+                >
+                  <div>
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-400 sm:hidden">
+                      {t("invoiceForm.description")}
+                    </span>
+                    <input
+                      placeholder={t("invoiceForm.descriptionPlaceholder")}
+                      className="input"
+                      value={item.description}
+                      onChange={(e) => updateItem(i, { description: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-400 sm:hidden">
+                      {t("invoiceForm.quantity")}
+                    </span>
+                    <input
+                      type="number"
+                      min={1}
+                      className="input text-center"
+                      value={item.quantity}
+                      onChange={(e) => updateItem(i, { quantity: Math.max(1, Number(e.target.value) || 1) })}
+                    />
+                  </div>
+                  <div>
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-400 sm:hidden">
+                      {t("invoiceForm.unitPrice")}
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      className="input text-right"
+                      value={item.unitPriceCents / 100}
+                      onChange={(e) => updateItem(i, { unitPriceCents: Math.round(Number(e.target.value) * 100) })}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between sm:block">
+                    <span className="text-xs font-medium uppercase tracking-wide text-gray-400 sm:hidden">
+                      {t("invoiceForm.lineTotal")}
+                    </span>
+                    <p className="text-right text-sm font-medium text-gray-700">
+                      {formatMoney(item.quantity * item.unitPriceCents)}
+                    </p>
+                  </div>
                   <button
                     type="button"
                     onClick={() => removeItem(i)}
                     disabled={form.lineItems.length <= 1}
-                    className="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:pointer-events-none disabled:opacity-30"
+                    className="flex h-7 w-7 items-center justify-center self-end rounded-md text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:pointer-events-none disabled:opacity-30 sm:self-auto"
                     aria-label={t("invoiceForm.removeLine")}
                   >
                     <IconTrash />
