@@ -228,6 +228,32 @@ function blockPreview(block: MarketingBlockDTO): string {
   return fr?.title || fr?.eyebrow || d.title || d.eyebrow || "(sans titre)";
 }
 
+// Icônes sur les boutons Modifier/Supprimer de chaque bloc — demande d'Adriel, 12/08/2026
+// ("et avec des icones"), suite à l'empilement mobile de ces deux boutons.
+function IconEdit() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 20h9" strokeLinecap="round" />
+      <path
+        d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function IconTrash() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M4 7h16" strokeLinecap="round" />
+      <path d="M6 7v13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7" strokeLinejoin="round" />
+      <path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3" strokeLinejoin="round" />
+      <path d="M10 11v7M14 11v7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export default function AdminSitePage() {
   const [activePage, setActivePage] = useState<MarketingPageKey>("HOME");
   const [blocks, setBlocks] = useState<MarketingBlockDTO[] | null>(null);
@@ -449,14 +475,20 @@ export default function AdminSitePage() {
                 </button>
               </div>
               <div className="ml-2 flex flex-col items-stretch gap-1 sm:flex-row sm:items-center">
-                <button type="button" className="btn-secondary text-sm" onClick={() => openEdit(block)}>
+                <button
+                  type="button"
+                  className="btn-secondary flex items-center justify-center gap-1.5 text-sm"
+                  onClick={() => openEdit(block)}
+                >
+                  <IconEdit />
                   {t("admin.site.edit")}
                 </button>
                 <button
                   type="button"
-                  className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+                  className="flex items-center justify-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
                   onClick={() => remove(block)}
                 >
+                  <IconTrash />
                   {t("admin.site.delete")}
                 </button>
               </div>
