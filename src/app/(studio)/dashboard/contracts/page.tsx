@@ -248,8 +248,13 @@ export default function ContractsPage() {
             {/* ml-auto (pas juste justify-end du parent) : quand ce bloc passe à la ligne sur
                 mobile (flex-wrap), il devient seul sur sa ligne et justify-content du parent
                 n'a alors plus d'effet — ml-auto le colle à droite dans tous les cas, même
-                fix que la barre d'actions de GalleryManager (12/08/2026). */}
-            <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+                fix que la barre d'actions de GalleryManager (12/08/2026). Pas de shrink-0 ici
+                (contrairement à d'autres blocs) : avec shrink-0, ce bloc refusait de se
+                réduire à la largeur de l'écran une fois seul sur sa ligne, et son flex-wrap
+                interne ne se déclenchait donc jamais — tous les boutons restaient sur une
+                seule ligne trop large, provoquant un défilement horizontal indésirable de
+                toute la page (remonté par Adriel, 12/08/2026, sur Télécharger/Archiver). */}
+            <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
               {c.amountCents !== null &&
                 (() => {
                   const billing = billingSummary(c.id);
