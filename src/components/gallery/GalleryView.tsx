@@ -1034,11 +1034,11 @@ function GalleryCover({
   const studioBadge = studioName ? (
     <Link
       href={studioSlug ? `/s/${studioSlug}` : "#"}
-      className="absolute left-4 top-4 flex items-center gap-3 transition-opacity hover:opacity-85 sm:left-6 sm:top-6"
+      className="absolute left-3 top-3 flex items-center gap-2 transition-opacity hover:opacity-85 sm:left-6 sm:top-6 sm:gap-3"
     >
       <StudioAvatar name={studioName} logoUrl={studioLogoUrl} size="lg" />
       <span
-        className="text-sm uppercase tracking-[0.2em] text-white sm:text-base"
+        className="text-[11px] uppercase tracking-[0.15em] text-white sm:text-base sm:tracking-[0.2em]"
         style={{ textShadow: "0 1px 6px rgba(0,0,0,0.55)" }}
       >
         {studioName}
@@ -1389,13 +1389,13 @@ function StudioAvatar({
         <img
           src={logoUrl}
           alt={name || "Studio"}
-          className="h-16 w-16 rounded-xl object-cover shadow-lg ring-1 ring-white/20 sm:h-20 sm:w-20"
+          className="h-9 w-9 rounded-lg object-cover shadow-lg ring-1 ring-white/20 sm:h-20 sm:w-20 sm:rounded-xl"
         />
       );
     }
     const initialLg = name?.trim()?.[0]?.toUpperCase() || "?";
     return (
-      <span className="flex h-16 w-16 items-center justify-center rounded-xl bg-gray-200 text-2xl font-semibold text-gray-600 shadow-lg ring-1 ring-white/20 sm:h-20 sm:w-20">
+      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-200 text-sm font-semibold text-gray-600 shadow-lg ring-1 ring-white/20 sm:h-20 sm:w-20 sm:rounded-xl sm:text-2xl">
         {initialLg}
       </span>
     );
