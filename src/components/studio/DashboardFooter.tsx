@@ -8,8 +8,12 @@ import { useLanguage } from "@/lib/i18n/LanguageProvider";
 export function DashboardFooter() {
   const { t } = useLanguage();
   return (
-    <footer className="border-t border-gray-100 px-8 py-6">
-      <div className="flex flex-col items-center justify-between gap-3 text-xs text-gray-400 sm:flex-row">
+    <footer className="border-t border-gray-100 px-4 py-6 md:px-8">
+      {/* `px-8` fixe (au lieu de suivre le `p-4 md:p-8` du `<main>`) laissait le pied de
+          page moins centré que le contenu au-dessus sur mobile — corrigé pour matcher, et
+          `text-center` ajouté au cas où le texte passe sur deux lignes (demande d'Adriel le
+          12/08/2026 : "bien centrer le footer"). */}
+      <div className="flex flex-col items-center justify-between gap-3 text-center text-xs text-gray-400 sm:flex-row sm:text-left">
         <p>© {new Date().getFullYear()} pixleh — Groupe Lehwu</p>
         <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1">
           <Link href="/mentions-legales" target="_blank" className="hover:text-gray-600 hover:underline">

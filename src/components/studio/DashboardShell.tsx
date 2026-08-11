@@ -51,7 +51,9 @@ export function DashboardShell({
       {/* Barre du haut mobile/tablette — masquée à partir de md, où la sidebar statique
           suffit (logo déjà dedans). */}
       <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-3 md:hidden">
-        <PixlehLogo size={22} />
+        {/* Logo à l'extrême droite, bouton menu à gauche — demande d'Adriel le 12/08/2026
+            ("mettre le logo a l'extreme droite"), inverse l'ordre précédent (logo gauche /
+            menu droite). */}
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -61,6 +63,7 @@ export function DashboardShell({
         >
           <IconMenu />
         </button>
+        <PixlehLogo size={22} />
       </div>
 
       {/* Fond semi-transparent — uniquement affiché (et cliquable pour fermer) quand le
