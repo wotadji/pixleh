@@ -40,7 +40,10 @@ function formatPercent(part: number, total: number | null): string | null {
   return `${Math.round((part / total) * 100)} %`;
 }
 
-const PAGE_SIZE = 8;
+// Nombre de factures par page configurable — demande d'Adriel le 12/08/2026, même pattern
+// que /dashboard/contracts et /dashboard/guests.
+const PAGE_SIZE_OPTIONS = [8, 20, 50, 100];
+const DEFAULT_PAGE_SIZE = 8;
 
 // Même logique de pastille colorée que ContractsPage/OrdersView (30/07/2026, refonte
 // facturation demandée par Adriel : parité visuelle avec les contrats).
@@ -86,6 +89,7 @@ export default function InvoicesPage() {
   // — "ALL" (défaut), "NONE" (factures sans contrat lié), ou l'id d'un contrat précis.
   const [contractFilter, setContractFilter] = useState<string>("ALL");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [showArchived, setShowArchived] = useState(false);
   const [archiving, setArchiving] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
@@ -182,11 +186,11 @@ export default function InvoicesPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, contractFilter, showArchived]);
+  }, [search, statusFilter, contractFilter, showArchived, pageSize]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   if (pageLoading) return <PageSpinner />;
 
@@ -266,6 +270,21 @@ export default function InvoicesPage() {
             </select>
           </div>
         </div>
+        {/* Nombre de factures par page réglable — demande d'Adriel le 12/08/2026. */}
+        <label className="ml-auto flex items-center gap-2 text-sm text-gray-600">
+          {t("invoices.perPage")}
+          <select
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value))}
+            className="input w-auto py-1.5 text-sm"
+          >
+            {PAGE_SIZE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="mt-4 divide-y divide-gray-100 rounded-xl border border-gray-200">
@@ -358,7 +377,13 @@ export default function InvoicesPage() {
                   </p>
                 </div>
               </div>
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              {/* ml-auto + pas de shrink-0 : même correctif que /dashboard/contracts
+                  (12/08/2026) — shrink-0 empêchait ce bloc de se réduire à la largeur de
+                  l'écran une fois seul sur sa ligne (flex-wrap du parent), donc son propre
+                  flex-wrap ne se déclenchait jamais et tous les boutons (Télécharger,
+                  Marquer payée, Renvoyer, Archiver...) restaient sur une seule ligne trop
+                  large, provoquant un défilement horizontal de toute la page. */}
+              <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
                 <div className="text-right">
                   <p className="font-medium text-gray-900">{formatMoney(inv.totalCents, inv.currency)}</p>
                   {isPartial && (
