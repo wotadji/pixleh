@@ -423,35 +423,43 @@ export default function AdminSitePage() {
               </div>
               <p className="mt-1 text-sm font-medium text-gray-900">{blockPreview(block)}</p>
             </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                disabled={i === 0}
-                onClick={() => move(block, "up")}
-                className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-30"
-                aria-label={t("admin.site.moveUp")}
-              >
-                ↑
-              </button>
-              <button
-                type="button"
-                disabled={i === blocks.length - 1}
-                onClick={() => move(block, "down")}
-                className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-30"
-                aria-label={t("admin.site.moveDown")}
-              >
-                ↓
-              </button>
-              <button type="button" className="btn-secondary ml-2 text-sm" onClick={() => openEdit(block)}>
-                {t("admin.site.edit")}
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
-                onClick={() => remove(block)}
-              >
-                {t("admin.site.delete")}
-              </button>
+            {/* Supprimer sous Modifier en mobile (au lieu de côte à côte, trop compressé avec
+                les flèches de tri) — demande d'Adriel, 12/08/2026 : "mettre le boutton
+                supprimé en dessous du bouton modifier". À partir de sm, retour à la ligne
+                unique d'origine. */}
+            <div className="flex shrink-0 items-start gap-1 sm:items-center">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={i === 0}
+                  onClick={() => move(block, "up")}
+                  className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-30"
+                  aria-label={t("admin.site.moveUp")}
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  disabled={i === blocks.length - 1}
+                  onClick={() => move(block, "down")}
+                  className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-30"
+                  aria-label={t("admin.site.moveDown")}
+                >
+                  ↓
+                </button>
+              </div>
+              <div className="ml-2 flex flex-col items-stretch gap-1 sm:flex-row sm:items-center">
+                <button type="button" className="btn-secondary text-sm" onClick={() => openEdit(block)}>
+                  {t("admin.site.edit")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+                  onClick={() => remove(block)}
+                >
+                  {t("admin.site.delete")}
+                </button>
+              </div>
             </div>
           </div>
         ))}
