@@ -28,6 +28,11 @@ const STATUS_STYLES: Record<GuestDTO["status"], string> = {
   REJECTED: "bg-gray-100 text-gray-500",
 };
 
+// Même taille de page que ClientGalleriesView (référence pour la pagination client-side dans
+// l'app) — demande d'Adriel le 12/08/2026 ("mettre la pagination") après une liste d'invités
+// qui pouvait défiler très longtemps sans repère.
+const PAGE_SIZE = 20;
+
 /**
  * Liste des invités (GalleryGuest) de toutes les galeries du studio — demande d'Adriel le
  * 05/08/2026 : "voir la liste des emails des invités d'un studio" depuis le panel studio.
@@ -38,12 +43,19 @@ export default function GuestsPage() {
   const { t, locale } = useLanguage();
   const [guests, setGuests] = useState<GuestDTO[] | null>(null);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     fetch("/api/guests")
       .then((r) => r.json())
       .then((d) => setGuests(d.guests || []));
   }, []);
+
+  // Revient à la page 1 dès que la recherche change une liste filtrée plus courte — sinon on
+  // peut se retrouver bloqué sur une page vide (page 3 sur une recherche qui n'en donne qu'1).
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
 
   const filtered = useMemo(() => {
     if (!guests) return [];
@@ -53,6 +65,10 @@ export default function GuestsPage() {
       (g) => g.email.toLowerCase().includes(q) || g.galleryTitle.toLowerCase().includes(q)
     );
   }, [guests, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paged = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   if (!guests) return <PageSpinner />;
 
@@ -86,7 +102,7 @@ export default function GuestsPage() {
               {guests.length === 0 ? t("guests.empty") : t("guests.emptyNoMatch")}
             </p>
           )}
-          {filtered.map((g) => (
+          {paged.map((g) => (
             <div
               key={g.id}
               className="grid grid-cols-1 gap-1.5 p-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:items-center sm:gap-3"
@@ -108,6 +124,30 @@ export default function GuestsPage() {
           ))}
         </div>
       </div>
+
+      {filtered.length > PAGE_SIZE && (
+        <div className="mt-6 flex items-center justify-center gap-4">
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="btn-secondary px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {t("guests.prevPage")}
+          </button>
+          <span className="text-sm text-gray-500">
+            {t("guests.pageInfo").replace("{page}", String(currentPage)).replace("{total}", String(totalPages))}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className="btn-secondary px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {t("guests.nextPage")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

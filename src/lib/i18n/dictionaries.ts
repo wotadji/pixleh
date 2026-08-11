@@ -425,6 +425,9 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "guests.status.pending": "En attente",
     "guests.status.approved": "Approuvé",
     "guests.status.rejected": "Refusé",
+    "guests.prevPage": "Précédent",
+    "guests.nextPage": "Suivant",
+    "guests.pageInfo": "Page {page} sur {total}",
 
     "products.title": "Boutique — Produits",
     "products.printMovedToAdminNote": "Les produits d'impression (tirages, toiles...) sont désormais un service pixleh géré centralement — ils ne sont plus créés ici. Cette page reste pour vos éventuels téléchargements numériques, albums ou packages.",
@@ -1708,6 +1711,9 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "guests.status.pending": "Pending",
     "guests.status.approved": "Approved",
     "guests.status.rejected": "Rejected",
+    "guests.prevPage": "Previous",
+    "guests.nextPage": "Next",
+    "guests.pageInfo": "Page {page} of {total}",
 
     "products.title": "Store — Products",
     "products.printMovedToAdminNote": "Print products (prints, canvases...) are now a centrally-managed pixleh service — they're no longer created here. This page remains for any digital downloads, albums or packages you offer.",
@@ -2987,6 +2993,9 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "guests.status.pending": "Pendiente",
     "guests.status.approved": "Aprobado",
     "guests.status.rejected": "Rechazado",
+    "guests.prevPage": "Anterior",
+    "guests.nextPage": "Siguiente",
+    "guests.pageInfo": "Página {page} de {total}",
 
     "products.title": "Tienda — Productos",
     "products.printMovedToAdminNote": "Los productos de impresión (copias, lienzos...) son ahora un servicio pixleh gestionado de forma centralizada — ya no se crean aquí. Esta página sigue disponible para tus descargas digitales, álbumes o packs.",
@@ -4266,6 +4275,9 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "guests.status.pending": "Pendente",
     "guests.status.approved": "Aprovado",
     "guests.status.rejected": "Recusado",
+    "guests.prevPage": "Anterior",
+    "guests.nextPage": "Próximo",
+    "guests.pageInfo": "Página {page} de {total}",
 
     "products.title": "Loja — Produtos",
     "products.printMovedToAdminNote": "Os produtos de impressão (cópias, telas...) agora são um serviço pixleh gerido centralmente — deixaram de ser criados aqui. Esta página continua disponível para seus downloads digitais, álbuns ou pacotes.",
@@ -5545,6 +5557,9 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "guests.status.pending": "待处理",
     "guests.status.approved": "已批准",
     "guests.status.rejected": "已拒绝",
+    "guests.prevPage": "上一页",
+    "guests.nextPage": "下一页",
+    "guests.pageInfo": "第 {page} 页，共 {total} 页",
 
     "products.title": "商店 — 产品",
     "products.printMovedToAdminNote": "印刷产品（照片打印、画布等）现在是由平台统一管理的 pixleh 服务 — 不再在此创建。此页面仍可用于数字下载、相册或套餐。",
@@ -6809,6 +6824,9 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "guests.status.pending": "قيد الانتظار",
     "guests.status.approved": "مقبول",
     "guests.status.rejected": "مرفوض",
+    "guests.prevPage": "السابق",
+    "guests.nextPage": "التالي",
+    "guests.pageInfo": "صفحة {page} من {total}",
 
     "products.title": "المتجر — المنتجات",
     "products.printMovedToAdminNote": "أصبحت منتجات الطباعة (الصور المطبوعة، اللوحات...) خدمة تديرها pixleh مركزيًا — لم تعد تُنشأ هنا. تبقى هذه الصفحة متاحة للتنزيلات الرقمية أو الألبومات أو الباقات.",
