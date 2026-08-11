@@ -25,6 +25,12 @@ interface StudioOption {
 
 type ViewMode = "list" | "grid";
 
+// Pagination client-side — demande d'Adriel le 12/08/2026 ("ajouter a droite le nombre de
+// item a afficher et la pagination"), même patron que /dashboard/guests côté studio (voir ce
+// fichier) : 10 par défaut, sélecteur pour changer, prev/next sous la liste.
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const DEFAULT_PAGE_SIZE = 10;
+
 const STATUS_KEYS: Record<GuestDTO["status"], string> = {
   PENDING: "guests.status.pending",
   APPROVED: "guests.status.approved",
@@ -57,6 +63,8 @@ export default function AdminGuestsPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const { t, locale } = useLanguage();
 
   useEffect(() => {
@@ -90,6 +98,16 @@ export default function AdminGuestsPage() {
     });
   }, [guests, search, dateFrom, dateTo]);
 
+  // Revient à la page 1 dès qu'un filtre ou la taille de page change une liste filtrée plus
+  // courte — sinon on peut se retrouver bloqué sur une page devenue vide.
+  useEffect(() => {
+    setPage(1);
+  }, [search, dateFrom, dateTo, studioFilter, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   if (!guests || !studios) return <PageSpinner />;
 
   return (
@@ -97,9 +115,17 @@ export default function AdminGuestsPage() {
       <h1 className="font-serif text-2xl font-semibold">{t("admin.guests.title")}</h1>
       <p className="mt-1 text-sm text-gray-500">{t("admin.guests.subtitle")}</p>
 
-      <div className="mt-6 flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="w-56 shrink-0">
+      {/* Sur mobile : Recherche et Studio occupent toute la largeur (chacun sur sa ligne),
+          Du/Au restent côte à côte sur une même ligne (moitié chacun) — demande d'Adriel,
+          12/08/2026 : "mettre la barre de recherche et studio sur toute la largeur et sur la
+          meme ligne mettre du et au". À partir de sm, on repasse à la disposition en ligne
+          d'origine (largeurs fixes). Le sélecteur "par page" + la bascule liste/grille
+          passent à droite de la barre ("ajouter a droite le nombre de item a afficher et la
+          pagination") ; les contrôles précédent/suivant restent sous la liste (même
+          convention que /dashboard/guests côté studio). */}
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="w-full sm:w-56 sm:shrink-0">
             <label className="mb-1 block text-xs font-medium text-gray-600">{t("admin.guests.searchLabel")}</label>
             <input
               type="text"
@@ -109,7 +135,7 @@ export default function AdminGuestsPage() {
               className="input"
             />
           </div>
-          <div className="w-52 shrink-0">
+          <div className="w-full sm:w-52 sm:shrink-0">
             <label className="mb-1 block text-xs font-medium text-gray-600">{t("admin.guests.studioLabel")}</label>
             <SearchableSelect
               value={studioFilter}
@@ -122,37 +148,57 @@ export default function AdminGuestsPage() {
               ]}
             />
           </div>
-          <div className="w-36 shrink-0">
-            <label className="mb-1 block text-xs font-medium text-gray-600">{t("admin.guests.dateFromLabel")}</label>
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="input" />
-          </div>
-          <div className="w-36 shrink-0">
-            <label className="mb-1 block text-xs font-medium text-gray-600">{t("admin.guests.dateToLabel")}</label>
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="input" />
+          <div className="flex gap-2 sm:contents">
+            <div className="w-1/2 sm:w-36 sm:shrink-0">
+              <label className="mb-1 block text-xs font-medium text-gray-600">{t("admin.guests.dateFromLabel")}</label>
+              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="input" />
+            </div>
+            <div className="w-1/2 sm:w-36 sm:shrink-0">
+              <label className="mb-1 block text-xs font-medium text-gray-600">{t("admin.guests.dateToLabel")}</label>
+              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="input" />
+            </div>
           </div>
         </div>
 
-        {/* Bascule vue liste/colonnes (grille) — même pattern que GalleriesListView côté
-            studio (icônes grid/list, état actif en fond sombre). */}
-        <div className="flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
-          <button
-            type="button"
-            onClick={() => setViewMode("list")}
-            title={t("admin.guests.viewList")}
-            aria-label={t("admin.guests.viewList")}
-            className={`rounded-md p-1.5 ${viewMode === "list" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-white"}`}
-          >
-            <IconList />
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode("grid")}
-            title={t("admin.guests.viewGrid")}
-            aria-label={t("admin.guests.viewGrid")}
-            className={`rounded-md p-1.5 ${viewMode === "grid" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-white"}`}
-          >
-            <IconGrid />
-          </button>
+        <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
+          {/* Nombre d'invités par page réglable — demande d'Adriel le 12/08/2026. */}
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            {t("guests.perPage")}
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="input w-auto py-1.5 text-sm"
+            >
+              {PAGE_SIZE_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {/* Bascule vue liste/colonnes (grille) — même pattern que GalleriesListView côté
+              studio (icônes grid/list, état actif en fond sombre). */}
+          <div className="flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
+            <button
+              type="button"
+              onClick={() => setViewMode("list")}
+              title={t("admin.guests.viewList")}
+              aria-label={t("admin.guests.viewList")}
+              className={`rounded-md p-1.5 ${viewMode === "list" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-white"}`}
+            >
+              <IconList />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("grid")}
+              title={t("admin.guests.viewGrid")}
+              aria-label={t("admin.guests.viewGrid")}
+              className={`rounded-md p-1.5 ${viewMode === "grid" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-white"}`}
+            >
+              <IconGrid />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -177,7 +223,7 @@ export default function AdminGuestsPage() {
             <span className="text-right">{t("guests.colDate")}</span>
           </div>
           <div className="divide-y divide-gray-100">
-            {filtered.map((g) => (
+            {paginated.map((g) => (
               <div
                 key={g.id}
                 className="grid grid-cols-1 gap-1.5 p-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,220px)_minmax(0,1fr)_auto_auto] sm:items-center sm:gap-3"
@@ -206,7 +252,7 @@ export default function AdminGuestsPage() {
 
       {filtered.length > 0 && viewMode === "grid" && (
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((g) => (
+          {paginated.map((g) => (
             <div key={g.id} className="rounded-xl border border-gray-200 bg-white p-4">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700">
@@ -226,6 +272,32 @@ export default function AdminGuestsPage() {
               </p>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Pagination — demande d'Adriel le 12/08/2026 ("ajouter [...] la pagination"), même
+          convention que /dashboard/guests côté studio (prev/next centrés sous la liste). */}
+      {filtered.length > pageSize && (
+        <div className="mt-6 flex items-center justify-center gap-4">
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="btn-secondary px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {t("guests.prevPage")}
+          </button>
+          <span className="text-sm text-gray-500">
+            {t("guests.pageInfo").replace("{page}", String(currentPage)).replace("{total}", String(totalPages))}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className="btn-secondary px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {t("guests.nextPage")}
+          </button>
         </div>
       )}
     </div>
