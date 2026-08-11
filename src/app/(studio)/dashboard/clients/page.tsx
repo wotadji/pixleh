@@ -506,7 +506,7 @@ export default function ClientsPage() {
                 {threads[selected.id]?.map((m) => (
                   <div key={m.id} className={`flex ${m.direction === "OUTBOUND" ? "justify-end" : "justify-start"}`}>
                     <div
-                      className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${
+                      className={`max-w-[85%] break-words rounded-lg px-3 py-2 text-base leading-relaxed sm:max-w-[75%] sm:text-sm ${
                         m.direction === "OUTBOUND" ? "bg-brand-600 text-white" : "border border-gray-200 bg-white text-gray-700"
                       }`}
                     >
@@ -616,9 +616,13 @@ export default function ClientsPage() {
                       (isHtmlEmpty(replyDrafts[selected.id] || "") && !pendingAttachments[selected.id])
                     }
                     onClick={() => sendReply(selected)}
-                    className="btn-primary mb-0.5 shrink-0 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                    title={replySending[selected.id] ? t("clients.reply.sending") : t("clients.reply.send")}
+                    className="btn-primary mb-0.5 flex shrink-0 items-center gap-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {replySending[selected.id] ? t("clients.reply.sending") : t("clients.reply.send")}
+                    <IconSendClients className={replySending[selected.id] ? "animate-pulse" : undefined} />
+                    <span className="hidden sm:inline">
+                      {replySending[selected.id] ? t("clients.reply.sending") : t("clients.reply.send")}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -690,6 +694,15 @@ function IconArrowLeftClients() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M19 12H5M11 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconSendClients({ className }: { className?: string }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+      <path d="M22 2 11 13" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M22 2 15 22l-4-9-9-4 20-7Z" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
