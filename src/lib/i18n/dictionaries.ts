@@ -736,7 +736,7 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "invoices.colDate": "Date",
     "invoices.colAmount": "Montant",
     "invoices.groupCount": "{count} facture(s)",
-    "invoices.contractTotal": "Montant total du contrat",
+    "invoices.contractTotal": "Prix contrat",
     "invoices.contractAmountUnset": "Non renseigné",
     "invoices.contractBilled": "Déjà facturé",
     "invoices.contractPaid": "Déjà payé",
