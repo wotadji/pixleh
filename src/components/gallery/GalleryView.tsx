@@ -447,25 +447,32 @@ export function GalleryView({
                   la navigation, pas une action secondaire. */}
               {videos.length > 0 && (
                 <div className="flex items-center gap-1 rounded-full bg-black/5 p-0.5 text-[11px] font-semibold uppercase tracking-wide">
+                  {/* Sur mobile, icônes seules (place limitée à côté de la langue/menu) ;
+                      à partir de sm, texte "Photos"/"Vidéo" comme avant (demande d'Adriel,
+                      11/08/2026 : "en mode mobile changer photo / video par des icones"). */}
                   <button
                     onClick={() => setMainView("photos")}
-                    className="rounded-full px-2.5 py-1 transition-colors"
+                    aria-label="Photos"
+                    className="flex items-center rounded-full px-2 py-1 transition-colors sm:px-2.5"
                     style={{
                       opacity: mainView === "photos" ? 1 : 0.6,
                       backgroundColor: mainView === "photos" ? palette.bg : "transparent",
                     }}
                   >
-                    Photos
+                    <IconImageTab className="sm:hidden" />
+                    <span className="hidden sm:inline">Photos</span>
                   </button>
                   <button
                     onClick={() => setMainView("video")}
-                    className="rounded-full px-2.5 py-1 transition-colors"
+                    aria-label="Vidéo"
+                    className="flex items-center rounded-full px-2 py-1 transition-colors sm:px-2.5"
                     style={{
                       opacity: mainView === "video" ? 1 : 0.6,
                       backgroundColor: mainView === "video" ? palette.bg : "transparent",
                     }}
                   >
-                    Vidéo
+                    <IconVideoTab className="sm:hidden" />
+                    <span className="hidden sm:inline">Vidéo</span>
                   </button>
                 </div>
               )}
@@ -1826,6 +1833,26 @@ function IconRemark() {
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
       <path d="M4 5h16v11H8l-4 4V5z" strokeLinejoin="round" />
       <path d="M8 9h8M8 12.5h5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Icônes de la bascule Photos/Vidéo sur mobile — voir la bascule dans le header sticky. */
+function IconImageTab({ className = "" }: { className?: string }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" stroke="none" />
+      <path d="M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.12 0L4 19" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconVideoTab({ className = "" }: { className?: string }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+      <rect x="2.5" y="6" width="13" height="12" rx="2" />
+      <path d="M15.5 10l5-2.8v9.6l-5-2.8z" strokeLinejoin="round" />
     </svg>
   );
 }
