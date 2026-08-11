@@ -463,11 +463,15 @@ export default function InvoicesPage() {
               />
             </div>
           )}
-          <div className="w-full sm:w-44 sm:shrink-0">
+          {/* select natif remplacé par un rendu appearance-none + flèche custom (même icône que
+              SearchableSelect) — demande d'Adriel, 12/08/2026 : la flèche du select natif du
+              navigateur n'était pas alignée avec celle de SearchableSelect ("Tous les
+              contrats") juste au-dessus, chaque navigateur la positionnant différemment. */}
+          <div className="relative w-full sm:w-44 sm:shrink-0">
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as InvoiceStatus | "ALL")}
-              className="input"
+              className="input appearance-none pr-8"
             >
               <option value="ALL">{t("invoices.allStatuses")}</option>
               {(Object.keys(STATUS_LABELS) as InvoiceStatus[]).map((s) => (
@@ -476,6 +480,7 @@ export default function InvoicesPage() {
                 </option>
               ))}
             </select>
+            <IconChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           </div>
         </div>
         {/* Regrouper par contrat (gauche) + nombre par page (droite) sur une même ligne, y
@@ -502,17 +507,20 @@ export default function InvoicesPage() {
           {!groupByContract && (
             <label className="flex shrink-0 items-center gap-2 text-sm text-gray-600">
               {t("invoices.perPage")}
-              <select
-                value={pageSize}
-                onChange={(e) => setPageSize(Number(e.target.value))}
-                className="input w-auto"
-              >
-                {PAGE_SIZE_OPTIONS.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                  className="input w-auto appearance-none pr-8"
+                >
+                  {PAGE_SIZE_OPTIONS.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+                <IconChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              </div>
             </label>
           )}
         </div>
@@ -873,6 +881,17 @@ function IconGroup() {
       <path d="M12 3 3 8l9 5 9-5-9-5Z" strokeLinejoin="round" />
       <path d="M3 12l9 5 9-5" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M3 16l9 5 9-5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/* Même tracé que IconChevron de SearchableSelect — utilisée pour remplacer la flèche native des
+   <select> restants de cette page afin qu'elle s'aligne visuellement avec SearchableSelect
+   (demande d'Adriel, 12/08/2026). */
+function IconChevronDown({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+      <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
