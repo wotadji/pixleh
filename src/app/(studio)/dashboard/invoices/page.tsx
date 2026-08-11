@@ -433,8 +433,12 @@ export default function InvoicesPage() {
         </button>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="w-56 shrink-0">
+      {/* Sur mobile : chaque contrôle prend toute la largeur et s'empile (flex-col) au lieu
+          de se tasser côte à côte — demande d'Adriel, 12/08/2026 ("que ça occupe toute la
+          zone en largeur, surtout bien aligné"). À partir de sm, on repasse à la disposition
+          en ligne avec des largeurs fixes comme avant. */}
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
+        <div className="w-full sm:w-56 sm:shrink-0">
           <input
             type="text"
             value={search}
@@ -443,9 +447,9 @@ export default function InvoicesPage() {
             className="input"
           />
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           {contractOptions.length > 0 && (
-            <div className="w-52 shrink-0">
+            <div className="w-full sm:w-52 sm:shrink-0">
               <SearchableSelect
                 value={contractFilter}
                 onChange={setContractFilter}
@@ -459,7 +463,7 @@ export default function InvoicesPage() {
               />
             </div>
           )}
-          <div className="w-44 shrink-0">
+          <div className="w-full sm:w-44 sm:shrink-0">
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as InvoiceStatus | "ALL")}
@@ -474,26 +478,28 @@ export default function InvoicesPage() {
             </select>
           </div>
           {/* Regrouper par contrat — demande d'Adriel, 12/08/2026. Désactivé s'il n'y a aucune
-              facture liée à un contrat (rien à regrouper). */}
+              facture liée à un contrat (rien à regrouper). Libellé toujours visible (pas
+              seulement à partir de sm) : sur mobile le bouton prend toute la largeur, une
+              icône seule y serait trop peu explicite. */}
           <button
             type="button"
             onClick={() => setGroupByContract((g) => !g)}
             disabled={contractOptions.length === 0}
             title={t("invoices.groupByContract")}
-            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
+            className={`flex w-full items-center justify-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:justify-start ${
               groupByContract
                 ? "border-brand-500 bg-brand-50 text-brand-700"
                 : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
             }`}
           >
             <IconGroup />
-            <span className="hidden sm:inline">{t("invoices.groupByContract")}</span>
+            <span>{t("invoices.groupByContract")}</span>
           </button>
         </div>
         {/* Nombre de factures par page réglable — demande d'Adriel le 12/08/2026. Sans objet
             en vue groupée (pas de découpage par page), donc masqué dans ce mode. */}
         {!groupByContract && (
-          <label className="ml-auto flex items-center gap-2 text-sm text-gray-600">
+          <label className="flex w-full items-center justify-between gap-2 text-sm text-gray-600 sm:ml-auto sm:w-auto sm:justify-start">
             {t("invoices.perPage")}
             <select
               value={pageSize}
