@@ -1492,19 +1492,26 @@ function CatalogRow({
             {resyncing === item.id ? t("admin.printCatalog.resyncing") : t("admin.printCatalog.resync")}
           </button>
         )}
+        {/* Boutons en icône seule (au lieu de texte "Modifier"/"Supprimer") — demande
+            d'Adriel, 12/08/2026 : "mettre le boutton supprimé et le bouton modifier en
+            icone" (débordaient sur mobile en vue liste). */}
         <button
           type="button"
-          className="rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+          title={t("admin.printCatalog.edit")}
+          aria-label={t("admin.printCatalog.edit")}
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-50 text-gray-600 hover:bg-gray-100"
           onClick={() => onEdit(item)}
         >
-          {t("admin.printCatalog.edit")}
+          <IconEdit />
         </button>
         <button
           type="button"
-          className="rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-100"
+          title={t("admin.printCatalog.delete")}
+          aria-label={t("admin.printCatalog.delete")}
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-red-50 text-red-600 hover:bg-red-100"
           onClick={() => onRemove(item)}
         >
-          {t("admin.printCatalog.delete")}
+          <IconTrash />
         </button>
       </div>
     </div>
