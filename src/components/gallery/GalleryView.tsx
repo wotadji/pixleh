@@ -1129,8 +1129,14 @@ function GalleryCover({
       // droite, photo pleine à gauche — utile pour varier la composition d'une galerie
       // à l'autre sans perdre la lisibilité du style par défaut.
       return (
-        <div className="flex h-screen max-h-[900px] min-h-[520px] w-full flex-col md:flex-row-reverse" style={{ backgroundColor: palette.bg }}>
-          <div className="relative flex w-full flex-col justify-between border-b md:h-full md:w-[38%] md:border-b-0 md:border-l" style={{ borderColor: `${palette.accent}30` }}>
+        <div
+          className="flex h-[70vh] max-h-[620px] min-h-[440px] w-full flex-col md:h-screen md:max-h-[900px] md:min-h-[520px] md:flex-row-reverse"
+          style={{ backgroundColor: palette.bg }}
+        >
+          <div
+            className="relative flex w-full flex-col justify-center gap-6 border-b md:h-full md:w-[38%] md:justify-between md:gap-0 md:border-b-0 md:border-l"
+            style={{ borderColor: `${palette.accent}30` }}
+          >
             {studioName && (
               <Link
                 href={studioSlug ? `/s/${studioSlug}` : "#"}
@@ -1273,8 +1279,14 @@ function GalleryCover({
       // Rendu par défaut : panneau uni à gauche (nom du studio, titre, bouton) et photo
       // pleine à droite, séparés par un simple trait — aucun assombrissement de la photo.
       return (
-        <div className="flex h-screen max-h-[900px] min-h-[520px] w-full flex-col md:flex-row" style={{ backgroundColor: palette.bg }}>
-          <div className="relative flex w-full flex-col justify-between border-b md:h-full md:w-[38%] md:border-b-0 md:border-r" style={{ borderColor: `${palette.accent}30` }}>
+        <div
+          className="flex h-[70vh] max-h-[620px] min-h-[440px] w-full flex-col md:h-screen md:max-h-[900px] md:min-h-[520px] md:flex-row"
+          style={{ backgroundColor: palette.bg }}
+        >
+          <div
+            className="relative flex w-full flex-col justify-center gap-6 border-b md:h-full md:w-[38%] md:justify-between md:gap-0 md:border-b-0 md:border-r"
+            style={{ borderColor: `${palette.accent}30` }}
+          >
             {studioName && (
               <Link
                 href={studioSlug ? `/s/${studioSlug}` : "#"}
