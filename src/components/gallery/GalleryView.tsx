@@ -632,9 +632,13 @@ export function GalleryView({
           </div>
 
           {/* Filtre par set : une pill par set + "Toutes les photos", sur sa propre ligne,
-              masqué si la galerie n'a aucun set ou si on est en vue Vidéo. */}
+              masqué si la galerie n'a aucun set ou si on est en vue Vidéo. Retour à la ligne
+              automatique (flex-wrap) plutôt qu'un défilement horizontal (11/08/2026, retour
+              d'Adriel : "dans galerie il y'a toujours le scroll horizontal" — identifié via
+              la console comme étant précisément cette rangée, dont le contenu dépassait la
+              largeur de l'écran) : plus de swipe requis pour voir tous les sets. */}
           {mainView === "photos" && collections.length > 0 && (
-            <div className="mt-2 flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
               <SetPill
                 label="Toutes les photos"
                 active={activeSetId === null}
