@@ -28,10 +28,11 @@ const STATUS_STYLES: Record<GuestDTO["status"], string> = {
   REJECTED: "bg-gray-100 text-gray-500",
 };
 
-// Même taille de page que ClientGalleriesView (référence pour la pagination client-side dans
-// l'app) — demande d'Adriel le 12/08/2026 ("mettre la pagination") après une liste d'invités
-// qui pouvait défiler très longtemps sans repère.
-const PAGE_SIZE = 20;
+// Pagination client-side — demande d'Adriel le 12/08/2026 ("mettre la pagination"), puis
+// affinée le même jour ("10 par page avec la possibilité de choisir le nombre d'item à
+// afficher") : 10 par défaut au lieu de 20, avec un sélecteur pour changer.
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const DEFAULT_PAGE_SIZE = 10;
 
 /**
  * Liste des invités (GalleryGuest) de toutes les galeries du studio — demande d'Adriel le
@@ -44,6 +45,7 @@ export default function GuestsPage() {
   const [guests, setGuests] = useState<GuestDTO[] | null>(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   useEffect(() => {
     fetch("/api/guests")
@@ -51,11 +53,12 @@ export default function GuestsPage() {
       .then((d) => setGuests(d.guests || []));
   }, []);
 
-  // Revient à la page 1 dès que la recherche change une liste filtrée plus courte — sinon on
-  // peut se retrouver bloqué sur une page vide (page 3 sur une recherche qui n'en donne qu'1).
+  // Revient à la page 1 dès que la recherche ou la taille de page change une liste filtrée
+  // plus courte — sinon on peut se retrouver bloqué sur une page vide (page 3 sur une
+  // recherche qui n'en donne qu'1, ou après être passé de 10 à 100 par page).
   useEffect(() => {
     setPage(1);
-  }, [search]);
+  }, [search, pageSize]);
 
   const filtered = useMemo(() => {
     if (!guests) return [];
@@ -66,9 +69,9 @@ export default function GuestsPage() {
     );
   }, [guests, search]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const paged = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   if (!guests) return <PageSpinner />;
 
@@ -77,14 +80,31 @@ export default function GuestsPage() {
       <h1 className="font-serif text-2xl font-semibold">{t("guests.title")}</h1>
       <p className="mt-1 text-sm text-gray-500">{t("guests.subtitle")}</p>
 
-      <div className="mt-5 w-64">
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={t("guests.searchPlaceholder")}
-          className="input w-full"
-        />
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="w-64">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("guests.searchPlaceholder")}
+            className="input w-full"
+          />
+        </div>
+        {/* Nombre d'invités par page réglable — demande d'Adriel le 12/08/2026. */}
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          {t("guests.perPage")}
+          <select
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value))}
+            className="input w-auto py-1.5 text-sm"
+          >
+            {PAGE_SIZE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="mt-4 overflow-hidden rounded-xl border border-gray-200">
@@ -125,7 +145,7 @@ export default function GuestsPage() {
         </div>
       </div>
 
-      {filtered.length > PAGE_SIZE && (
+      {filtered.length > pageSize && (
         <div className="mt-6 flex items-center justify-center gap-4">
           <button
             type="button"
