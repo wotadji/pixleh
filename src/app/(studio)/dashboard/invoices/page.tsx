@@ -477,16 +477,20 @@ export default function InvoicesPage() {
               ))}
             </select>
           </div>
-          {/* Regrouper par contrat — demande d'Adriel, 12/08/2026. Désactivé s'il n'y a aucune
-              facture liée à un contrat (rien à regrouper). Libellé toujours visible (pas
-              seulement à partir de sm) : sur mobile le bouton prend toute la largeur, une
-              icône seule y serait trop peu explicite. */}
+        </div>
+        {/* Regrouper par contrat (gauche) + nombre par page (droite) sur une même ligne, y
+            compris sur mobile — demande d'Adriel, 12/08/2026 ("mettre regrouper par contrat à
+            gauche et page à droite"). Même hauteur/padding (py-2) que les autres selects pour
+            que les flèches des menus déroulants restent alignées entre elles. Le sélecteur de
+            page est sans objet en vue groupée (pas de découpage par page), donc masqué dans ce
+            mode. */}
+        <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:ml-auto">
           <button
             type="button"
             onClick={() => setGroupByContract((g) => !g)}
             disabled={contractOptions.length === 0}
             title={t("invoices.groupByContract")}
-            className={`flex w-full items-center justify-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:justify-start ${
+            className={`flex items-center justify-center gap-1.5 rounded-full border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
               groupByContract
                 ? "border-brand-500 bg-brand-50 text-brand-700"
                 : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
@@ -495,25 +499,23 @@ export default function InvoicesPage() {
             <IconGroup />
             <span>{t("invoices.groupByContract")}</span>
           </button>
+          {!groupByContract && (
+            <label className="flex shrink-0 items-center gap-2 text-sm text-gray-600">
+              {t("invoices.perPage")}
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="input w-auto"
+              >
+                {PAGE_SIZE_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
-        {/* Nombre de factures par page réglable — demande d'Adriel le 12/08/2026. Sans objet
-            en vue groupée (pas de découpage par page), donc masqué dans ce mode. */}
-        {!groupByContract && (
-          <label className="flex w-full items-center justify-between gap-2 text-sm text-gray-600 sm:ml-auto sm:w-auto sm:justify-start">
-            {t("invoices.perPage")}
-            <select
-              value={pageSize}
-              onChange={(e) => setPageSize(Number(e.target.value))}
-              className="input w-auto py-1.5 text-sm"
-            >
-              {PAGE_SIZE_OPTIONS.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
       </div>
 
       <div className="mt-4 divide-y divide-gray-100 rounded-xl border border-gray-200">
