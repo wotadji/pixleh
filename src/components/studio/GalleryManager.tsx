@@ -1235,10 +1235,15 @@ export function GalleryManager({
             <button
               onClick={regenerateThumbnails}
               disabled={regenLoading}
-              title={t("gm.regenerateThumbsHint")}
-              className="text-xs text-gray-400 underline-offset-2 hover:text-gray-600 hover:underline disabled:opacity-50"
+              title={regenLoading ? t("gm.regenerating") : t("gm.regenerateThumbsHint")}
+              className="flex items-center gap-1 text-xs text-gray-400 underline-offset-2 hover:text-gray-600 hover:underline disabled:opacity-50"
             >
-              {regenLoading ? t("gm.regenerating") : t("gm.regenerateThumbs")}
+              {/* Icône seule sur mobile, texte à partir de sm — demande d'Adriel,
+                  12/08/2026 : "mettre Régénérer les miniatures en icone". */}
+              <IconRefreshThumbs className={regenLoading ? "animate-spin" : undefined} />
+              <span className="hidden sm:inline">
+                {regenLoading ? t("gm.regenerating") : t("gm.regenerateThumbs")}
+              </span>
             </button>
           )}
           {/* Icônes seules sur mobile (place limitée à côté du titre) ; libellé visible à
@@ -3240,6 +3245,23 @@ function IconShareLink() {
       <circle cx="6" cy="12" r="3" />
       <circle cx="18" cy="19" r="3" />
       <path d="M8.6 10.5l6.8-3.9M8.6 13.5l6.8 3.9" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconRefreshThumbs({ className }: { className?: string }) {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      className={className}
+    >
+      <path d="M3 12a9 9 0 0115.4-6.36M21 12a9 9 0 01-15.4 6.36" strokeLinecap="round" />
+      <path d="M18.6 3.6v4.5h-4.5M5.4 20.4v-4.5h4.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
