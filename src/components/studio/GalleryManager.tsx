@@ -1241,34 +1241,56 @@ export function GalleryManager({
               {regenLoading ? t("gm.regenerating") : t("gm.regenerateThumbs")}
             </button>
           )}
-          <a href={`/g/${gallery.slug}`} target="_blank" className="btn-secondary text-sm">
-            {t("gm.preview")}
+          {/* Icônes seules sur mobile (place limitée à côté du titre) ; libellé visible à
+              partir de sm — demande d'Adriel, 11/08/2026 : "proposez des icones a la place
+              des textes sur les bouton" après que ces 4 boutons débordaient sur mobile. */}
+          <a
+            href={`/g/${gallery.slug}`}
+            target="_blank"
+            title={t("gm.preview")}
+            className="btn-secondary flex items-center gap-1.5 text-sm"
+          >
+            <IconEye />
+            <span className="hidden sm:inline">{t("gm.preview")}</span>
           </a>
           {gallery.clientId && (
             <button
               onClick={handleShareToClient}
               disabled={shareToClientState === "sending"}
-              title={shareToClientState === "error" ? shareToClientError || undefined : undefined}
-              className="btn-secondary text-sm disabled:opacity-50"
+              title={
+                shareToClientState === "error"
+                  ? shareToClientError || undefined
+                  : t("gm.shareToClient")
+              }
+              className="btn-secondary flex items-center gap-1.5 text-sm disabled:opacity-50"
             >
-              {shareToClientState === "sending"
-                ? t("gm.shareToClientSending")
-                : shareToClientState === "sent"
-                  ? t("gm.shareToClientSent")
-                  : shareToClientState === "error"
-                    ? t("gm.shareToClientError")
-                    : t("gm.shareToClient")}
+              <IconSendToClient />
+              <span className="hidden sm:inline">
+                {shareToClientState === "sending"
+                  ? t("gm.shareToClientSending")
+                  : shareToClientState === "sent"
+                    ? t("gm.shareToClientSent")
+                    : shareToClientState === "error"
+                      ? t("gm.shareToClientError")
+                      : t("gm.shareToClient")}
+              </span>
             </button>
           )}
-          <button onClick={handleShare} className="btn-secondary text-sm">
-            {copied ? t("gm.linkCopied") : t("gm.share")}
+          <button
+            onClick={handleShare}
+            title={copied ? t("gm.linkCopied") : t("gm.share")}
+            className="btn-secondary flex items-center gap-1.5 text-sm"
+          >
+            <IconShareLink />
+            <span className="hidden sm:inline">{copied ? t("gm.linkCopied") : t("gm.share")}</span>
           </button>
           {/* Masqué pendant l'upload (demandé par Adriel le 11/08/2026) : évite de laisser
               croire qu'on peut relancer un envoi par-dessus celui en cours, la barre de
               progression prenant le relais visuellement à la place du bouton. */}
           {!uploading && (
-            <button onClick={open} className="btn-primary text-sm">
-              {t("gm.addMedia")}
+            <button onClick={open} title={t("gm.addMedia")} className="btn-primary flex items-center gap-1.5 text-sm">
+              <IconAddMedia />
+              <span className="hidden sm:inline">{t("gm.addMedia")}</span>
             </button>
           )}
         </div>
@@ -1598,10 +1620,16 @@ export function GalleryManager({
                           <button
                             type="button"
                             onClick={() => setSortMenuOpen((v) => !v)}
+                            title={`${t("gm.sortBy")}: ${SORT_OPTIONS.find((o) => o.key === sortBy)?.label}`}
                             className="btn-secondary flex items-center gap-1.5 text-xs"
                           >
                             <IconSort />
-                            {t("gm.sortBy")}: {SORT_OPTIONS.find((o) => o.key === sortBy)?.label}
+                            {/* Libellé complet masqué sur mobile (place limitée dans la barre
+                                d'outils grille) — icône seule + tooltip, comme les boutons du
+                                header (demande d'Adriel, 11/08/2026). */}
+                            <span className="hidden sm:inline">
+                              {t("gm.sortBy")}: {SORT_OPTIONS.find((o) => o.key === sortBy)?.label}
+                            </span>
                             <span className="text-gray-400">▾</span>
                           </button>
                           {sortMenuOpen && (
@@ -3174,6 +3202,46 @@ function IconRemarksTab() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
+    </svg>
+  );
+}
+
+/** Icônes des boutons de la barre du haut (Aperçu / Partager au client / Partager /
+ * Ajouter des médias), affichées seules sur mobile faute de place — voir la barre du haut
+ * dans GalleryManager (demande d'Adriel, 11/08/2026). */
+function IconEye() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function IconSendToClient() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M22 2L11 13" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M22 2l-7 20-4-9-9-4 20-7z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconShareLink() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="18" cy="5" r="3" />
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="19" r="3" />
+      <path d="M8.6 10.5l6.8-3.9M8.6 13.5l6.8 3.9" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconAddMedia() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 5v14M5 12h14" strokeLinecap="round" />
     </svg>
   );
 }
