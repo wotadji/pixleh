@@ -6,6 +6,19 @@
   --brand: #7c3aed;
 }
 
+/* Garde-fou anti-scroll-horizontal (11/08/2026, demande d'Adriel : "dans galerie il y'a
+   toujours le scroll horizontal") — sans ça, le moindre élément ne serait-ce qu'1-2px plus
+   large que l'écran sur mobile (arrondi de bordure, padding, gap flexbox non prévu à un
+   breakpoint) rend TOUTE la page glissable horizontalement, avec effet de bord (contenu qui
+   se décale/se coupe) plutôt qu'un simple débordement invisible. `overflow-x: hidden` sur
+   `html` (pas `body`) pour ne jamais casser le `position: sticky` des barres du haut (voir
+   GalleryView.tsx) — mettre overflow-x sur body forcerait overflow-y à passer de "visible" à
+   "auto" (règle du spec CSS), ce qui change l'ancêtre de référence du sticky ; sur html ça
+   n'a pas cet effet de bord tant que body reste la zone de scroll normale. */
+html {
+  overflow-x: hidden;
+}
+
 body {
   @apply bg-white text-gray-900 antialiased;
 }
