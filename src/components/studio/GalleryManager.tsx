@@ -1337,9 +1337,15 @@ export function GalleryManager({
         </nav>
 
         {activeTab === "photos" && (
-          <>
+          // Sur mobile, le panneau Sets passe au-dessus de la grille (au lieu d'à côté) —
+          // demande d'Adriel le 12/08/2026 ("mettre la sous menu au dessus et les photos en
+          // dessous") : côte à côte, les deux ne laissaient presque plus de place pour la
+          // grille sur petit écran. Hauteur plafonnée + défilement propre sur mobile pour
+          // qu'un grand nombre de sets ne pousse pas toute la grille hors champ ; revient à
+          // la disposition côte à côte d'origine à partir de md.
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden md:flex-row">
             {/* Panneau Sets */}
-            <aside className="w-56 shrink-0 overflow-y-auto border-r border-gray-200 bg-gray-50 p-3">
+            <aside className="max-h-40 shrink-0 overflow-y-auto border-b border-gray-200 bg-gray-50 p-3 md:max-h-none md:w-56 md:border-b-0 md:border-r">
               <p className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
                 {t("gm.photosLabel")}
               </p>
@@ -1727,7 +1733,7 @@ export function GalleryManager({
               )}
               </div>
             </main>
-          </>
+          </div>
         )}
 
         {activeTab === "design" && (
