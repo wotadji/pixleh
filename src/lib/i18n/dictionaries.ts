@@ -471,6 +471,8 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "client.nav.myGalleries": "Mes galeries",
     "client.nav.myOrders": "Mes impressions",
     "client.nav.settings": "Paramètres",
+    "client.nav.menu": "Menu",
+    "client.nav.close": "Fermer",
 
     "client.galleries.title": "Mes galeries",
     "client.galleries.emptyAll": "Aucune galerie ne vous a encore été partagée.",
@@ -1752,6 +1754,8 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "client.nav.myGalleries": "My galleries",
     "client.nav.myOrders": "My prints",
     "client.nav.settings": "Settings",
+    "client.nav.menu": "Menu",
+    "client.nav.close": "Close",
 
     "client.galleries.title": "My galleries",
     "client.galleries.emptyAll": "No gallery has been shared with you yet.",
@@ -3029,6 +3033,8 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "client.nav.myGalleries": "Mis galerías",
     "client.nav.myOrders": "Mis impresiones",
     "client.nav.settings": "Ajustes",
+    "client.nav.menu": "Menú",
+    "client.nav.close": "Cerrar",
 
     "client.galleries.title": "Mis galerías",
     "client.galleries.emptyAll": "Aún no se ha compartido ninguna galería con usted.",
@@ -4306,6 +4312,8 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "client.nav.myGalleries": "Minhas galerias",
     "client.nav.myOrders": "Minhas impressões",
     "client.nav.settings": "Configurações",
+    "client.nav.menu": "Menu",
+    "client.nav.close": "Fechar",
 
     "client.galleries.title": "Minhas galerias",
     "client.galleries.emptyAll": "Nenhuma galeria foi compartilhada com você ainda.",
@@ -5583,6 +5591,8 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "client.nav.myGalleries": "我的相册",
     "client.nav.myOrders": "我的印品订单",
     "client.nav.settings": "设置",
+    "client.nav.menu": "菜单",
+    "client.nav.close": "关闭",
 
     "client.galleries.title": "我的相册",
     "client.galleries.emptyAll": "目前还没有相册与您分享。",
@@ -6845,6 +6855,8 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "client.nav.myGalleries": "معارضي",
     "client.nav.myOrders": "طلبات الطباعة",
     "client.nav.settings": "الإعدادات",
+    "client.nav.menu": "القائمة",
+    "client.nav.close": "إغلاق",
 
     "client.galleries.title": "معارضي",
     "client.galleries.emptyAll": "لم تتم مشاركة أي معرض معك بعد.",

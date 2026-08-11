@@ -30,7 +30,10 @@ export default async function ClientPortalAppLayout({ children }: { children: Re
       {/* Le pied de page doit courir sur toute la largeur de l'écran (demande d'Adriel du
           30/07/2026), pas seulement sous la colonne de contenu : il vit donc en dehors du
           conteneur mx-auto max-w-5xl (sidebar + contenu) plutôt que dedans, comme avant. */}
-      <div className="mx-auto flex w-full max-w-5xl flex-1">
+      {/* flex-col sur mobile (la sidebar rend sa propre barre du haut + tiroir en dessous de
+          md, voir ClientPortalSidebar) / flex-row à partir de md (sidebar fixe à gauche) —
+          demande d'Adriel du 11/08/2026 : l'espace Client n'était pas responsive. */}
+      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col md:flex-row">
         <ClientPortalSidebar email={session.email} galleryCount={galleryCount} />
         <div className="min-w-0 flex-1">{children}</div>
       </div>

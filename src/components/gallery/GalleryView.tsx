@@ -119,6 +119,12 @@ export function GalleryView({
   const [activeVideoId, setActiveVideoId] = useState<string | null>(videos[0]?.id ?? null);
   const [shareTarget, setShareTarget] = useState<{ url: string; title: string } | null>(null);
   const [downloadPanelOpen, setDownloadPanelOpen] = useState(false);
+  // Menu "..." de la barre du haut sur mobile (11/08/2026, demande d'Adriel : le header
+  // n'était pas responsive — une dizaine d'icônes d'action se battaient pour la même ligne
+  // que le titre). Sur petit écran, ces actions sont regroupées derrière ce bouton plutôt
+  // qu'affichées en icônes côte à côte (comportement conservé tel quel à partir de sm, voir
+  // le header plus bas).
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
 
   // Remarque de retouche (icône dédiée sur chaque vignette, lien client uniquement) :
   // `remarkPhotoId` pilote l'ouverture du petit composeur, `remarks` garde le texte et le
@@ -391,49 +397,244 @@ export function GalleryView({
         onViewGallery={scrollToGrid}
       />
 
-      {/* Barre sticky : avatar + studio + titre à gauche (avec, si la galerie a des sets,
-          une ligne de pills juste en dessous pour filtrer par set), icônes d'action à
-          droite — `items-start` sur la ligne globale + `items-center` sur le bloc gauche
-          en colonne : les icônes restent alignées avec le titre seul quand il n'y a pas de
-          sets, et se recentrent automatiquement sur toute la hauteur (titre + pills) dès
-          qu'une ligne de sets apparaît, plutôt que de rester collées en haut. */}
+      {/* Barre sticky : avatar + studio + titre sur la ligne du haut, icônes d'action à
+          droite. Sur mobile, ces actions sont regroupées derrière un bouton "..." plutôt
+          qu'étalées en icônes (voir menu ci-dessous) — avant, une dizaine d'icônes + le
+          titre se battaient tous pour la même ligne sans jamais passer à la ligne, ce qui
+          faisait déborder le header sur petit écran (demande d'Adriel, 11/08/2026 : "rien
+          n'est responsible [...] surtout l'entete la barre de menu"). Le filtre par set
+          (pills) passe sur sa propre ligne en dessous, scrollable horizontalement — même
+          comportement mobile et desktop, plus robuste qu'un partage de ligne avec le titre. */}
       <div
         className="sticky top-0 z-10 border-b backdrop-blur"
         style={{ borderColor: `${palette.accent}33`, backgroundColor: `${palette.bg}f0` }}
       >
-      <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
-        <div className="flex min-w-0 flex-1 items-center gap-4">
-          {/* Seuls l'avatar et le nom du studio mènent vers la page publique du studio —
-              le titre de LA galerie courante ne doit pas être cliquable vers autre chose
-              puisqu'on est déjà dessus (auparavant tout le bloc, titre inclus, était un seul
-              lien, ce qui rendait le titre cliquable sans que ça se voie visuellement). */}
-          <div className="flex shrink-0 items-center gap-2.5">
-            <Link
-              href={gallery.studioSlug ? `/s/${gallery.studioSlug}` : "#"}
-              className="shrink-0"
-              aria-label={gallery.studioName || undefined}
-            >
-              <StudioAvatar name={gallery.studioName} logoUrl={gallery.studioLogoUrl} />
-            </Link>
-            <div className="leading-tight">
-              <p className="text-xs font-semibold uppercase leading-tight tracking-wide sm:text-sm">{gallery.title}</p>
-              {gallery.studioName && (
-                <Link
-                  href={gallery.studioSlug ? `/s/${gallery.studioSlug}` : "#"}
-                  className="block text-[11px] uppercase leading-tight tracking-wide opacity-60 hover:underline"
-                >
-                  {gallery.studioName}
-                </Link>
+        <div className="px-4 py-3 sm:px-6">
+          <div className="flex items-center justify-between gap-3">
+            {/* Seuls l'avatar et le nom du studio mènent vers la page publique du studio —
+                le titre de LA galerie courante ne doit pas être cliquable vers autre chose
+                puisqu'on est déjà dessus. */}
+            <div className="flex min-w-0 flex-1 items-center gap-2.5">
+              <Link
+                href={gallery.studioSlug ? `/s/${gallery.studioSlug}` : "#"}
+                className="shrink-0"
+                aria-label={gallery.studioName || undefined}
+              >
+                <StudioAvatar name={gallery.studioName} logoUrl={gallery.studioLogoUrl} />
+              </Link>
+              <div className="min-w-0 leading-tight">
+                <p className="truncate text-xs font-semibold uppercase leading-tight tracking-wide sm:text-sm">
+                  {gallery.title}
+                </p>
+                {gallery.studioName && (
+                  <Link
+                    href={gallery.studioSlug ? `/s/${gallery.studioSlug}` : "#"}
+                    className="block truncate text-[11px] uppercase leading-tight tracking-wide opacity-60 hover:underline"
+                  >
+                    {gallery.studioName}
+                  </Link>
+                )}
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
+              {/* Sélecteur de langue (02/08/2026, demande d'Adriel : "dans gallery mettre la
+                  possibilité de changer de langue") — réutilise le composant du site marketing. */}
+              <MarketingLanguageSwitcher />
+              <span className="hidden h-4 w-px opacity-20 sm:inline" style={{ backgroundColor: palette.text }} />
+              {/* Bascule Photos / Vidéo — visible seulement si la galerie a au moins une
+                  vidéo (voir `videos` prop), toujours visible (mobile compris) car c'est de
+                  la navigation, pas une action secondaire. */}
+              {videos.length > 0 && (
+                <div className="flex items-center gap-1 rounded-full bg-black/5 p-0.5 text-[11px] font-semibold uppercase tracking-wide">
+                  <button
+                    onClick={() => setMainView("photos")}
+                    className="rounded-full px-2.5 py-1 transition-colors"
+                    style={{
+                      opacity: mainView === "photos" ? 1 : 0.6,
+                      backgroundColor: mainView === "photos" ? palette.bg : "transparent",
+                    }}
+                  >
+                    Photos
+                  </button>
+                  <button
+                    onClick={() => setMainView("video")}
+                    className="rounded-full px-2.5 py-1 transition-colors"
+                    style={{
+                      opacity: mainView === "video" ? 1 : 0.6,
+                      backgroundColor: mainView === "video" ? palette.bg : "transparent",
+                    }}
+                  >
+                    Vidéo
+                  </button>
+                </div>
               )}
+              {videos.length > 0 && (
+                <span className="hidden h-4 w-px opacity-20 sm:inline" style={{ backgroundColor: palette.text }} />
+              )}
+
+              {/* Desktop (à partir de sm) : toutes les actions affichées en icônes sur la
+                  même ligne, comportement historique inchangé. */}
+              <div className="hidden items-center gap-1.5 sm:flex sm:gap-3">
+                {mainView === "photos" && (
+                  <>
+                    {allowPrintStore && (
+                      <>
+                        <Link
+                          href={`/g/${gallery.slug}/store`}
+                          className="text-xs uppercase tracking-wide opacity-70 hover:opacity-100"
+                        >
+                          Print Store
+                        </Link>
+                        <span className="h-4 w-px opacity-20" style={{ backgroundColor: palette.text }} />
+                        {/* Demande d'Adriel (01/08/2026) : "quand on clique sur imprimante, il faut un
+                            target avec une page" — ouvre désormais une page dédiée (voir
+                            /g/[gallerySlug]/print-selection/page.tsx) dans un nouvel onglet plutôt que
+                            la modale PrintSelectionPanel (supprimée), qui superposait l'écran de
+                            commande à la galerie. */}
+                        <Link
+                          href={`/g/${gallery.slug}/print-selection`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Sélection impression"
+                          aria-label="Sélection impression"
+                          className="relative flex h-8 w-8 items-center justify-center rounded-full opacity-70 transition-colors hover:bg-black/5 hover:opacity-100"
+                        >
+                          <IconPrinter />
+                          {printSelection.size > 0 && (
+                            <span
+                              className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-semibold text-white"
+                              style={{ backgroundColor: palette.accent }}
+                            >
+                              {printSelection.size}
+                            </span>
+                          )}
+                        </Link>
+                      </>
+                    )}
+                    {gallery.allowFavorites && (
+                      <IconButton
+                        label={favoritesOnly ? "Toutes les photos" : "Mes favoris"}
+                        onClick={() => setFavoritesOnly((v) => !v)}
+                        active={favoritesOnly}
+                      >
+                        <IconHeart filled={favoritesOnly} />
+                      </IconButton>
+                    )}
+                    {gallery.allowDownload && (
+                      <IconButton label="Télécharger" onClick={() => setDownloadPanelOpen(true)}>
+                        <IconDownload />
+                      </IconButton>
+                    )}
+                  </>
+                )}
+                <IconButton label="Partager" onClick={() => openShare()}>
+                  <IconShare />
+                </IconButton>
+                {mainView === "photos" && photos.length > 0 && (
+                  <IconButton label="Diaporama" onClick={() => setLightboxIndex(0)}>
+                    <IconPlay />
+                  </IconButton>
+                )}
+                {mainView === "photos" && allowRemarks && (
+                  <IconButton
+                    label={remarksOnly ? "Toutes les photos" : "Mes remarques"}
+                    onClick={() => setRemarksOnly((v) => !v)}
+                    active={remarksOnly}
+                  >
+                    <IconRemark />
+                  </IconButton>
+                )}
+              </div>
+
+              {/* Mobile : les mêmes actions regroupées derrière un bouton "..." plutôt
+                  qu'étalées en icônes, pour ne jamais déborder de l'écran. */}
+              <div className="relative sm:hidden">
+                <IconButton
+                  label="Plus d'actions"
+                  onClick={() => setActionsMenuOpen((v) => !v)}
+                  active={actionsMenuOpen}
+                >
+                  <IconMore />
+                </IconButton>
+                {actionsMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setActionsMenuOpen(false)} />
+                    <div
+                      className="absolute right-0 top-full z-40 mt-2 w-60 overflow-hidden rounded-xl border py-1 shadow-lg"
+                      style={{ backgroundColor: palette.bg, borderColor: `${palette.accent}33` }}
+                    >
+                      {mainView === "photos" && allowPrintStore && (
+                        <MenuRow
+                          icon={<IconPrinter />}
+                          label="Sélection impression"
+                          href={`/g/${gallery.slug}/print-selection`}
+                          target="_blank"
+                          badge={printSelection.size}
+                          onClick={() => setActionsMenuOpen(false)}
+                        />
+                      )}
+                      {mainView === "photos" && gallery.allowFavorites && (
+                        <MenuRow
+                          icon={<IconHeart filled={favoritesOnly} />}
+                          label={favoritesOnly ? "Toutes les photos" : "Mes favoris"}
+                          active={favoritesOnly}
+                          onClick={() => {
+                            setFavoritesOnly((v) => !v);
+                            setActionsMenuOpen(false);
+                          }}
+                        />
+                      )}
+                      {mainView === "photos" && gallery.allowDownload && (
+                        <MenuRow
+                          icon={<IconDownload />}
+                          label="Télécharger"
+                          onClick={() => {
+                            setDownloadPanelOpen(true);
+                            setActionsMenuOpen(false);
+                          }}
+                        />
+                      )}
+                      <MenuRow
+                        icon={<IconShare />}
+                        label="Partager"
+                        onClick={() => {
+                          openShare();
+                          setActionsMenuOpen(false);
+                        }}
+                      />
+                      {mainView === "photos" && photos.length > 0 && (
+                        <MenuRow
+                          icon={<IconPlay />}
+                          label="Diaporama"
+                          onClick={() => {
+                            setLightboxIndex(0);
+                            setActionsMenuOpen(false);
+                          }}
+                        />
+                      )}
+                      {mainView === "photos" && allowRemarks && (
+                        <MenuRow
+                          icon={<IconRemark />}
+                          label={remarksOnly ? "Toutes les photos" : "Mes remarques"}
+                          active={remarksOnly}
+                          onClick={() => {
+                            setRemarksOnly((v) => !v);
+                            setActionsMenuOpen(false);
+                          }}
+                        />
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Filtre par set : une pill par set + "Toutes les photos", masqué si la galerie
-              n'a aucun set ou si on est en vue Vidéo. Sur la même ligne que le bloc
-              avatar/titre (plutôt que sur sa propre ligne en dessous), avec défilement
-              horizontal plutôt que passage à la ligne pour rester compact. */}
+          {/* Filtre par set : une pill par set + "Toutes les photos", sur sa propre ligne,
+              masqué si la galerie n'a aucun set ou si on est en vue Vidéo. */}
           {mainView === "photos" && collections.length > 0 && (
-            <div className="flex min-w-0 items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+            <div className="mt-2 flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
               <SetPill
                 label="Toutes les photos"
                 active={activeSetId === null}
@@ -450,113 +651,6 @@ export function GalleryView({
             </div>
           )}
         </div>
-
-        <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
-          {/* Sélecteur de langue (02/08/2026, demande d'Adriel : "dans gallery mettre la
-              possibilité de changer de langue") — réutilise le composant du site marketing. */}
-          <MarketingLanguageSwitcher />
-          <span className="hidden h-4 w-px opacity-20 sm:inline" style={{ backgroundColor: palette.text }} />
-          {/* Bascule Photos / Vidéo — visible seulement si la galerie a au moins une
-              vidéo (voir `videos` prop), au même niveau que les icônes d'action et
-              directement à côté d'elles plutôt que sur sa propre ligne. */}
-          {videos.length > 0 && (
-            <div className="flex items-center gap-1 rounded-full bg-black/5 p-0.5 text-[11px] font-semibold uppercase tracking-wide">
-              <button
-                onClick={() => setMainView("photos")}
-                className="rounded-full px-2.5 py-1 transition-colors"
-                style={{
-                  opacity: mainView === "photos" ? 1 : 0.6,
-                  backgroundColor: mainView === "photos" ? palette.bg : "transparent",
-                }}
-              >
-                Photos
-              </button>
-              <button
-                onClick={() => setMainView("video")}
-                className="rounded-full px-2.5 py-1 transition-colors"
-                style={{
-                  opacity: mainView === "video" ? 1 : 0.6,
-                  backgroundColor: mainView === "video" ? palette.bg : "transparent",
-                }}
-              >
-                Vidéo
-              </button>
-            </div>
-          )}
-          {videos.length > 0 && (
-            <span className="hidden h-4 w-px opacity-20 sm:inline" style={{ backgroundColor: palette.text }} />
-          )}
-          {mainView === "photos" && (
-            <>
-              {allowPrintStore && (
-                <>
-                  <Link
-                    href={`/g/${gallery.slug}/store`}
-                    className="hidden text-xs uppercase tracking-wide opacity-70 hover:opacity-100 sm:inline"
-                  >
-                    Print Store
-                  </Link>
-                  <span className="hidden h-4 w-px opacity-20 sm:inline" style={{ backgroundColor: palette.text }} />
-                  {/* Demande d'Adriel (01/08/2026) : "quand on clique sur imprimante, il faut un
-                      target avec une page" — ouvre désormais une page dédiée (voir
-                      /g/[gallerySlug]/print-selection/page.tsx) dans un nouvel onglet plutôt que
-                      la modale PrintSelectionPanel (supprimée), qui superposait l'écran de
-                      commande à la galerie. */}
-                  <Link
-                    href={`/g/${gallery.slug}/print-selection`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Sélection impression"
-                    aria-label="Sélection impression"
-                    className="relative flex h-8 w-8 items-center justify-center rounded-full opacity-70 transition-colors hover:bg-black/5 hover:opacity-100"
-                  >
-                    <IconPrinter />
-                    {printSelection.size > 0 && (
-                      <span
-                        className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-semibold text-white"
-                        style={{ backgroundColor: palette.accent }}
-                      >
-                        {printSelection.size}
-                      </span>
-                    )}
-                  </Link>
-                </>
-              )}
-              {gallery.allowFavorites && (
-                <IconButton
-                  label={favoritesOnly ? "Toutes les photos" : "Mes favoris"}
-                  onClick={() => setFavoritesOnly((v) => !v)}
-                  active={favoritesOnly}
-                >
-                  <IconHeart filled={favoritesOnly} />
-                </IconButton>
-              )}
-              {gallery.allowDownload && (
-                <IconButton label="Télécharger" onClick={() => setDownloadPanelOpen(true)}>
-                  <IconDownload />
-                </IconButton>
-              )}
-            </>
-          )}
-          <IconButton label="Partager" onClick={() => openShare()}>
-            <IconShare />
-          </IconButton>
-          {mainView === "photos" && photos.length > 0 && (
-            <IconButton label="Diaporama" onClick={() => setLightboxIndex(0)}>
-              <IconPlay />
-            </IconButton>
-          )}
-          {mainView === "photos" && allowRemarks && (
-            <IconButton
-              label={remarksOnly ? "Toutes les photos" : "Mes remarques"}
-              onClick={() => setRemarksOnly((v) => !v)}
-              active={remarksOnly}
-            >
-              <IconRemark />
-            </IconButton>
-          )}
-        </div>
-      </div>
       </div>
 
       {mainView === "video" && videos.length > 0 && (
@@ -1455,6 +1549,52 @@ function IconButton({
   return (
     <button onClick={onClick} title={label} aria-label={label} className={className}>
       {children}
+    </button>
+  );
+}
+
+/** Ligne d'action à l'intérieur du menu "..." mobile de la barre du haut (voir plus haut) —
+ * même rôle qu'IconButton, mais en pleine largeur avec icône + libellé, pour un menu
+ * déroulant plutôt qu'une rangée d'icônes. */
+function MenuRow({
+  icon,
+  label,
+  onClick,
+  href,
+  target,
+  active,
+  badge,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick?: () => void;
+  href?: string;
+  target?: string;
+  active?: boolean;
+  badge?: number;
+}) {
+  const content = (
+    <>
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center">{icon}</span>
+      <span className="flex-1 truncate">{label}</span>
+      {!!badge && (
+        <span className="rounded-full bg-black/10 px-1.5 py-0.5 text-[10px] font-semibold">{badge}</span>
+      )}
+    </>
+  );
+  const className = `flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm transition-colors hover:bg-black/5 ${
+    active ? "font-medium opacity-100" : "opacity-80"
+  }`;
+  if (href) {
+    return (
+      <Link href={href} target={target} rel={target ? "noopener noreferrer" : undefined} className={className} onClick={onClick}>
+        {content}
+      </Link>
+    );
+  }
+  return (
+    <button type="button" onClick={onClick} className={className}>
+      {content}
     </button>
   );
 }
