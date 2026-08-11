@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireStudioSession, AccessError } from "@/lib/access";
+import { parseBookingHours, type BookingHours } from "@/lib/bookingHours";
 
 export async function GET() {
   try {
@@ -29,9 +30,10 @@ export async function GET() {
           bankName: string | null;
           invoiceLegalMentions: string | null;
           invoiceNumberPrefix: string | null;
+          bookingHours: unknown;
         }[]
       >`
-        SELECT "legalForm", siret, "vatNumber", "vatExempt", "vatRate", iban, bic, "bankName", "invoiceLegalMentions", "invoiceNumberPrefix"
+        SELECT "legalForm", siret, "vatNumber", "vatExempt", "vatRate", iban, bic, "bankName", "invoiceLegalMentions", "invoiceNumberPrefix", "bookingHours"
         FROM "StudioSettings" WHERE "studioId" = ${session.user.studioId}
       `;
       studioWithBilling = {
@@ -48,6 +50,9 @@ export async function GET() {
           bankName: billingRow?.bankName ?? null,
           invoiceLegalMentions: billingRow?.invoiceLegalMentions ?? null,
           invoiceNumberPrefix: billingRow?.invoiceNumberPrefix ?? null,
+          // Toujours un planning complet et valide (voir parseBookingHours) — que le studio
+          // n'ait encore rien configuré (colonne null) ou une valeur partiellement corrompue.
+          bookingHours: parseBookingHours(billingRow?.bookingHours ?? null),
         },
       } as typeof studio;
     }
@@ -134,6 +139,14 @@ export async function PATCH(req: Request) {
     }
     if (body.invoiceNumberPrefix !== undefined) {
       await prisma.$executeRaw`UPDATE "StudioSettings" SET "invoiceNumberPrefix" = ${body.invoiceNumberPrefix} WHERE "studioId" = ${session.user.studioId}`;
+    }
+    // Horaires d'ouverture des réservations (Réglages > Réservations, 11/08/2026) — normalisés
+    // via parseBookingHours avant écriture : un jour manquant/invalide dans ce que le
+    // formulaire envoie retombe sur le défaut de ce jour plutôt que de corrompre la colonne ou
+    // de faire échouer toute la sauvegarde pour un seul champ mal formé.
+    if (body.bookingHours !== undefined) {
+      const normalized: BookingHours = parseBookingHours(body.bookingHours);
+      await prisma.$executeRaw`UPDATE "StudioSettings" SET "bookingHours" = ${JSON.stringify(normalized)}::jsonb WHERE "studioId" = ${session.user.studioId}`;
     }
 
     if (body.heroTitle !== undefined || body.heroSubtitle !== undefined) {

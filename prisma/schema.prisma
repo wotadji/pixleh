@@ -252,6 +252,17 @@ model StudioSettings {
   invoiceLegalMentions String? @db.Text
   /// Préfixe du numéro de facture (ex: "FAC" → "FAC-2026-0001").
   invoiceNumberPrefix  String? @default("FAC")
+  /// Horaires d'ouverture pour les réservations (site public /s/[slug]/book) — demande
+  /// d'Adriel (11/08/2026) : "le studio dois valider ces horaire de travail (par exemple de
+  /// 8h a 22h en semaine et 2h le week-end). comme ca les horaire ou selection des horaires
+  /// se feront [dans ces limites]". Forme : Record<"mon"|"tue"|"wed"|"thu"|"fri"|"sat"|"sun",
+  /// { enabled: boolean; start: string; end: string }> (start/end au format "HH:mm") — voir
+  /// src/lib/bookingHours.ts pour les types/défauts et src/lib/bookingAvailability.ts pour le
+  /// calcul des créneaux réellement proposés (horaires moins les réservations déjà prises).
+  /// `null` tant que le studio n'a rien configuré : DEFAULT_BOOKING_HOURS s'applique alors.
+  /// Même limitation de sandbox que les autres champs récents de StudioSettings : lu/écrit via
+  /// $queryRaw/$executeRaw tant qu'Adriel n'a pas relancé `prisma generate && prisma db push`.
+  bookingHours       Json?
 }
 
 model User {

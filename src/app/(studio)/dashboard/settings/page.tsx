@@ -10,6 +10,7 @@ import { RichTextEditor } from "@/components/studio/RichTextEditor";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { Modal } from "@/components/ui/Modal";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { DEFAULT_BOOKING_HOURS, WEEKDAY_KEYS, type BookingHours, type WeekdayKey } from "@/lib/bookingHours";
 
 interface BookingTypeDTO {
   id: string;
@@ -32,7 +33,7 @@ function makeSlideId() {
 type SettingsTab = "profile" | "account" | "password" | "watermark" | "carousel" | "bookingTypes" | "billing";
 
 export default function SettingsPage() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const { data: authSession } = useSession();
   const searchParams = useSearchParams();
   // Permet un lien direct vers un onglet précis (ex: /dashboard/settings?tab=billing depuis
@@ -153,6 +154,14 @@ export default function SettingsPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
 
+  // Horaires d'ouverture des réservations (11/08/2026, demande d'Adriel : "le studio dois
+  // valider ces horaire de travail [...] comme ca les horaire ou selection des horaires se
+  // feront" dans ces limites) — voir src/lib/bookingHours.ts pour les types/défauts et
+  // BookingForm.tsx (site public) pour la grille de créneaux qui en découle.
+  const [bookingHours, setBookingHours] = useState<BookingHours>(DEFAULT_BOOKING_HOURS);
+  const [hoursSaving, setHoursSaving] = useState(false);
+  const [hoursSaved, setHoursSaved] = useState(false);
+
   function loadSettings() {
     return fetch("/api/settings")
       .then((r) => r.json())
@@ -183,6 +192,7 @@ export default function SettingsPage() {
         setCarouselSlides(
           Array.isArray(d.studio?.settings?.carouselSlides) ? d.studio.settings.carouselSlides : []
         );
+        setBookingHours(d.studio?.settings?.bookingHours || DEFAULT_BOOKING_HOURS);
       });
   }
   function loadTypes() {
@@ -458,6 +468,48 @@ export default function SettingsPage() {
     });
     setNewType({ name: "", durationMinutes: 60, priceCents: 0 });
     loadTypes();
+  }
+
+  function toggleBookingDay(key: WeekdayKey) {
+    setBookingHours((prev) => ({ ...prev, [key]: { ...prev[key], enabled: !prev[key].enabled } }));
+  }
+
+  function updateBookingDayTime(key: WeekdayKey, field: "start" | "end", value: string) {
+    setBookingHours((prev) => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
+  }
+
+  async function saveBookingHours() {
+    setHoursSaving(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingHours }),
+      });
+      if (res.ok) {
+        setHoursSaved(true);
+        setTimeout(() => setHoursSaved(false), 2000);
+      }
+    } finally {
+      setHoursSaving(false);
+    }
+  }
+
+  // Libellés de jour localisés sans dictionnaire dédié : une date de référence par jour de
+  // semaine (5-11 janvier 2026 = lundi-dimanche) formatée via Intl selon la langue active —
+  // évite d'ajouter 7 clés i18n juste pour "Lundi"/"Mardi"/etc. dans les 6 langues du produit.
+  const WEEKDAY_REF_DATES: Record<WeekdayKey, Date> = {
+    mon: new Date(2026, 0, 5),
+    tue: new Date(2026, 0, 6),
+    wed: new Date(2026, 0, 7),
+    thu: new Date(2026, 0, 8),
+    fri: new Date(2026, 0, 9),
+    sat: new Date(2026, 0, 10),
+    sun: new Date(2026, 0, 11),
+  };
+  function weekdayLabel(key: WeekdayKey) {
+    const label = new Intl.DateTimeFormat(locale, { weekday: "long" }).format(WEEKDAY_REF_DATES[key]);
+    return label.charAt(0).toUpperCase() + label.slice(1);
   }
 
   return (
@@ -900,6 +952,67 @@ export default function SettingsPage() {
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {/* Horaires d'ouverture (11/08/2026, demande d'Adriel) : bornent les créneaux
+            proposés sur la page publique de réservation (/s/[slug]/book) — voir
+            src/lib/bookingHours.ts et src/lib/bookingAvailability.ts. */}
+        {tab === "bookingTypes" && (
+          <div className="card mt-4 space-y-3">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">{t("settings.bookingHoursTitle")}</h2>
+              <p className="mt-0.5 text-xs text-gray-500">{t("settings.bookingHoursHint")}</p>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {WEEKDAY_KEYS.map((key) => {
+                const day = bookingHours[key];
+                return (
+                  <div key={key} className="flex flex-wrap items-center gap-3 py-2.5">
+                    <label className="flex w-36 shrink-0 items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={day.enabled}
+                        onChange={() => toggleBookingDay(key)}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <span className={day.enabled ? "text-gray-900" : "text-gray-400"}>
+                        {weekdayLabel(key)}
+                      </span>
+                    </label>
+                    <input
+                      type="time"
+                      disabled={!day.enabled}
+                      value={day.start}
+                      onChange={(e) => updateBookingDayTime(key, "start", e.target.value)}
+                      className="input w-32 disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                    <span className="text-sm text-gray-400">–</span>
+                    <input
+                      type="time"
+                      disabled={!day.enabled}
+                      value={day.end}
+                      onChange={(e) => updateBookingDayTime(key, "end", e.target.value)}
+                      className="input w-32 disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                    {day.enabled && day.start >= day.end && (
+                      <span className="text-xs text-red-600">{t("settings.bookingHoursInvalidRange")}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div>
+              <button
+                type="button"
+                onClick={saveBookingHours}
+                disabled={hoursSaving}
+                className="btn-primary text-sm"
+              >
+                {t("common.save")}
+              </button>
+              {hoursSaved && <span className="ml-2 text-sm text-green-600">{t("common.saved")}</span>}
+            </div>
           </div>
         )}
 

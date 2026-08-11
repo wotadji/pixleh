@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireStudioSession, AccessError } from "@/lib/access";
 import { bookingRequestSchema } from "@/lib/validators";
 import { sendStudioNewBookingEmail, sendClientBookingConfirmationEmail } from "@/lib/notifications";
+import { parseBookingHours } from "@/lib/bookingHours";
+import { isSlotAvailable } from "@/lib/bookingAvailability";
 
 /** Liste des réservations du studio connecté. */
 export async function GET() {
@@ -34,6 +36,39 @@ export async function POST(req: Request) {
   if (!studio) return NextResponse.json({ error: "Studio introuvable" }, { status: 404 });
 
   const data = parsed.data;
+  const startsAt = new Date(data.startsAt);
+  const endsAt = new Date(data.endsAt);
+  if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
+    return NextResponse.json({ error: "Date invalide" }, { status: 400 });
+  }
+
+  // Re-vérification côté serveur, indispensable : la grille de créneaux affichée au client
+  // (voir GET /api/bookings/availability) a pu devenir obsolète entre l'affichage et la
+  // soumission — un autre visiteur a pu prendre le même créneau entre-temps (condition de
+  // course classique). Sans ce contrôle, deux clients pourraient réserver le même horaire.
+  const dayStart = new Date(startsAt);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60000);
+  const [hoursRow] = await prisma.$queryRaw<{ bookingHours: unknown }[]>`
+    SELECT "bookingHours" FROM "StudioSettings" WHERE "studioId" = ${studio.id}
+  `;
+  const hours = parseBookingHours(hoursRow?.bookingHours ?? null);
+  const occupied = await prisma.booking.findMany({
+    where: {
+      studioId: studio.id,
+      status: { in: ["PENDING", "CONFIRMED"] },
+      startsAt: { lt: dayEnd },
+      endsAt: { gt: dayStart },
+    },
+    select: { startsAt: true, endsAt: true },
+  });
+  if (!isSlotAvailable({ startsAt, endsAt, hours, occupied })) {
+    return NextResponse.json(
+      { error: "Ce créneau vient d'être pris ou n'est plus disponible. Merci d'en choisir un autre." },
+      { status: 409 }
+    );
+  }
+
   const booking = await prisma.booking.create({
     data: {
       studioId: studio.id,
@@ -41,8 +76,8 @@ export async function POST(req: Request) {
       customerName: data.customerName,
       customerEmail: data.customerEmail,
       customerPhone: data.customerPhone || null,
-      startsAt: new Date(data.startsAt),
-      endsAt: new Date(data.endsAt),
+      startsAt,
+      endsAt,
       notes: data.notes || null,
       status: "PENDING",
     },

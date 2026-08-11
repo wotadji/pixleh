@@ -553,6 +553,90 @@ export async function sendClientBookingConfirmationEmail(params: {
   });
 }
 
+/** Envoyée au client quand le studio CONFIRME sa demande de réservation (PENDING → CONFIRMED,
+ * voir PATCH /api/bookings/[id]) — demande d'Adriel (11/08/2026) : "apres validation ou
+ * acceptation par le studio, la personne aui a reservé dois avoir le message". Distincte de
+ * sendClientBookingConfirmationEmail ci-dessus, qui ne fait qu'accuser réception de la
+ * DEMANDE (toujours en attente à ce stade). */
+export async function sendBookingConfirmedEmail(params: {
+  customerName: string;
+  customerEmail: string;
+  studioName: string;
+  startsAt: Date;
+  endsAt: Date;
+}) {
+  const dateLabel = params.startsAt.toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" });
+  const timeRangeLabel = `${params.startsAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })} – ${params.endsAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
+  const html = wrapEmail(`
+    <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Réservation confirmée ✅</h2>
+    <p>Bonjour ${escapeHtml(params.customerName)},</p>
+    <p><strong>${escapeHtml(params.studioName)}</strong> a confirmé votre réservation du
+    <strong>${dateLabel}</strong> (${timeRangeLabel}).</p>
+    <p>À très bientôt !</p>
+  `);
+
+  return sendMail({
+    to: params.customerEmail,
+    subject: `Réservation confirmée — ${params.studioName}`,
+    text: `Bonjour ${params.customerName}, ${params.studioName} a confirmé votre réservation du ${dateLabel} (${timeRangeLabel}). À bientôt !`,
+    html,
+  });
+}
+
+/** Envoyée au client quand le studio REFUSE sa demande de réservation (PENDING → CANCELLED
+ * directement, sans être jamais passée par CONFIRMED) — voir sendBookingCancelledEmail
+ * ci-dessous pour le cas distinct d'une réservation déjà confirmée puis annulée. */
+export async function sendBookingDeclinedEmail(params: {
+  customerName: string;
+  customerEmail: string;
+  studioName: string;
+  startsAt: Date;
+}) {
+  const dateLabel = params.startsAt.toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" });
+  const html = wrapEmail(`
+    <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Demande de réservation non retenue</h2>
+    <p>Bonjour ${escapeHtml(params.customerName)},</p>
+    <p><strong>${escapeHtml(params.studioName)}</strong> n'est malheureusement pas en mesure de
+    donner suite à votre demande de réservation du <strong>${dateLabel}</strong>.</p>
+    <p>N'hésitez pas à proposer un autre créneau si vous le souhaitez.</p>
+  `);
+
+  return sendMail({
+    to: params.customerEmail,
+    subject: `Votre demande de réservation n'a pas pu être retenue — ${params.studioName}`,
+    text: `Bonjour ${params.customerName}, ${params.studioName} n'est malheureusement pas en mesure de donner suite à votre demande de réservation du ${dateLabel}. N'hésitez pas à proposer un autre créneau.`,
+    html,
+  });
+}
+
+/** Envoyée au client quand une réservation DÉJÀ CONFIRMÉE est finalement annulée par le studio
+ * (CONFIRMED → CANCELLED) — cas distinct d'un refus initial (voir sendBookingDeclinedEmail) :
+ * le client pensait sa séance acquise, l'annulation mérite un message plus explicite qu'un
+ * simple refus de demande. Demande d'Adriel (11/08/2026) : "une reservation validé peux etre
+ * annulé [...] apres" [sa confirmation]. */
+export async function sendBookingCancelledEmail(params: {
+  customerName: string;
+  customerEmail: string;
+  studioName: string;
+  startsAt: Date;
+}) {
+  const dateLabel = params.startsAt.toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" });
+  const html = wrapEmail(`
+    <h2 style="color:#111827;font-size:19px;margin:0 0 12px;">Réservation annulée</h2>
+    <p>Bonjour ${escapeHtml(params.customerName)},</p>
+    <p><strong>${escapeHtml(params.studioName)}</strong> a dû annuler votre réservation, initialement
+    confirmée pour le <strong>${dateLabel}</strong>.</p>
+    <p>N'hésitez pas à les recontacter pour convenir d'un nouveau créneau.</p>
+  `);
+
+  return sendMail({
+    to: params.customerEmail,
+    subject: `Réservation annulée — ${params.studioName}`,
+    text: `Bonjour ${params.customerName}, ${params.studioName} a dû annuler votre réservation, initialement confirmée pour le ${dateLabel}. N'hésitez pas à les recontacter pour convenir d'un nouveau créneau.`,
+    html,
+  });
+}
+
 /** Nouveau visiteur sur le lien invité d'une galerie (voir /api/guest-access) — n'est
  * appelé que pour un email jamais vu sur cette galerie (première visite), pas à chaque
  * retour du même invité, pour ne pas spammer le studio. */
