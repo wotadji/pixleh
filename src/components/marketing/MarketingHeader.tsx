@@ -96,18 +96,24 @@ export function MarketingHeader({ transparent = false }: { transparent?: boolean
             );
           })}
         </nav>
-        <div className="flex items-center gap-4">
-          <MarketingLanguageSwitcher transparent={transparent} />
-          <LoginMenu transparent={transparent} />
-          {/* "Créer mon studio" passe d'abord par la page Tarifs (choix d'un plan) plutôt que
-              directement vers l'inscription — "Connexion" reste inchangé (/login) pour un
-              utilisateur existant. */}
-          <Link href="/tarifs" className="btn-primary hidden sm:inline-flex">
-            {t("marketing.nav.cta")}
-          </Link>
-          {/* Icône menu — mobile uniquement, placée à droite du header — demande d'Adriel,
-              12/08/2026. Ouvre un tiroir avec les 3 liens de nav + Espace Professionnel/Client
-              (auparavant sur une rangée séparée sous le header, qui débordait sur mobile). */}
+        {/* Sur mobile, l'icône menu passe sous le bouton "Créer mon studio" (plutôt que sur la
+            même ligne, trop serré) — demande d'Adriel, 12/08/2026. `sm:contents` fait
+            disparaître le sous-groupe à partir de sm : sélecteur de langue, connexion et CTA
+            rejoignent alors la ligne unique d'origine, à côté de l'icône (masquée sm:hidden). */}
+        <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center sm:gap-4">
+          <div className="flex items-center gap-4 sm:contents">
+            <MarketingLanguageSwitcher transparent={transparent} />
+            <LoginMenu transparent={transparent} />
+            {/* "Créer mon studio" passe d'abord par la page Tarifs (choix d'un plan) plutôt
+                que directement vers l'inscription — "Connexion" reste inchangé (/login) pour
+                un utilisateur existant. */}
+            <Link href="/tarifs" className="btn-primary">
+              {t("marketing.nav.cta")}
+            </Link>
+          </div>
+          {/* Icône menu — mobile uniquement. Ouvre un tiroir avec les 3 liens de nav + Espace
+              Professionnel/Client (le CTA n'y figure plus : il est déjà visible juste
+              au-dessus, demande d'Adriel, 12/08/2026). */}
           <button
             type="button"
             onClick={() => setMobileMenuOpen((v) => !v)}
@@ -151,13 +157,6 @@ export function MarketingHeader({ transparent = false }: { transparent?: boolean
                 </Link>
               );
             })}
-            <Link
-              href="/tarifs"
-              onClick={() => setMobileMenuOpen(false)}
-              className="btn-primary mt-2 justify-center"
-            >
-              {t("marketing.nav.cta")}
-            </Link>
           </nav>
         </>
       )}
