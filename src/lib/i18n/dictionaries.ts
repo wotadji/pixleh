@@ -429,7 +429,7 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "guests.prevPage": "Précédent",
     "guests.nextPage": "Suivant",
     "guests.pageInfo": "Page {page} sur {total}",
-    "guests.perPage": "Par page",
+    "guests.perPage": "Page",
 
     "products.title": "Boutique — Produits",
     "products.printMovedToAdminNote": "Les produits d'impression (tirages, toiles...) sont désormais un service pixleh géré centralement — ils ne sont plus créés ici. Cette page reste pour vos éventuels téléchargements numériques, albums ou packages.",
