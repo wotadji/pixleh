@@ -63,8 +63,13 @@ export function MarketingHeader({ transparent = false }: { transparent?: boolean
           : "border-b border-gray-100"
       }
     >
-      <div className="relative mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <Link href="/" className={transparent ? "text-white" : undefined}>
+      <div className="relative mx-auto flex max-w-6xl items-start justify-between px-6 py-4 sm:items-center">
+        {/* self-start + sm:self-center : le groupe de droite est sur 2 lignes en mobile (CTA
+            puis icône menu, voir plus bas), donc "items-center" au niveau de la ligne
+            centrerait le logo entre les deux lignes au lieu de l'aligner avec le bouton
+            "Créer mon studio" — demande d'Adriel, 12/08/2026 ("bien aligné le logo ... le
+            faire remonter pour qu'il soit aligné avec le bouton creer mon studio"). */}
+        <Link href="/" className={`self-start sm:self-center ${transparent ? "text-white" : ""}`}>
           <PixlehLogo size={26} />
         </Link>
         {/* Centrée par rapport à la barre entière (absolute + translate), pas seulement à
