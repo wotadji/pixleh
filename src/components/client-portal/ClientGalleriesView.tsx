@@ -293,32 +293,38 @@ export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
                 </select>
               </div>
             )}
-            <div className="col-span-2 flex shrink-0 items-center justify-center gap-1 rounded-lg border border-gray-200 p-0.5 sm:col-span-1 sm:w-auto sm:justify-start">
-              <button
-                type="button"
-                onClick={() => changeView("grid")}
-                title={t("galleries.viewGrid")}
-                className={`rounded-md p-1.5 ${viewMode === "grid" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
-              >
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-                  <rect x="2" y="2" width="7" height="7" rx="1" fill="currentColor" />
-                  <rect x="11" y="2" width="7" height="7" rx="1" fill="currentColor" />
-                  <rect x="2" y="11" width="7" height="7" rx="1" fill="currentColor" />
-                  <rect x="11" y="11" width="7" height="7" rx="1" fill="currentColor" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => changeView("list")}
-                title={t("galleries.viewList")}
-                className={`rounded-md p-1.5 ${viewMode === "list" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
-              >
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-                  <rect x="2" y="3" width="16" height="3" rx="1" fill="currentColor" />
-                  <rect x="2" y="8.5" width="16" height="3" rx="1" fill="currentColor" />
-                  <rect x="2" y="14" width="16" height="3" rx="1" fill="currentColor" />
-                </svg>
-              </button>
+            {/* col-span-2 + justify-end : la bascule grille/liste occupe toute la largeur de la
+                grille mobile mais son contenu (largeur auto) est poussé à droite plutôt que
+                centré — demande d'Adriel, 12/08/2026 ("mettre les boutons de la gestion de
+                l'affichage a la droite"). */}
+            <div className="col-span-2 flex justify-end sm:col-span-1 sm:w-auto sm:justify-start">
+              <div className="flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => changeView("grid")}
+                  title={t("galleries.viewGrid")}
+                  className={`rounded-md p-1.5 ${viewMode === "grid" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+                >
+                  <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                    <rect x="2" y="2" width="7" height="7" rx="1" fill="currentColor" />
+                    <rect x="11" y="2" width="7" height="7" rx="1" fill="currentColor" />
+                    <rect x="2" y="11" width="7" height="7" rx="1" fill="currentColor" />
+                    <rect x="11" y="11" width="7" height="7" rx="1" fill="currentColor" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => changeView("list")}
+                  title={t("galleries.viewList")}
+                  className={`rounded-md p-1.5 ${viewMode === "list" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+                >
+                  <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                    <rect x="2" y="3" width="16" height="3" rx="1" fill="currentColor" />
+                    <rect x="2" y="8.5" width="16" height="3" rx="1" fill="currentColor" />
+                    <rect x="2" y="14" width="16" height="3" rx="1" fill="currentColor" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>
