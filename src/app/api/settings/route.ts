@@ -54,7 +54,7 @@ export async function GET() {
           // n'ait encore rien configuré (colonne null) ou une valeur partiellement corrompue.
           bookingHours: parseBookingHours(billingRow?.bookingHours ?? null),
         },
-      } as typeof studio;
+      } as unknown as typeof studio;
     }
 
     // session.user.name/email sont relus depuis la base à chaque session (voir auth.ts) :
