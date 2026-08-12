@@ -235,15 +235,15 @@ export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
     <div className="px-6 py-10 sm:px-10">
       <h1 className="font-serif text-2xl font-semibold text-gray-900">{t("client.galleries.title")}</h1>
 
-      {/* Chaque contrôle est enveloppé dans un div de largeur fixe (shrink-0) : la classe
-          utilitaire .input applique w-full (voir globals.css), qui écraserait sinon toute
-          largeur passée directement sur l'<input>/<select>. justify-between garde la recherche
-          collée à gauche et les filtres + la bascule grille/liste collés à droite (demande
-          d'Adriel du 30/07/2026) ; chaque groupe peut retomber sur sa propre ligne si l'écran
-          est trop étroit (flex-wrap), plutôt qu'un défilement horizontal forcé. */}
+      {/* Sur mobile : la recherche occupe toute la largeur, et les deux selects (Statut,
+          Téléchargements) se partagent une grille à 2 colonnes égales juste en dessous, pour
+          que leurs bords s'alignent avec la barre de recherche au-dessus — demande d'Adriel,
+          12/08/2026 ("bien aligné la barre de recherche les deux select"). À partir de sm, on
+          repasse à la disposition en ligne d'origine (largeurs fixes, recherche à gauche,
+          filtres + bascule grille/liste à droite, demande d'Adriel du 30/07/2026). */}
       {allGalleries.length > 0 && (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="w-44 shrink-0">
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
+          <div className="w-full sm:w-44 sm:shrink-0">
             <input
               type="text"
               value={search}
@@ -253,8 +253,8 @@ export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="w-36 shrink-0">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+            <div className="sm:w-36 sm:shrink-0">
               <select
                 className="input text-sm"
                 value={statusFilter}
@@ -266,7 +266,7 @@ export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
                 <option value="ARCHIVED">{STATUS_LABELS.ARCHIVED}</option>
               </select>
             </div>
-            <div className="w-40 shrink-0">
+            <div className="sm:w-40 sm:shrink-0">
               <select
                 className="input text-sm"
                 value={downloadsFilter}
@@ -278,7 +278,7 @@ export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
               </select>
             </div>
             {studioOptions.length > 1 && (
-              <div className="w-40 shrink-0">
+              <div className="col-span-2 sm:col-span-1 sm:w-40 sm:shrink-0">
                 <select
                   className="input text-sm"
                   value={studioFilter}
@@ -293,7 +293,7 @@ export function ClientGalleriesView({ rows }: { rows: StudioRow[] }) {
                 </select>
               </div>
             )}
-            <div className="flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 p-0.5">
+            <div className="col-span-2 flex shrink-0 items-center justify-center gap-1 rounded-lg border border-gray-200 p-0.5 sm:col-span-1 sm:w-auto sm:justify-start">
               <button
                 type="button"
                 onClick={() => changeView("grid")}
