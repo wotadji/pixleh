@@ -96,7 +96,10 @@ function HeroBlock({ data, blockId }: { data: HeroBlockData; blockId: string }) 
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={data.imageUrl} alt="" className="absolute inset-0 -z-20 h-full w-full object-cover" />
         <div className="absolute inset-0 -z-10 bg-gradient-to-r from-black/80 via-black/50 to-black/10" />
-        <div className="mx-auto flex min-h-[860px] max-w-6xl items-center px-6 py-24">
+        {/* pt-0 en mobile (le header transparent superposé suffit comme espace au-dessus du
+            titre), pb-24 conservé — demande d'Adriel, 12/08/2026, retiré depuis l'inspecteur
+            (.py-24 padding-top décoché). Restauré à partir de sm. */}
+        <div className="mx-auto flex min-h-[860px] max-w-6xl items-center px-6 pb-24 pt-0 sm:py-24">
           {/* max-w-3xl (plus large que les autres styles) + taille de titre fixe (pas de
               palier sm:text-5xl) : les deux mis bout à bout laissent assez de place pour
               qu'un titre de longueur normale tienne sur 2 lignes sans être coupé. */}
