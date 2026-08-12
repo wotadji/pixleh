@@ -90,15 +90,16 @@ function ClientLoginInner() {
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
-      {/* Lien retour à l'accueil, positionné comme le logo dans l'en-tête marketing (voir
-          MarketingHeader.tsx) — cette page n'avait jusqu'ici aucun moyen de revenir en
-          arrière. Demande d'Adriel, 12/08/2026. */}
-      <Link href="/" className="mb-8 inline-flex w-fit items-center">
+    <div className="relative min-h-screen">
+      {/* Lien retour à l'accueil, ancré en haut de l'écran (indépendant du centrage vertical
+          du formulaire ci-dessous) — demande d'Adriel, 12/08/2026 ("mettre le bouton de
+          revenir a la page d'accueil en haut"). */}
+      <Link href="/" className="absolute left-6 top-6 inline-flex w-fit items-center">
         <PixlehLogo size={24} />
       </Link>
 
-      <h1 className="font-serif text-2xl font-semibold">Mon espace</h1>
+      <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
+        <h1 className="font-serif text-2xl font-semibold">Mon espace</h1>
       <p className="mt-2 text-sm text-gray-600">
         Retrouvez toutes vos galeries, quel que soit le studio qui vous les a partagées.
       </p>
@@ -199,6 +200,7 @@ function ClientLoginInner() {
           Cliquez dessus pour activer votre mot de passe et vous connecter.
         </div>
       )}
+      </div>
     </div>
   );
 }
