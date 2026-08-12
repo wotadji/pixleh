@@ -115,7 +115,7 @@ function HeroBlock({ data, blockId }: { data: HeroBlockData; blockId: string }) 
               {tr.secondaryCtaLabel && data.secondaryCtaHref && (
                 <Link
                   href={data.secondaryCtaHref}
-                  className="rounded-full border border-white/70 px-6 py-3 text-base font-medium text-white transition hover:bg-white/10"
+                  className="inline-flex items-center justify-center rounded-full border border-white/70 px-6 py-3 text-center text-base font-medium text-white transition hover:bg-white/10"
                 >
                   {tr.secondaryCtaLabel}
                 </Link>
