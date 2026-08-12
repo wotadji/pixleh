@@ -2,7 +2,9 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { PixlehLogo } from "@/components/marketing/PixlehLogo";
 
 type Step = "email" | "password" | "create-password" | "check-inbox";
 
@@ -89,6 +91,13 @@ function ClientLoginInner() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
+      {/* Lien retour à l'accueil, positionné comme le logo dans l'en-tête marketing (voir
+          MarketingHeader.tsx) — cette page n'avait jusqu'ici aucun moyen de revenir en
+          arrière. Demande d'Adriel, 12/08/2026. */}
+      <Link href="/" className="mb-8 inline-flex w-fit items-center">
+        <PixlehLogo size={24} />
+      </Link>
+
       <h1 className="font-serif text-2xl font-semibold">Mon espace</h1>
       <p className="mt-2 text-sm text-gray-600">
         Retrouvez toutes vos galeries, quel que soit le studio qui vous les a partagées.
