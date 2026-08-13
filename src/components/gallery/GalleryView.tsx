@@ -174,6 +174,10 @@ export function GalleryView({
   // photo, voir handleShareCollectionPhoto) — état de chargement identique au pattern déjà
   // utilisé pour le set "Réseaux sociaux" côté studio (GalleryManager.tsx).
   const [sharingCollectionPhotoId, setSharingCollectionPhotoId] = useState<string | null>(null);
+  // Bandeau "photo téléchargée au lieu d'être partagée" — affiché quand shareOrDownloadImage
+  // bascule sur le téléchargement parce qu'on est sur desktop (voir shareImage.ts : le partage
+  // de fichier natif n'attache pas la photo hors mobile, ex. Facebook sur Mac).
+  const [shareDesktopNotice, setShareDesktopNotice] = useState(false);
 
   const fetchClientCollections = async () => {
     setCollectionsLoading(true);
@@ -305,11 +309,15 @@ export function GalleryView({
   async function shareCollectionPhoto(photo: { photoId: string; filename: string }) {
     setSharingCollectionPhotoId(photo.photoId);
     try {
-      await shareOrDownloadImage(
+      const result = await shareOrDownloadImage(
         `/api/galleries/${gallery.id}/photos/${photo.photoId}/download`,
         photo.filename,
         gallery.title
       );
+      if (result === "downloaded-desktop") {
+        setShareDesktopNotice(true);
+        setTimeout(() => setShareDesktopNotice(false), 6000);
+      }
     } catch {
       // Échec silencieux (partage annulé, etc.) — rien de bloquant à signaler.
     }
@@ -1179,6 +1187,21 @@ export function GalleryView({
           accentColor={palette.accent}
           onClose={() => setShareTarget(null)}
         />
+      )}
+
+      {shareDesktopNotice && (
+        <div className="fixed inset-x-0 bottom-4 z-[80] flex justify-center px-4">
+          <div className="flex max-w-md items-center gap-3 rounded-xl bg-gray-900/90 px-4 py-3 text-sm text-white shadow-lg">
+            <span>{t("gallery.collections.shareDesktopNotice")}</span>
+            <button
+              onClick={() => setShareDesktopNotice(false)}
+              aria-label={t("common.close")}
+              className="shrink-0 rounded p-1 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
       )}
 
       {downloadPanelOpen && (

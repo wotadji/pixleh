@@ -1064,15 +1064,23 @@ export function GalleryManager({
   // au-dessus de la grille (voir plus bas) — demande d'Adriel, 12/08/2026.
   const activeSocialSet = gallery.collections.find((c) => c.id === activeSet && c.isSocialDefault) || null;
   const [sharingPhotoId, setSharingPhotoId] = useState<string | null>(null);
+  // Bandeau "photo téléchargée au lieu d'être partagée" — affiché quand shareOrDownloadImage
+  // bascule sur le téléchargement parce qu'on est sur desktop (voir shareImage.ts : le partage
+  // de fichier natif n'attache pas la photo hors mobile, ex. Facebook sur Mac).
+  const [shareDesktopNotice, setShareDesktopNotice] = useState(false);
 
   async function handleSharePhoto(photo: PhotoDTO) {
     setSharingPhotoId(photo.id);
     try {
-      await shareOrDownloadImage(
+      const result = await shareOrDownloadImage(
         `/api/galleries/${gallery.id}/photos/${photo.id}/download`,
         photo.filename,
         gallery.title
       );
+      if (result === "downloaded-desktop") {
+        setShareDesktopNotice(true);
+        setTimeout(() => setShareDesktopNotice(false), 6000);
+      }
     } catch {
       // Échec silencieux (annulation du partage natif, réseau...) — rien de bloquant à
       // signaler, l'icône reprend simplement son état normal juste après.
@@ -1345,6 +1353,18 @@ export function GalleryManager({
       )}
       {regenMessage && (
         <p className="border-b border-green-100 bg-green-50 px-6 py-2 text-sm text-green-700">{regenMessage}</p>
+      )}
+      {shareDesktopNotice && (
+        <div className="flex items-center justify-between gap-3 border-b border-amber-100 bg-amber-50 px-6 py-2 text-sm text-amber-700">
+          <p>{t("gm.shareDesktopNotice")}</p>
+          <button
+            onClick={() => setShareDesktopNotice(false)}
+            aria-label={t("common.close")}
+            className="shrink-0 rounded p-1 text-amber-500 transition-colors hover:bg-amber-100 hover:text-amber-700"
+          >
+            ✕
+          </button>
+        </div>
       )}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
