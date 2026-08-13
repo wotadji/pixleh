@@ -1974,6 +1974,7 @@ function MenuRow({
   target,
   active,
   badge,
+  tone,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -1982,6 +1983,9 @@ function MenuRow({
   target?: string;
   active?: boolean;
   badge?: number;
+  // "danger" : action destructive (ex. Supprimer une collection) — texte rouge, réutilisé par
+  // ClientCollectionsView plutôt que de dupliquer ce composant pour une seule couleur.
+  tone?: "danger";
 }) {
   const content = (
     <>
@@ -1993,8 +1997,8 @@ function MenuRow({
     </>
   );
   const className = `flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm transition-colors hover:bg-black/5 ${
-    active ? "font-medium opacity-100" : "opacity-80"
-  }`;
+    tone === "danger" ? "text-red-500" : ""
+  } ${active ? "font-medium opacity-100" : "opacity-80"}`;
   if (href) {
     return (
       <Link href={href} target={target} rel={target ? "noopener noreferrer" : undefined} className={className} onClick={onClick}>
@@ -2215,6 +2219,27 @@ function IconShare() {
   );
 }
 
+/** Icône "crayon" (renommer) — utilisée dans le menu "..." d'une collection cliente. */
+function IconEdit() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z" strokeLinejoin="round" />
+      <path d="M13.5 8L16 10.5" />
+    </svg>
+  );
+}
+
+/** Icône "corbeille" (supprimer) — utilisée dans le menu "..." d'une collection cliente. */
+function IconTrash() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" strokeLinecap="round" />
+      <path d="M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13" strokeLinejoin="round" />
+      <path d="M10 11v6M14 11v6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /** Icône "remarque" (bulle avec un trait, façon annotation) — voir PhotoOverlay. */
 function IconRemark() {
   return (
@@ -2337,6 +2362,12 @@ function ClientCollectionsView({
   onShareCover: (collection: ClientCollectionDTO) => void;
 }) {
   const activeCollection = collections.find((c) => c.id === activeCollectionId) ?? null;
+  // Menu "..." (Renommer/Supprimer) : évite d'aligner 3 liens texte serrés dans le header
+  // de la collection (retour d'Adriel, 13/08/2026) — même pattern que le menu mobile "Plus
+  // d'actions" de la barre d'outils principale (IconMore + MenuRow + backdrop), pour rester
+  // cohérent avec le reste de l'UI. Le partage reste une action principale visible (bouton
+  // à part), Renommer/Supprimer sont secondaires et groupées derrière le kebab.
+  const [collectionMenuOpen, setCollectionMenuOpen] = useState(false);
 
   if (activeCollectionId) {
     return (
@@ -2376,26 +2407,55 @@ function ClientCollectionsView({
           )}
           {!renaming && (
             <div className="flex items-center gap-2">
-              <button
-                onClick={onStartRename}
-                className="text-xs uppercase tracking-wide opacity-70 hover:opacity-100 hover:underline"
-              >
-                {t("gallery.collections.rename")}
-              </button>
               {activeCollection && (
                 <button
                   onClick={() => onShareCover(activeCollection)}
-                  className="flex items-center gap-1 text-xs uppercase tracking-wide opacity-70 hover:opacity-100 hover:underline"
+                  className="flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wide transition-colors hover:bg-black/5"
+                  style={{ borderColor: `${palette.accent}55`, color: palette.accent }}
                 >
                   <IconShare /> {t("gallery.collections.share")}
                 </button>
               )}
-              <button
-                onClick={onDelete}
-                className="text-xs uppercase tracking-wide text-red-500 opacity-80 hover:opacity-100 hover:underline"
-              >
-                {t("gallery.collections.delete")}
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setCollectionMenuOpen((v) => !v)}
+                  aria-label={t("gallery.collections.moreActions")}
+                  title={t("gallery.collections.moreActions")}
+                  className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors hover:bg-black/5 ${
+                    collectionMenuOpen ? "border-current opacity-100" : "border-transparent opacity-70 hover:opacity-100"
+                  }`}
+                >
+                  <IconMore />
+                </button>
+                {collectionMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setCollectionMenuOpen(false)} />
+                    <div
+                      className="absolute right-0 top-full z-40 mt-2 w-48 overflow-hidden rounded-xl border py-1 shadow-lg"
+                      style={{ backgroundColor: palette.bg, borderColor: `${palette.accent}33` }}
+                    >
+                      <MenuRow
+                        icon={<IconEdit />}
+                        label={t("gallery.collections.rename")}
+                        onClick={() => {
+                          setCollectionMenuOpen(false);
+                          onStartRename();
+                        }}
+                      />
+                      <div className="my-1 h-px" style={{ backgroundColor: `${palette.accent}22` }} />
+                      <MenuRow
+                        icon={<IconTrash />}
+                        label={t("gallery.collections.delete")}
+                        tone="danger"
+                        onClick={() => {
+                          setCollectionMenuOpen(false);
+                          onDelete();
+                        }}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           )}
         </div>
