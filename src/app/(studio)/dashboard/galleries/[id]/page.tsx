@@ -24,6 +24,15 @@ export default async function GalleryDetailPage({ params }: { params: { id: stri
   `;
   const additionalClientIds = additionalClientRows.map((r) => r.clientId);
 
+  // isSocialDefault (set "Réseaux sociaux" auto-créé, voir POST /api/galleries) : trop récent
+  // pour le Prisma Client généré du sandbox (voir le commentaire sur ce champ dans
+  // schema.prisma), donc lu à part via $queryRaw et fusionné dans gallery.collections plus
+  // bas, même workaround qu'additionalClientIds ci-dessus.
+  const socialDefaultRows = await prisma.$queryRaw<{ id: string; isSocialDefault: boolean }[]>`
+    SELECT "id", "isSocialDefault" FROM "Collection" WHERE "galleryId" = ${gallery.id}
+  `;
+  const socialDefaultById = new Map(socialDefaultRows.map((r) => [r.id, r.isSocialDefault]));
+
   // Tags déjà utilisés sur d'autres galeries du studio, pour l'autocomplétion du champ
   // "Catégorie / tag" (créer = taper un nom nouveau, réutiliser = choisir dans la liste).
   const tagRows = await prisma.gallery.findMany({
@@ -76,6 +85,7 @@ export default async function GalleryDetailPage({ params }: { params: { id: stri
           title: c.title,
           visibility: c.visibility,
           isPortfolioDefault: c.isPortfolioDefault,
+          isSocialDefault: socialDefaultById.get(c.id) ?? false,
         })),
       }}
     />

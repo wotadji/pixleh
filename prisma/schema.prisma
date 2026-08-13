@@ -622,6 +622,18 @@ model Collection {
   /// d'autres sets normaux avec PORTFOLIO dans leur visibility comme avant ; ce flag ne sert
   /// qu'à distinguer CE set précis, pas à limiter qui peut avoir PORTFOLIO dans sa visibility.
   isPortfolioDefault Boolean @default(false)
+  /// Marque le set "Réseaux sociaux" créé automatiquement à la création de la galerie (même
+  /// principe que isPortfolioDefault ci-dessus) — dossier de curation privé où le studio range
+  /// les photos qu'il veut publier sur ses réseaux, avec un bouton Partager dédié dans
+  /// GalleryManager (12/08/2026, demande d'Adriel : "un set automatique 'reseau sociaux' [...]
+  /// où le studio peux mettre des images et un boutton pour qu'il puisse partager directement
+  /// dans ces murs"). Contrairement à Portfolio, ce set n'a pas de visibilité publique propre
+  /// (aucune page pixleh ne l'affiche) : `visibility` reste vide, il ne sert qu'au partage natif
+  /// (Web Share API / téléchargement) depuis le panel studio. Ajouté après le dernier
+  /// `prisma generate` du sandbox (même limitation que isPortfolioDefault a connue en son
+  /// temps) : lu/écrit via $queryRaw/$executeRaw en attendant qu'Adriel relance
+  /// `prisma generate && prisma db push`.
+  isSocialDefault Boolean @default(false)
   /// Invités ayant reçu un accès limité à CE set précisément (GalleryGuest.allSetsAccess =
   /// false) — voir /approve-guest/[token].
   guestAllowedFor GalleryGuest[] @relation("GuestAllowedCollections")

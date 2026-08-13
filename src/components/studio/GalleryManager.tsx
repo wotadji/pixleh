@@ -24,6 +24,7 @@ import {
 import { sortPhotos, resolvePhotoSortKey, formatFileSize, type PhotoSortKey } from "@/lib/photoSort";
 import { formatDuration } from "@/lib/videoEmbed";
 import { generateGalleryCode as generateGalleryPassword } from "@/lib/galleryCode";
+import { shareOrDownloadImage } from "@/lib/shareImage";
 
 /**
  * Hash SHA-256 (hex) d'un fichier, calculé côté navigateur via Web Crypto — utilisé pour
@@ -86,6 +87,9 @@ interface CollectionDTO {
    * seul dont la visibilité PORTFOLIO se pilote via un interrupteur dédié dans le panneau
    * Sets plutôt que le modal de renommage (voir togglePortfolioVisibility). */
   isPortfolioDefault: boolean;
+  /** Set "Réseaux sociaux" auto-créé à la création de la galerie (voir POST /api/galleries) —
+   * dossier de curation privé, non supprimable, sans visibilité publique propre. */
+  isSocialDefault: boolean;
 }
 
 interface ClientOption {
@@ -1056,6 +1060,26 @@ export function GalleryManager({
     return sortPhotos(base, sortBy);
   }, [localPhotos, activeSet, sortBy]);
 
+  // Set "Réseaux sociaux" ouvert : affiche le bandeau d'explication + le bouton Partager
+  // au-dessus de la grille (voir plus bas) — demande d'Adriel, 12/08/2026.
+  const activeSocialSet = gallery.collections.find((c) => c.id === activeSet && c.isSocialDefault) || null;
+  const [sharingPhotoId, setSharingPhotoId] = useState<string | null>(null);
+
+  async function handleSharePhoto(photo: PhotoDTO) {
+    setSharingPhotoId(photo.id);
+    try {
+      await shareOrDownloadImage(
+        `/api/galleries/${gallery.id}/photos/${photo.id}/download`,
+        photo.filename,
+        gallery.title
+      );
+    } catch {
+      // Échec silencieux (annulation du partage natif, réseau...) — rien de bloquant à
+      // signaler, l'icône reprend simplement son état normal juste après.
+    }
+    setSharingPhotoId(null);
+  }
+
   /** Change le tri ET le persiste en base (Gallery.photoSortOrder) pour qu'il s'applique
    * aussi côté galerie publiée et lien invité, pas seulement dans cette vue admin. */
   async function changeSortOrder(key: PhotoSortKey) {
@@ -1412,6 +1436,14 @@ export function GalleryManager({
                               P
                             </span>
                           )}
+                          {c.isSocialDefault && (
+                            <span
+                              title={t("gm.socialSetBadge")}
+                              className="rounded bg-gray-200 px-1 text-[10px] font-semibold text-gray-500"
+                            >
+                              R
+                            </span>
+                          )}
                         </span>
                       </span>
                       <span className="text-xs text-gray-400">{count}</span>
@@ -1452,7 +1484,7 @@ export function GalleryManager({
                     >
                       ✎
                     </button>
-                    {!c.isPortfolioDefault && (
+                    {!c.isPortfolioDefault && !c.isSocialDefault && (
                       <button
                         onClick={() => setDeleteConfirm({ collectionId: c.id, title: c.title })}
                         className="hidden px-1 text-xs text-gray-400 hover:text-red-500 group-hover:block"
@@ -1540,6 +1572,14 @@ export function GalleryManager({
               )}
 
               <div className="absolute inset-0 overflow-y-auto">
+              {/* Bandeau d'explication du set "Réseaux sociaux" — visible uniquement quand ce
+                  set est ouvert (voir activeSocialSet), demande d'Adriel, 12/08/2026. */}
+              {activeSocialSet && (
+                <div className="m-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <p className="text-sm font-semibold text-gray-800">{t("gm.socialBannerTitle")}</p>
+                  <p className="mt-1 text-xs text-gray-500">{t("gm.socialBannerBody")}</p>
+                </div>
+              )}
               {filteredPhotos.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-gray-400">
                   <p>{activeSet ? t("gm.noPhotosInSet") : t("gm.noPhotosYet")}</p>
@@ -1708,6 +1748,29 @@ export function GalleryManager({
                               </svg>
                             )}
                           </span>
+                          {/* Bouton "Partager" : visible sur toutes les vignettes au survol,
+                              mais en permanence (pas seulement au hover) dans le set "Réseaux
+                              sociaux" — demande d'Adriel, 12/08/2026. Positionné en miroir de
+                              la pastille de sélection ci-dessus. */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSharePhoto(photo);
+                            }}
+                            disabled={sharingPhotoId === photo.id}
+                            title={t("gm.sharePhoto")}
+                            aria-label={t("gm.sharePhoto")}
+                            className={`absolute right-1.5 top-1.5 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 disabled:cursor-wait disabled:opacity-70 ${
+                              activeSocialSet ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                            }`}
+                          >
+                            {sharingPhotoId === photo.id ? (
+                              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                            ) : (
+                              <IconShare />
+                            )}
+                          </button>
                           <div
                             onClick={(e) => e.stopPropagation()}
                             className="absolute inset-x-0 bottom-0 hidden flex-col gap-1 bg-gradient-to-t from-black/80 to-transparent p-2 group-hover:flex"
@@ -3251,6 +3314,18 @@ function IconShareLink() {
       <circle cx="6" cy="12" r="3" />
       <circle cx="18" cy="19" r="3" />
       <path d="M8.6 10.5l6.8-3.9M8.6 13.5l6.8 3.9" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Bouton "Partager" des vignettes de la grille (voir handleSharePhoto) — flèche sortant
+ * d'une boîte, icône de partage standard style iOS. */
+function IconShare() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 3v12" strokeLinecap="round" />
+      <path d="M8 7l4-4 4 4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

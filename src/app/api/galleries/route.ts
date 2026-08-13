@@ -77,6 +77,16 @@ export async function POST(req: Request) {
       },
     });
 
+    // Set "Réseaux sociaux" par défaut, présent sur toute nouvelle galerie au même titre que
+    // "Portfolio" ci-dessus (12/08/2026, demande d'Adriel) — dossier de curation privé, sans
+    // visibilité publique (visibility: [], jamais affiché sur pixleh.com), qui sert seulement
+    // de point de départ au bouton Partager de GalleryManager. $executeRaw plutôt que l'API
+    // Prisma typée : isSocialDefault est trop récent pour le Prisma Client généré du sandbox
+    // (voir le commentaire sur ce champ dans schema.prisma), même limitation que
+    // GalleryClientAccess ci-dessous.
+    await prisma.$executeRaw`INSERT INTO "Collection" ("id", "galleryId", "title", "position", "visibility", "isPortfolioDefault", "isSocialDefault")
+      VALUES (${randomUUID()}, ${gallery.id}, 'Réseaux sociaux', 1, ARRAY[]::"SetVisibility"[], false, true)`;
+
     // Clients additionnels (accès secondaire en lecture seule, voir modèle GalleryClientAccess
     // dans schema.prisma) — jamais le client principal, dédupliqués, et vérifiés comme
     // appartenant à ce studio avant insertion (on ne fait pas confiance à la liste d'ids
