@@ -255,6 +255,9 @@ export default async function GalleryEntryPage({
         currency: p.currency,
       }))}
       allowRemarks={allowRemarks}
+      // Collections privées (12/08/2026, demande d'Adriel) : même périmètre qu'allowRemarks
+      // ci-dessus — mode "client" uniquement (jamais invité), voir GalleryView.tsx.
+      enableClientCollections={mode === "client"}
     />
   );
 }

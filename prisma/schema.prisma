@@ -543,6 +543,9 @@ model Gallery {
   guests          GalleryGuest[]
   remarks         PhotoRemark[]
   additionalClientAccess GalleryClientAccess[]
+  /// Collections privées créées par les clients de cette galerie — voir ClientCollection,
+  /// jamais exposé côté studio.
+  clientCollections ClientCollection[]
 
   @@index([studioId])
   @@index([clientId])
@@ -671,6 +674,9 @@ model Photo {
   downloadEvents DownloadEvent[]
   orderItems    OrderItem[]
   remarks       PhotoRemark[]
+  /// Entrées dans les collections privées des clients (voir ClientCollectionPhoto) —
+  /// jamais exposé côté studio.
+  clientCollectionEntries ClientCollectionPhoto[]
 
   @@index([galleryId])
   @@index([galleryId, contentHash])
@@ -737,6 +743,74 @@ model PhotoRemark {
   createdAt    DateTime @default(now())
 
   @@index([galleryId])
+  @@index([photoId])
+}
+
+/// Collection privée créée par le CLIENT lui-même à l'intérieur d'une galerie (12/08/2026,
+/// demande d'Adriel, en s'inspirant d'un concurrent vu en vidéo : "comme pour un concurent,
+/// pouvons nous creer les colections dans la galerie (uniquement par le client)") — sorte de
+/// sous-dossier personnel ("Mes favoris pour le mariage", "À imprimer") pour trier SES photos
+/// préférées, à ne pas confondre avec `Collection` ci-dessus (les "sets" créés par le STUDIO
+/// pour organiser/publier la galerie, ex. isPortfolioDefault/isSocialDefault). Tâche #498.
+///
+/// Confidentialité stricte : jamais exposé ni accessible côté studio (aucune route
+/// /api/galleries/..., aucun affichage dans GalleryManager) — uniquement lu/écrit par les
+/// routes /api/client/galleries/[gallerySlug]/collections/..., qui vérifient systématiquement
+/// que le visiteur courant est bien le propriétaire avant toute lecture/écriture.
+///
+/// `clientRef` (pas de relation vers `Client`) : identifie le PROPRIÉTAIRE de cette collection
+/// avec le même mécanisme que `Selection.clientRef`/`PhotoRemark.clientRef` ci-dessus (cookie de
+/// session de galerie posé par /api/gallery-access, voir gallery-session.ts) plutôt qu'un
+/// `Client.id` du CRM. Choix documenté ici plutôt que de bloquer sur le sujet : la vue galerie
+/// cliente (/g/[gallerySlug], mode "client") n'authentifie pas ses visiteurs via un Client réel
+/// identifié par email — même un client "secondaire" via GalleryClientAccess (accès donné à
+/// plusieurs personnes pour la même galerie) obtient son propre `clientRef` distinct dès qu'il
+/// saisit le mot de passe depuis son propre navigateur (voir /api/gallery-access), exactement
+/// comme pour les favoris ou les remarques. Cela isole déjà naturellement les collections de
+/// chaque visiteur/appareil les unes des autres, cohérent avec le reste du proofing. Limite
+/// connue héritée du même mécanisme que les favoris : sur une galerie SANS mot de passe, tous
+/// les visiteurs anonymes partagent le même clientRef ("anonymous"), donc les collections y
+/// sont mutualisées plutôt qu'individuelles (voir le commentaire équivalent sur
+/// checkGalleryAccess dans src/lib/access.ts).
+///
+/// Ajouté après le dernier `prisma generate` du sandbox (même limitation que
+/// GalleryClientAccess/isSocialDefault plus haut dans ce schéma, voir tâches #254/#145) : tant
+/// qu'Adriel n'a pas relancé `prisma generate && prisma db push` en local, ce modèle est
+/// lu/écrit via $queryRaw/$executeRaw (ids générés côté appelant avec randomUUID()) plutôt que
+/// via l'API typée du Prisma Client généré, qui ne le connaît pas encore — voir
+/// src/lib/clientCollections.ts.
+model ClientCollection {
+  id        String   @id @default(cuid())
+  galleryId String
+  gallery   Gallery  @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  /// Identifiant de session du visiteur propriétaire — voir la note ci-dessus. Jamais un id
+  /// studio/User : ces collections sont strictement invisibles côté studio.
+  clientRef String
+  title     String
+  /// Ordre d'affichage manuel (glisser-déposer non implémenté en v1, réservé pour plus tard) —
+  /// une nouvelle collection prend la position la plus haute existante + 1.
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  photos ClientCollectionPhoto[]
+
+  @@index([galleryId, clientRef])
+}
+
+/// Photo d'une galerie ajoutée par le client à l'une de ses `ClientCollection` — simple table
+/// de liaison (une photo peut appartenir à plusieurs collections du même client, une collection
+/// contient 0 à N photos). Voir ClientCollection ci-dessus pour le contexte complet
+/// (confidentialité, limitation $queryRaw/$executeRaw du sandbox).
+model ClientCollectionPhoto {
+  id                 String           @id @default(cuid())
+  clientCollectionId String
+  clientCollection   ClientCollection @relation(fields: [clientCollectionId], references: [id], onDelete: Cascade)
+  photoId            String
+  photo              Photo            @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  addedAt            DateTime         @default(now())
+
+  @@unique([clientCollectionId, photoId])
   @@index([photoId])
 }
 

@@ -15,6 +15,8 @@ import {
 } from "@/lib/galleryDesign";
 import { buildEmbedUrl, formatDuration, type VideoProvider } from "@/lib/videoEmbed";
 import { MarketingLanguageSwitcher } from "@/components/marketing/MarketingLanguageSwitcher";
+import { shareOrDownloadImage } from "@/lib/shareImage";
+import { useLanguage } from "@/lib/i18n/LanguageProvider";
 
 interface PhotoDTO {
   id: string;
@@ -52,6 +54,23 @@ interface PrintProductDTO {
   currency: string;
 }
 
+/** Collection privée créée par le client (onglet "Mes collections", voir
+ * src/lib/clientCollections.ts) — résumé pour la vue en cartes. */
+interface ClientCollectionDTO {
+  id: string;
+  title: string;
+  photoCount: number;
+  coverPhotoId: string | null;
+}
+
+/** Photo d'une collection privée, pour la vue détail. */
+interface ClientCollectionPhotoDTO {
+  photoId: string;
+  filename: string;
+  width: number | null;
+  height: number | null;
+}
+
 export function GalleryView({
   gallery,
   studioId,
@@ -64,6 +83,7 @@ export function GalleryView({
   allowRemarks = false,
   allowPrintStore = true,
   shareBaseUrl,
+  enableClientCollections = false,
 }: {
   gallery: {
     id: string;
@@ -105,7 +125,15 @@ export function GalleryView({
    * (`/[studioSlug]/portfolio/[gallerySlug]`) pour ne jamais partager un lien qui mène en
    * fait à la galerie complète protégée. */
   shareBaseUrl?: string;
+  /** Onglet "Mes collections" + sélection multiple "Ajouter à une collection" (12/08/2026,
+   * demande d'Adriel : "comme pour un concurent, pouvons nous creer les colections dans la
+   * galerie (uniquement par le client)") — lien client connecté UNIQUEMENT (jamais le lien
+   * invité, jamais le portfolio public), même périmètre que `allowRemarks` ci-dessus. Ajouté
+   * séparément plutôt que réutiliser allowRemarks tel quel : sémantiquement distinct, même si
+   * les deux sont vrais/faux ensemble aujourd'hui côté /g/[gallerySlug]/page.tsx. */
+  enableClientCollections?: boolean;
 }) {
+  const { t } = useLanguage();
   const [favorites, setFavorites] = useState<Set<string>>(new Set(initialFavorites));
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
@@ -113,10 +141,180 @@ export function GalleryView({
   // Filtre par set (Collection) — pills sous la barre du haut, voir plus bas. `null` =
   // "Toutes les photos" (comportement par défaut, y compris les photos sans set).
   const [activeSetId, setActiveSetId] = useState<string | null>(null);
-  // Bascule Photos / Vidéo — n'apparaît que si la galerie a au moins une vidéo (voir
-  // `videos` prop). Le lecteur affiche la première vidéo par défaut.
-  const [mainView, setMainView] = useState<"photos" | "video">("photos");
+  // Bascule Photos / Vidéo / Collections — Vidéo n'apparaît que si la galerie a au moins une
+  // vidéo (voir `videos` prop), Collections uniquement si `enableClientCollections`. Le
+  // lecteur vidéo affiche la première vidéo par défaut.
+  const [mainView, setMainView] = useState<"photos" | "video" | "collections">("photos");
   const [activeVideoId, setActiveVideoId] = useState<string | null>(videos[0]?.id ?? null);
+
+  // ---------- Collections privées du client (12/08/2026, demande d'Adriel) ----------
+  // Voir src/lib/clientCollections.ts pour les routes API correspondantes. `clientCollections`
+  // est la liste résumée (onglet "Mes collections") ; `activeCollectionId` bascule sur la vue
+  // détail d'UNE collection (grille de ses photos), chargée à la demande.
+  const [clientCollections, setClientCollections] = useState<ClientCollectionDTO[]>([]);
+  const [collectionsLoading, setCollectionsLoading] = useState(false);
+  const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null);
+  const [activeCollectionTitle, setActiveCollectionTitle] = useState("");
+  const [activeCollectionPhotos, setActiveCollectionPhotos] = useState<ClientCollectionPhotoDTO[]>([]);
+  const [collectionDetailLoading, setCollectionDetailLoading] = useState(false);
+  const [renamingCollection, setRenamingCollection] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [createCollectionOpen, setCreateCollectionOpen] = useState(false);
+  // Sélection multiple dans la grille Photos (icône "case à cocher" de la barre du haut) —
+  // même esprit que le panier impression (togglePrintSelection), mais purement local (pas
+  // persisté en base) : sert uniquement à choisir des photos à ajouter d'un coup à une
+  // collection, voir la barre flottante plus bas.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
+  // Photo(s) cible(s) de la modale "Ajouter à une collection" — soit une seule (icône de
+  // survol sur une vignette), soit plusieurs (barre flottante de sélection multiple).
+  const [addToCollectionTargets, setAddToCollectionTargets] = useState<string[] | null>(null);
+  const [addingToCollection, setAddingToCollection] = useState(false);
+  // Partage d'une photo précise depuis la vue détail d'une collection (icône dédiée par
+  // photo, voir handleShareCollectionPhoto) — état de chargement identique au pattern déjà
+  // utilisé pour le set "Réseaux sociaux" côté studio (GalleryManager.tsx).
+  const [sharingCollectionPhotoId, setSharingCollectionPhotoId] = useState<string | null>(null);
+
+  const fetchClientCollections = async () => {
+    setCollectionsLoading(true);
+    try {
+      const res = await fetch(`/api/client/galleries/${gallery.slug}/collections`);
+      if (res.ok) {
+        const data = await res.json();
+        setClientCollections(data.collections ?? []);
+      }
+    } finally {
+      setCollectionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!enableClientCollections) return;
+    fetchClientCollections();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enableClientCollections, gallery.slug]);
+
+  async function openCollection(id: string) {
+    setActiveCollectionId(id);
+    setCollectionDetailLoading(true);
+    try {
+      const res = await fetch(`/api/client/galleries/${gallery.slug}/collections/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setActiveCollectionTitle(data.collection?.title ?? "");
+        setActiveCollectionPhotos(data.photos ?? []);
+      } else {
+        setActiveCollectionId(null);
+      }
+    } finally {
+      setCollectionDetailLoading(false);
+    }
+  }
+
+  function closeCollectionDetail() {
+    setActiveCollectionId(null);
+    setActiveCollectionPhotos([]);
+    setRenamingCollection(false);
+  }
+
+  async function submitCreateCollection(title: string): Promise<string | null> {
+    const res = await fetch(`/api/client/galleries/${gallery.slug}/collections`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    await fetchClientCollections();
+    return data.collection?.id ?? null;
+  }
+
+  async function renameActiveCollection(title: string) {
+    if (!activeCollectionId) return;
+    const res = await fetch(`/api/client/galleries/${gallery.slug}/collections/${activeCollectionId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    });
+    if (res.ok) {
+      setActiveCollectionTitle(title);
+      setRenamingCollection(false);
+      fetchClientCollections();
+    }
+  }
+
+  async function deleteActiveCollection() {
+    if (!activeCollectionId) return;
+    if (!window.confirm(t("gallery.collections.deleteConfirm"))) return;
+    const res = await fetch(`/api/client/galleries/${gallery.slug}/collections/${activeCollectionId}`, {
+      method: "DELETE",
+    });
+    if (res.ok) {
+      closeCollectionDetail();
+      fetchClientCollections();
+    }
+  }
+
+  async function removePhotoFromActiveCollection(photoId: string) {
+    if (!activeCollectionId) return;
+    setActiveCollectionPhotos((prev) => prev.filter((p) => p.photoId !== photoId));
+    await fetch(`/api/client/galleries/${gallery.slug}/collections/${activeCollectionId}/photos/${photoId}`, {
+      method: "DELETE",
+    });
+    fetchClientCollections();
+  }
+
+  /** Ajoute `addToCollectionTargets` (une ou plusieurs photos) à une collection existante,
+   * ou en crée une nouvelle au passage si `newTitle` est fourni. */
+  async function addTargetsToCollection(collectionId: string | null, newTitle?: string) {
+    const targets = addToCollectionTargets;
+    if (!targets || targets.length === 0) return;
+    setAddingToCollection(true);
+    try {
+      let id = collectionId;
+      if (!id && newTitle) {
+        id = await submitCreateCollection(newTitle);
+      }
+      if (!id) return;
+      await fetch(`/api/client/galleries/${gallery.slug}/collections/${id}/photos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoIds: targets }),
+      });
+      await fetchClientCollections();
+      if (activeCollectionId === id) await openCollection(id);
+      setAddToCollectionTargets(null);
+      setSelectMode(false);
+      setSelectedPhotoIds(new Set());
+    } finally {
+      setAddingToCollection(false);
+    }
+  }
+
+  function toggleSelectPhoto(photoId: string) {
+    setSelectedPhotoIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(photoId)) next.delete(photoId);
+      else next.add(photoId);
+      return next;
+    });
+  }
+
+  /** Partage natif (Web Share API niveau 2, avec repli téléchargement) d'une photo — réutilise
+   * exactement le même helper que le set "Réseaux sociaux" côté studio (voir shareImage.ts). */
+  async function shareCollectionPhoto(photo: { photoId: string; filename: string }) {
+    setSharingCollectionPhotoId(photo.photoId);
+    try {
+      await shareOrDownloadImage(
+        `/api/galleries/${gallery.id}/photos/${photo.photoId}/download`,
+        photo.filename,
+        gallery.title
+      );
+    } catch {
+      // Échec silencieux (partage annulé, etc.) — rien de bloquant à signaler.
+    }
+    setSharingCollectionPhotoId(null);
+  }
   const [shareTarget, setShareTarget] = useState<{ url: string; title: string } | null>(null);
   const [downloadPanelOpen, setDownloadPanelOpen] = useState(false);
   // Menu "..." de la barre du haut sur mobile (11/08/2026, demande d'Adriel : le header
@@ -442,14 +640,17 @@ export function GalleryView({
                   possibilité de changer de langue") — réutilise le composant du site marketing. */}
               <MarketingLanguageSwitcher />
               <span className="hidden h-4 w-px opacity-20 sm:inline" style={{ backgroundColor: palette.text }} />
-              {/* Bascule Photos / Vidéo — visible seulement si la galerie a au moins une
-                  vidéo (voir `videos` prop), toujours visible (mobile compris) car c'est de
-                  la navigation, pas une action secondaire. */}
-              {videos.length > 0 && (
+              {/* Bascule Photos / Vidéo / Collections — Vidéo n'apparaît que si la galerie a
+                  au moins une vidéo (voir `videos` prop), Collections uniquement en mode
+                  client connecté (`enableClientCollections`, jamais invité/portfolio public) —
+                  toujours visible (mobile compris) car c'est de la navigation, pas une action
+                  secondaire. */}
+              {(videos.length > 0 || enableClientCollections) && (
                 <div className="flex items-center gap-1 rounded-full bg-black/5 p-0.5 text-[11px] font-semibold uppercase tracking-wide">
                   {/* Sur mobile, icônes seules (place limitée à côté de la langue/menu) ;
-                      à partir de sm, texte "Photos"/"Vidéo" comme avant (demande d'Adriel,
-                      11/08/2026 : "en mode mobile changer photo / video par des icones"). */}
+                      à partir de sm, texte "Photos"/"Vidéo"/"Collections" comme avant (demande
+                      d'Adriel, 11/08/2026 : "en mode mobile changer photo / video par des
+                      icones"). */}
                   <button
                     onClick={() => setMainView("photos")}
                     aria-label="Photos"
@@ -462,21 +663,40 @@ export function GalleryView({
                     <IconImageTab className="sm:hidden" />
                     <span className="hidden sm:inline">Photos</span>
                   </button>
-                  <button
-                    onClick={() => setMainView("video")}
-                    aria-label="Vidéo"
-                    className="flex items-center rounded-full px-2 py-1 transition-colors sm:px-2.5"
-                    style={{
-                      opacity: mainView === "video" ? 1 : 0.6,
-                      backgroundColor: mainView === "video" ? palette.bg : "transparent",
-                    }}
-                  >
-                    <IconVideoTab className="sm:hidden" />
-                    <span className="hidden sm:inline">Vidéo</span>
-                  </button>
+                  {videos.length > 0 && (
+                    <button
+                      onClick={() => setMainView("video")}
+                      aria-label="Vidéo"
+                      className="flex items-center rounded-full px-2 py-1 transition-colors sm:px-2.5"
+                      style={{
+                        opacity: mainView === "video" ? 1 : 0.6,
+                        backgroundColor: mainView === "video" ? palette.bg : "transparent",
+                      }}
+                    >
+                      <IconVideoTab className="sm:hidden" />
+                      <span className="hidden sm:inline">Vidéo</span>
+                    </button>
+                  )}
+                  {enableClientCollections && (
+                    <button
+                      onClick={() => {
+                        setMainView("collections");
+                        closeCollectionDetail();
+                      }}
+                      aria-label={t("gallery.collections.tab")}
+                      className="flex items-center rounded-full px-2 py-1 transition-colors sm:px-2.5"
+                      style={{
+                        opacity: mainView === "collections" ? 1 : 0.6,
+                        backgroundColor: mainView === "collections" ? palette.bg : "transparent",
+                      }}
+                    >
+                      <IconCollectionTab className="sm:hidden" />
+                      <span className="hidden sm:inline">{t("gallery.collections.tab")}</span>
+                    </button>
+                  )}
                 </div>
               )}
-              {videos.length > 0 && (
+              {(videos.length > 0 || enableClientCollections) && (
                 <span className="hidden h-4 w-px opacity-20 sm:inline" style={{ backgroundColor: palette.text }} />
               )}
 
@@ -531,6 +751,18 @@ export function GalleryView({
                     {gallery.allowDownload && (
                       <IconButton label="Télécharger" onClick={() => setDownloadPanelOpen(true)}>
                         <IconDownload />
+                      </IconButton>
+                    )}
+                    {enableClientCollections && (
+                      <IconButton
+                        label={selectMode ? t("gallery.collections.selectModeExit") : t("gallery.collections.selectModeEnter")}
+                        onClick={() => {
+                          setSelectMode((v) => !v);
+                          setSelectedPhotoIds(new Set());
+                        }}
+                        active={selectMode}
+                      >
+                        <IconSelectMode />
                       </IconButton>
                     )}
                   </>
@@ -598,6 +830,18 @@ export function GalleryView({
                           label="Télécharger"
                           onClick={() => {
                             setDownloadPanelOpen(true);
+                            setActionsMenuOpen(false);
+                          }}
+                        />
+                      )}
+                      {mainView === "photos" && enableClientCollections && (
+                        <MenuRow
+                          icon={<IconSelectMode />}
+                          label={selectMode ? t("gallery.collections.selectModeExit") : t("gallery.collections.selectModeEnter")}
+                          active={selectMode}
+                          onClick={() => {
+                            setSelectMode((v) => !v);
+                            setSelectedPhotoIds(new Set());
                             setActionsMenuOpen(false);
                           }}
                         />
@@ -724,10 +968,15 @@ export function GalleryView({
                   className="h-full w-full cursor-pointer object-cover"
                   onMouseEnter={() => prefetchPreview(photo.id)}
                   onClick={() => {
+                    if (selectMode) {
+                      toggleSelectPhoto(photo.id);
+                      return;
+                    }
                     setLightboxIndex(i);
                     acknowledgeRemark(photo.id);
                   }}
                 />
+                {selectMode && <SelectCheckbox checked={selectedPhotoIds.has(photo.id)} accentColor={palette.accent} />}
                 <PhotoOverlay
                   allowFavorites={gallery.allowFavorites}
                   allowDownload={gallery.allowDownload}
@@ -743,6 +992,8 @@ export function GalleryView({
                   remarkState={remarkStateFor(photo.id)}
                   remarkSeen={!!remarks.get(photo.id)?.seenByClient}
                   onRemark={() => setRemarkPhotoId(photo.id)}
+                  allowClientCollections={enableClientCollections && !selectMode}
+                  onAddToCollection={() => setAddToCollectionTargets([photo.id])}
                 />
               </figure>
             );
@@ -774,10 +1025,15 @@ export function GalleryView({
                       className="block h-auto w-full cursor-pointer"
                       onMouseEnter={() => prefetchPreview(photo.id)}
                       onClick={() => {
+                        if (selectMode) {
+                          toggleSelectPhoto(photo.id);
+                          return;
+                        }
                         setLightboxIndex(i);
                         acknowledgeRemark(photo.id);
                       }}
                     />
+                    {selectMode && <SelectCheckbox checked={selectedPhotoIds.has(photo.id)} accentColor={palette.accent} />}
                     <PhotoOverlay
                       allowFavorites={gallery.allowFavorites}
                       allowDownload={gallery.allowDownload}
@@ -793,6 +1049,8 @@ export function GalleryView({
                       remarkState={remarkStateFor(photo.id)}
                       remarkSeen={!!remarks.get(photo.id)?.seenByClient}
                       onRemark={() => setRemarkPhotoId(photo.id)}
+                      allowClientCollections={enableClientCollections && !selectMode}
+                      onAddToCollection={() => setAddToCollectionTargets([photo.id])}
                     />
                   </figure>
                 );
@@ -802,6 +1060,95 @@ export function GalleryView({
         </div>
       )}
         </>
+      )}
+
+      {mainView === "collections" && enableClientCollections && (
+        <ClientCollectionsView
+          collections={clientCollections}
+          loading={collectionsLoading}
+          activeCollectionId={activeCollectionId}
+          activeTitle={activeCollectionTitle}
+          activePhotos={activeCollectionPhotos}
+          detailLoading={collectionDetailLoading}
+          renaming={renamingCollection}
+          renameValue={renameValue}
+          palette={palette}
+          fileUrl={fileUrl}
+          t={t}
+          sharingPhotoId={sharingCollectionPhotoId}
+          onOpen={openCollection}
+          onBack={closeCollectionDetail}
+          onCreateClick={() => setCreateCollectionOpen(true)}
+          onStartRename={() => {
+            setRenameValue(activeCollectionTitle);
+            setRenamingCollection(true);
+          }}
+          onCancelRename={() => setRenamingCollection(false)}
+          onRenameValueChange={setRenameValue}
+          onSubmitRename={() => renameActiveCollection(renameValue.trim() || activeCollectionTitle)}
+          onDelete={deleteActiveCollection}
+          onRemovePhoto={removePhotoFromActiveCollection}
+          onSharePhoto={shareCollectionPhoto}
+          onShareCover={(collection) => {
+            if (!collection.coverPhotoId) return;
+            shareCollectionPhoto({
+              photoId: collection.coverPhotoId,
+              filename: photos.find((p) => p.id === collection.coverPhotoId)?.filename ?? `${collection.title}.jpg`,
+            });
+          }}
+        />
+      )}
+
+      {selectMode && selectedPhotoIds.size > 0 && (
+        <div
+          className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-center gap-4 border-t px-4 py-3 shadow-[0_-2px_10px_rgba(0,0,0,0.08)]"
+          style={{ backgroundColor: palette.bg, borderColor: `${palette.accent}33` }}
+        >
+          <span className="text-sm font-medium">
+            {t("gallery.collections.selectedCount").replace("{count}", String(selectedPhotoIds.size))}
+          </span>
+          <button
+            onClick={() => setAddToCollectionTargets(Array.from(selectedPhotoIds))}
+            style={{ backgroundColor: palette.accent }}
+            className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition-opacity hover:opacity-90"
+          >
+            {t("gallery.collections.addToCollection")}
+          </button>
+          <button
+            onClick={() => {
+              setSelectMode(false);
+              setSelectedPhotoIds(new Set());
+            }}
+            className="text-xs uppercase tracking-wide opacity-70 hover:opacity-100"
+          >
+            {t("gallery.collections.cancelSelection")}
+          </button>
+        </div>
+      )}
+
+      {addToCollectionTargets && (
+        <AddToCollectionModal
+          collections={clientCollections}
+          accentColor={palette.accent}
+          submitting={addingToCollection}
+          t={t}
+          onPickExisting={(id) => addTargetsToCollection(id)}
+          onCreateAndAdd={(title) => addTargetsToCollection(null, title)}
+          onClose={() => setAddToCollectionTargets(null)}
+        />
+      )}
+
+      {createCollectionOpen && (
+        <CreateCollectionModal
+          accentColor={palette.accent}
+          t={t}
+          onCreate={async (title) => {
+            const id = await submitCreateCollection(title);
+            setCreateCollectionOpen(false);
+            if (id) openCollection(id);
+          }}
+          onClose={() => setCreateCollectionOpen(false)}
+        />
       )}
 
       {lightboxIndex !== null && (
@@ -1690,6 +2037,8 @@ function PhotoOverlay({
   remarkState,
   remarkSeen,
   onRemark,
+  allowClientCollections,
+  onAddToCollection,
 }: {
   allowFavorites: boolean;
   allowDownload: boolean;
@@ -1709,6 +2058,10 @@ function PhotoOverlay({
   /** true dès que le client a ouvert cette photo en plein écran au moins une fois. */
   remarkSeen?: boolean;
   onRemark?: () => void;
+  /** Icône "Ajouter à une collection" (12/08/2026, demande d'Adriel) — lien client connecté
+   * uniquement, masquée pendant la sélection multiple (voir `selectMode` dans GalleryView). */
+  allowClientCollections?: boolean;
+  onAddToCollection?: () => void;
 }) {
   const iconClass =
     "pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] transition-transform hover:scale-110";
@@ -1787,6 +2140,18 @@ function PhotoOverlay({
           {hasRemark ? <IconCheck /> : <IconRemark />}
         </button>
       )}
+      {allowClientCollections && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onAddToCollection?.();
+          }}
+          aria-label="Ajouter à une collection"
+          className={iconClass}
+        >
+          <IconCollectionAdd />
+        </button>
+      )}
     </div>
     {showHighlightBadge && (
       <button
@@ -1834,6 +2199,412 @@ function IconRemark() {
       <path d="M4 5h16v11H8l-4 4V5z" strokeLinejoin="round" />
       <path d="M8 9h8M8 12.5h5" strokeLinecap="round" />
     </svg>
+  );
+}
+
+/** Icône "Ajouter à une collection" (dossier avec un +) — voir PhotoOverlay et
+ * AddToCollectionModal, chantier "collections privées du client" (12/08/2026). */
+function IconCollectionAdd() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" strokeLinejoin="round" />
+      <path d="M12 11v5M9.5 13.5h5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Icône "sélection multiple" (case à cocher) — bascule le mode sélection dans la grille
+ * Photos, voir `selectMode` dans GalleryView. */
+function IconSelectMode() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <rect x="4" y="4" width="16" height="16" rx="3" />
+      <path d="M8 12.5l2.5 2.5L16 9.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Icône de l'onglet "Collections" (dossier) — voir la bascule Photos/Vidéo/Collections. */
+function IconCollectionTab({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className={className}
+    >
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Petite pastille cochable posée en haut à gauche de chaque vignette pendant la sélection
+ * multiple (voir `selectMode`) — purement visuelle : le clic est géré par l'image elle-même
+ * (toggleSelectPhoto), cette pastille reflète juste l'état. */
+function SelectCheckbox({ checked, accentColor }: { checked: boolean; accentColor: string }) {
+  return (
+    <span
+      className="pointer-events-none absolute left-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white shadow"
+      style={{ backgroundColor: checked ? accentColor : "rgba(0,0,0,0.35)" }}
+    >
+      {checked && (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.4">
+          <path d="M5 12.5l4.5 4.5L19 7.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+    </span>
+  );
+}
+
+/**
+ * Onglet "Mes collections" — vue liste (cartes) ou vue détail d'une collection (grille de ses
+ * photos), voir mainView === "collections" dans GalleryView. Extrait en composant séparé pour
+ * ne pas alourdir davantage le corps de GalleryView, comme VideoSection ci-dessus.
+ */
+function ClientCollectionsView({
+  collections,
+  loading,
+  activeCollectionId,
+  activeTitle,
+  activePhotos,
+  detailLoading,
+  renaming,
+  renameValue,
+  palette,
+  fileUrl,
+  t,
+  sharingPhotoId,
+  onOpen,
+  onBack,
+  onCreateClick,
+  onStartRename,
+  onCancelRename,
+  onRenameValueChange,
+  onSubmitRename,
+  onDelete,
+  onRemovePhoto,
+  onSharePhoto,
+  onShareCover,
+}: {
+  collections: ClientCollectionDTO[];
+  loading: boolean;
+  activeCollectionId: string | null;
+  activeTitle: string;
+  activePhotos: ClientCollectionPhotoDTO[];
+  detailLoading: boolean;
+  renaming: boolean;
+  renameValue: string;
+  palette: { bg: string; text: string; accent: string };
+  fileUrl: (photoId: string, variant: "thumb" | "preview") => string;
+  t: (key: string) => string;
+  sharingPhotoId: string | null;
+  onOpen: (id: string) => void;
+  onBack: () => void;
+  onCreateClick: () => void;
+  onStartRename: () => void;
+  onCancelRename: () => void;
+  onRenameValueChange: (v: string) => void;
+  onSubmitRename: () => void;
+  onDelete: () => void;
+  onRemovePhoto: (photoId: string) => void;
+  onSharePhoto: (photo: { photoId: string; filename: string }) => void;
+  onShareCover: (collection: ClientCollectionDTO) => void;
+}) {
+  const activeCollection = collections.find((c) => c.id === activeCollectionId) ?? null;
+
+  if (activeCollectionId) {
+    return (
+      <div className="px-4 py-6 sm:px-6">
+        <button
+          onClick={onBack}
+          className="mb-4 flex items-center gap-1.5 text-xs uppercase tracking-wide opacity-70 hover:opacity-100"
+        >
+          <IconArrowLeft />
+          {t("gallery.collections.backToList")}
+        </button>
+
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          {renaming ? (
+            <div className="flex flex-1 items-center gap-2">
+              <input
+                autoFocus
+                value={renameValue}
+                onChange={(e) => onRenameValueChange(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && onSubmitRename()}
+                className="min-w-0 flex-1 border-b bg-transparent px-1 py-1 font-serif text-xl font-semibold outline-none"
+                style={{ borderColor: palette.accent }}
+              />
+              <button
+                onClick={onSubmitRename}
+                style={{ backgroundColor: palette.accent }}
+                className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white"
+              >
+                {t("gallery.collections.save")}
+              </button>
+              <button onClick={onCancelRename} className="text-xs uppercase tracking-wide opacity-70 hover:opacity-100">
+                {t("gallery.collections.cancel")}
+              </button>
+            </div>
+          ) : (
+            <h2 className="font-serif text-xl font-semibold sm:text-2xl">{activeTitle}</h2>
+          )}
+          {!renaming && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onStartRename}
+                className="text-xs uppercase tracking-wide opacity-70 hover:opacity-100 hover:underline"
+              >
+                {t("gallery.collections.rename")}
+              </button>
+              {activeCollection && (
+                <button
+                  onClick={() => onShareCover(activeCollection)}
+                  className="flex items-center gap-1 text-xs uppercase tracking-wide opacity-70 hover:opacity-100 hover:underline"
+                >
+                  <IconShare /> {t("gallery.collections.share")}
+                </button>
+              )}
+              <button
+                onClick={onDelete}
+                className="text-xs uppercase tracking-wide text-red-500 opacity-80 hover:opacity-100 hover:underline"
+              >
+                {t("gallery.collections.delete")}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {detailLoading ? (
+          <div className="flex justify-center py-16">
+            <Spinner />
+          </div>
+        ) : activePhotos.length === 0 ? (
+          <p className="py-10 text-center text-sm opacity-60">{t("gallery.collections.detailEmpty")}</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+            {activePhotos.map((photo) => (
+              <figure key={photo.photoId} className="group relative aspect-square overflow-hidden bg-gray-50">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={fileUrl(photo.photoId, "thumb")}
+                  alt={photo.filename}
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                />
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center gap-3 bg-gradient-to-t from-black/60 to-transparent pb-2 pt-8 opacity-0 transition-opacity group-hover:opacity-100">
+                  <button
+                    onClick={() => onSharePhoto(photo)}
+                    disabled={sharingPhotoId === photo.photoId}
+                    aria-label={t("gallery.collections.share")}
+                    className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] transition-transform hover:scale-110 disabled:cursor-wait"
+                  >
+                    {sharingPhotoId === photo.photoId ? (
+                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                    ) : (
+                      <IconShare />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => onRemovePhoto(photo.photoId)}
+                    aria-label={t("gallery.collections.removePhoto")}
+                    className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] transition-transform hover:scale-110"
+                  >
+                    <IconClose />
+                  </button>
+                </div>
+              </figure>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-4 py-6 sm:px-6">
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <Spinner />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+          <button
+            onClick={onCreateClick}
+            className="flex aspect-square flex-col items-center justify-center gap-2 rounded-sm border-2 border-dashed text-sm opacity-70 transition-opacity hover:opacity-100"
+            style={{ borderColor: `${palette.accent}55` }}
+          >
+            <span className="text-2xl leading-none">+</span>
+            {t("gallery.collections.create")}
+          </button>
+          {collections.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => onOpen(c.id)}
+              className="group relative flex aspect-square flex-col justify-end overflow-hidden rounded-sm bg-gray-100 text-left"
+            >
+              {c.coverPhotoId ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={fileUrl(c.coverPhotoId, "thumb")} alt={c.title} className="absolute inset-0 h-full w-full object-cover" />
+              ) : (
+                <span className="absolute inset-0 flex items-center justify-center opacity-30">
+                  <IconCollectionTab />
+                </span>
+              )}
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onShareCover(c);
+                }}
+                role="button"
+                aria-label={t("gallery.collections.share")}
+                className="pointer-events-auto absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-white opacity-0 transition-opacity hover:bg-black/65 group-hover:opacity-100"
+              >
+                <IconShare />
+              </span>
+              <span className="relative bg-gradient-to-t from-black/70 to-transparent px-3 py-2 text-white">
+                <span className="block truncate text-sm font-medium">{c.title}</span>
+                <span className="block text-xs opacity-80">
+                  {t("gallery.collections.photoCount").replace("{count}", String(c.photoCount))}
+                </span>
+              </span>
+            </button>
+          ))}
+          {!loading && collections.length === 0 && (
+            <p className="col-span-full py-6 text-center text-sm opacity-60">{t("gallery.collections.listEmpty")}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Modale "Ajouter à une collection" — liste les collections existantes du client (choix
+ * direct) et propose d'en créer une nouvelle à la volée, ouverte depuis l'icône de survol
+ * d'une vignette ou depuis la barre de sélection multiple (voir GalleryView). */
+function AddToCollectionModal({
+  collections,
+  accentColor,
+  submitting,
+  t,
+  onPickExisting,
+  onCreateAndAdd,
+  onClose,
+}: {
+  collections: ClientCollectionDTO[];
+  accentColor: string;
+  submitting: boolean;
+  t: (key: string) => string;
+  onPickExisting: (id: string) => void;
+  onCreateAndAdd: (title: string) => void;
+  onClose: () => void;
+}) {
+  const [newTitle, setNewTitle] = useState("");
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
+      <div
+        className="w-full max-w-sm rounded-sm bg-[#f6f1ea] p-7 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-800">
+            {t("gallery.collections.addToCollection")}
+          </h2>
+          <button onClick={onClose} aria-label="Fermer" className="flex h-6 w-6 items-center justify-center text-gray-500 hover:text-gray-800">
+            <IconClose />
+          </button>
+        </div>
+
+        {collections.length > 0 && (
+          <div className="mt-4 max-h-56 space-y-1 overflow-y-auto">
+            {collections.map((c) => (
+              <button
+                key={c.id}
+                disabled={submitting}
+                onClick={() => onPickExisting(c.id)}
+                className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-white disabled:opacity-50"
+              >
+                <span className="truncate">{c.title}</span>
+                <span className="shrink-0 text-xs text-gray-400">{c.photoCount}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-4 flex items-center gap-2 border-t border-gray-300 pt-4">
+          <input
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            placeholder={t("gallery.collections.newNamePlaceholder")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && newTitle.trim()) onCreateAndAdd(newTitle.trim());
+            }}
+            className="min-w-0 flex-1 border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
+          />
+          <button
+            disabled={submitting || !newTitle.trim()}
+            onClick={() => newTitle.trim() && onCreateAndAdd(newTitle.trim())}
+            style={{ backgroundColor: accentColor }}
+            className="shrink-0 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {t("gallery.collections.create")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Modale "Créer une collection" — un simple nom, utilisée par la carte "+" de la vue liste
+ * (pas d'ajout de photo associé, contrairement à AddToCollectionModal). */
+function CreateCollectionModal({
+  accentColor,
+  t,
+  onCreate,
+  onClose,
+}: {
+  accentColor: string;
+  t: (key: string) => string;
+  onCreate: (title: string) => void;
+  onClose: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-sm bg-[#f6f1ea] p-7 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-800">
+            {t("gallery.collections.create")}
+          </h2>
+          <button onClick={onClose} aria-label="Fermer" className="flex h-6 w-6 items-center justify-center text-gray-500 hover:text-gray-800">
+            <IconClose />
+          </button>
+        </div>
+        <div className="mt-5 flex items-center gap-2">
+          <input
+            autoFocus
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={t("gallery.collections.newNamePlaceholder")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && title.trim()) onCreate(title.trim());
+            }}
+            className="min-w-0 flex-1 border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
+          />
+          <button
+            disabled={!title.trim()}
+            onClick={() => title.trim() && onCreate(title.trim())}
+            style={{ backgroundColor: accentColor }}
+            className="shrink-0 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {t("gallery.collections.create")}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
