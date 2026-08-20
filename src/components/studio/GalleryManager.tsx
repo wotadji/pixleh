@@ -182,6 +182,10 @@ export function GalleryManager({
   // groupées (déplacer vers un set, supprimer) qui remplace la barre d'outils normale tant
   // qu'au moins une photo est sélectionnée.
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
+  // Visionneuse plein écran (zoom) : clic sur une vignette de la grille Photos ouvre la photo
+  // en grand plutôt que de la (dé)sélectionner (retour d'Adriel, 21/08/2026 — la sélection se
+  // fait désormais uniquement via la case à cocher qui apparaît au survol de la vignette).
+  const [lightboxPhotoId, setLightboxPhotoId] = useState<string | null>(null);
   const [bulkMoveMenuOpen, setBulkMoveMenuOpen] = useState(false);
   const [bulkActing, setBulkActing] = useState(false);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
@@ -1111,6 +1115,14 @@ export function GalleryManager({
     return `/api/files/studios/${gallery.studioId}/galleries/${gallery.id}/${photoId}/thumb.jpg?v=${v}`;
   };
 
+  // Variante "preview" (plus grande, sans le crop carré des miniatures) utilisée par la
+  // visionneuse plein écran — voir thumbUrl ci-dessus pour le principe du paramètre ?v=.
+  const previewUrl = (photoId: string) => {
+    const version = localPhotos.find((p) => p.id === photoId)?.updatedAt;
+    const v = version ? new Date(version).getTime() : 0;
+    return `/api/files/studios/${gallery.studioId}/galleries/${gallery.id}/${photoId}/preview.jpg?v=${v}`;
+  };
+
   const activeCoverPhotoId = coverPhotoId || localPhotos[0]?.id || null;
   // Fond des vignettes de l'onglet Vidéo qui n'ont pas de miniature propre (upload direct,
   // pas de génération de vignette vidéo en v1) — la couverture de la galerie plutôt qu'un
@@ -1739,7 +1751,7 @@ export function GalleryManager({
                       return (
                         <div
                           key={photo.id}
-                          onClick={() => toggleSelectPhoto(photo.id)}
+                          onClick={() => setLightboxPhotoId(photo.id)}
                           className={`group relative aspect-square cursor-pointer overflow-hidden bg-gray-100 ${
                             selected ? "ring-2 ring-inset ring-brand-500" : ""
                           }`}
@@ -1750,11 +1762,19 @@ export function GalleryManager({
                             alt={photo.filename}
                             className="h-full w-full object-cover"
                           />
-                          {/* Clic sur l'image = (dé)sélection directe (voir onClick du
-                              conteneur) — cette pastille n'est qu'un indicateur visuel de
-                              l'état, plus une case à cocher séparée à viser précisément. */}
-                          <span
-                            className={`pointer-events-none absolute left-1.5 top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-sm text-white transition-opacity ${
+                          {/* Clic sur l'image = zoom (voir onClick du conteneur) — la case à
+                              cocher ci-dessous est désormais une vraie zone cliquable dédiée à
+                              la sélection, visible en permanence si sélectionnée, sinon
+                              seulement au survol (retour d'Adriel, 21/08/2026). */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleSelectPhoto(photo.id);
+                            }}
+                            title={t("gm.selectPhoto")}
+                            aria-label={t("gm.selectPhoto")}
+                            className={`absolute left-1.5 top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-sm text-white transition-opacity ${
                               selected ? "bg-brand-500 opacity-100" : "bg-black/40 opacity-0 group-hover:opacity-100"
                             }`}
                           >
@@ -1767,7 +1787,7 @@ export function GalleryManager({
                                 />
                               </svg>
                             )}
-                          </span>
+                          </button>
                           {/* Bouton "Partager" : visible sur toutes les vignettes au survol,
                               mais en permanence (pas seulement au hover) dans le set "Réseaux
                               sociaux" — demande d'Adriel, 12/08/2026. Positionné en miroir de
@@ -1829,6 +1849,84 @@ export function GalleryManager({
             </main>
           </div>
         )}
+
+        {/* Visionneuse plein écran (zoom) — ouverte au clic sur une vignette de la grille
+            Photos. Navigation précédent/suivant dans l'ordre affiché (filteredPhotos), donc
+            cohérente avec le tri/filtre en cours. */}
+        {lightboxPhotoId && (() => {
+          const index = filteredPhotos.findIndex((p) => p.id === lightboxPhotoId);
+          if (index === -1) return null;
+          const photo = filteredPhotos[index];
+          const goTo = (i: number) => {
+            if (i < 0 || i >= filteredPhotos.length) return;
+            setLightboxPhotoId(filteredPhotos[i].id);
+          };
+          return (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+              onClick={() => setLightboxPhotoId(null)}
+            >
+              <button
+                type="button"
+                onClick={() => setLightboxPhotoId(null)}
+                title={t("gm.lightbox.close")}
+                aria-label={t("gm.lightbox.close")}
+                className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                  <path d="M5.3 4.3a1 1 0 0 1 1.4 0L10 7.6l3.3-3.3a1 1 0 1 1 1.4 1.4L11.4 9l3.3 3.3a1 1 0 0 1-1.4 1.4L10 10.4l-3.3 3.3a1 1 0 0 1-1.4-1.4L8.6 9 5.3 5.7a1 1 0 0 1 0-1.4Z" />
+                </svg>
+              </button>
+              {index > 0 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    goTo(index - 1);
+                  }}
+                  title={t("gm.lightbox.prev")}
+                  aria-label={t("gm.lightbox.prev")}
+                  className="absolute left-2 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 sm:left-4"
+                >
+                  <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                    <path
+                      fillRule="evenodd"
+                      d="M12.7 4.3a1 1 0 0 1 0 1.4L8.4 10l4.3 4.3a1 1 0 0 1-1.4 1.4l-5-5a1 1 0 0 1 0-1.4l5-5a1 1 0 0 1 1.4 0Z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </button>
+              )}
+              {index < filteredPhotos.length - 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    goTo(index + 1);
+                  }}
+                  title={t("gm.lightbox.next")}
+                  aria-label={t("gm.lightbox.next")}
+                  className="absolute right-2 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 sm:right-4"
+                >
+                  <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                    <path
+                      fillRule="evenodd"
+                      d="M7.3 15.7a1 1 0 0 1 0-1.4L11.6 10 7.3 5.7a1 1 0 0 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4 0Z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </button>
+              )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewUrl(photo.id)}
+                alt={photo.filename}
+                onClick={(e) => e.stopPropagation()}
+                className="max-h-[90vh] max-w-[92vw] select-none object-contain"
+              />
+            </div>
+          );
+        })()}
 
         {activeTab === "design" && (
           <>
