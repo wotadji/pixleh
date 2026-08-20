@@ -141,9 +141,15 @@ export default async function GalleryEntryPage({
   // depuis le panneau studio (voir GalleryManager > togglePortfolioVisibility), et il a sa
   // propre vue dédiée (/[studioSlug]/portfolio/[gallerySlug]) — demandé par Adriel le
   // 30/07/2026 après avoir vu "PORTFOLIO" listé à côté des vrais sets sur /g/[slug].
+  // isSocialDefault exclu ici aussi (21/08/2026, retour d'Adriel) : le set "Réseaux sociaux"
+  // est un dossier de curation privé du photographe, jamais un onglet client/invité — même
+  // règle que isPortfolioDefault ci-dessus. Défensif : depuis ce même correctif, ajouter une
+  // photo à ces deux sets ne passe plus par collectionId (voir Photo.portfolioTagged/
+  // socialTagged dans schema.prisma), donc aucune photo ne devrait plus s'y trouver, mais on
+  // garde ce filtre au cas où d'anciennes données n'auraient pas encore été migrées.
   let visiblePhotos = gallery.photos;
   let visibleCollections = gallery.collections
-    .filter((c) => !c.isPortfolioDefault)
+    .filter((c) => !c.isPortfolioDefault && !c.isSocialDefault)
     .map((c) => ({ id: c.id, title: c.title }));
   let coverPhotoId = gallery.coverPhotoId;
   let allowDownload = gallery.allowDownload;
@@ -163,7 +169,9 @@ export default async function GalleryEntryPage({
       visiblePhotos = gallery.defaultVisibility.includes("GUEST") ? gallery.photos : [];
       visibleCollections = [];
     } else {
-      const guestSets = gallery.collections.filter((c) => c.visibility.includes("GUEST") && !c.isPortfolioDefault);
+      const guestSets = gallery.collections.filter(
+        (c) => c.visibility.includes("GUEST") && !c.isPortfolioDefault && !c.isSocialDefault
+      );
       visibleCollections = guestSets.map((c) => ({ id: c.id, title: c.title }));
       const guestCollectionIds = new Set(guestSets.map((c) => c.id));
       visiblePhotos = gallery.photos.filter((p) => p.collectionId && guestCollectionIds.has(p.collectionId));

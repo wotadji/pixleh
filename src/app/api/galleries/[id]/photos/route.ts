@@ -50,6 +50,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     // FormData est soit une chaîne, soit un fichier — exclure les chaînes suffit.
     const files = formData.getAll("files").filter((f) => typeof f !== "string") as File[];
     const collectionId = (formData.get("collectionId") as string | null) || null;
+    // Upload direct dans le set Portfolio/Réseaux sociaux (voir GalleryManager, activeSet) :
+    // tague les photos créées plutôt que de les affecter via collectionId — voir le
+    // commentaire sur Photo.portfolioTagged dans schema.prisma.
+    const portfolioTagged = formData.get("portfolioTagged") === "true";
+    const socialTagged = formData.get("socialTagged") === "true";
     const duplicateActionRaw = formData.get("duplicateAction") as string | null;
     const duplicateAction: "skip" | "replace" | "keep" =
       duplicateActionRaw === "replace" || duplicateActionRaw === "keep" ? duplicateActionRaw : "skip";
@@ -162,7 +167,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           position: position++,
         },
       });
-      created.push(photo);
+      if (portfolioTagged) {
+        await prisma.$executeRaw`UPDATE "Photo" SET "portfolioTagged" = true WHERE id = ${photo.id}`;
+      }
+      if (socialTagged) {
+        await prisma.$executeRaw`UPDATE "Photo" SET "socialTagged" = true WHERE id = ${photo.id}`;
+      }
+      created.push({ ...photo, portfolioTagged, socialTagged });
       bytesAddedSoFar += processed.sizeBytes || 0;
 
       if (coverReplacedBy === hash) {

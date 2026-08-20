@@ -43,18 +43,41 @@ export default async function PublicPortfolioGalleryPage({
     where: { slug: params.gallerySlug, studioId: studio.id, status: "PUBLISHED" },
     include: {
       photos: { orderBy: { position: "asc" } },
-      collections: { select: { id: true, visibility: true } },
+      collections: { select: { id: true, visibility: true, isPortfolioDefault: true } },
     },
   });
   if (!gallery) notFound();
 
+  // portfolioTagged (Photo) : trop récent pour le Prisma Client généré du sandbox, lu via
+  // $queryRaw — voir le commentaire sur ce champ dans schema.prisma.
+  const portfolioTaggedRows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM "Photo" WHERE "galleryId" = ${gallery.id} AND "portfolioTagged" = true
+  `;
+  const portfolioTaggedIds = new Set(portfolioTaggedRows.map((r) => r.id));
+
   const portfolioPhotos =
     gallery.collections.length > 0
       ? (() => {
-          const portfolioCollectionIds = new Set(
-            gallery.collections.filter((c) => c.visibility.includes("PORTFOLIO")).map((c) => c.id)
+          // Un studio peut publier N'IMPORTE quel set sur son portfolio (visibility PORTFOLIO),
+          // pas seulement le set "Portfolio" auto-créé — comportement inchangé pour ces sets
+          // "normaux" : appartenance réelle via collectionId. Le set auto-créé (isPortfolioDefault)
+          // fonctionne différemment depuis le 21/08/2026 : ses photos ne sont plus "dans" ce set
+          // via collectionId (elles restent dans leur set client d'origine), donc on se base sur
+          // le tag portfolioTagged à la place, uniquement si ce set précis est activé (visibility
+          // PORTFOLIO) — voir togglePortfolioVisibility dans GalleryManager.
+          const regularPortfolioCollectionIds = new Set(
+            gallery.collections
+              .filter((c) => c.visibility.includes("PORTFOLIO") && !c.isPortfolioDefault)
+              .map((c) => c.id)
           );
-          return gallery.photos.filter((p) => p.collectionId && portfolioCollectionIds.has(p.collectionId));
+          const defaultPortfolioActive = gallery.collections.some(
+            (c) => c.isPortfolioDefault && c.visibility.includes("PORTFOLIO")
+          );
+          return gallery.photos.filter(
+            (p) =>
+              (p.collectionId && regularPortfolioCollectionIds.has(p.collectionId)) ||
+              (defaultPortfolioActive && portfolioTaggedIds.has(p.id))
+          );
         })()
       : gallery.defaultVisibility.includes("PORTFOLIO")
         ? gallery.photos

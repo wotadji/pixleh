@@ -48,6 +48,13 @@ interface PhotoDTO {
   updatedAt: string;
   createdAt: string;
   sizeBytes: number | null;
+  /** Indépendants de collectionId : une photo peut être "dans" le set Portfolio et/ou
+   * Réseaux sociaux SANS quitter son set client d'origine (retour d'Adriel, 21/08/2026 —
+   * avant, l'assigner à ces sets la sortait de son set client, donc invisible au client).
+   * Pilotés par les icônes dédiées sur chaque vignette plutôt que par le menu "Déplacer
+   * vers", qui n'en propose plus que les vrais sets. Voir togglePhotoTag. */
+  portfolioTagged: boolean;
+  socialTagged: boolean;
 }
 
 /** Remarque de modification laissée par le client sur une photo (lien /g, jamais /invite). */
@@ -465,7 +472,18 @@ export function GalleryManager({
         const batchBytes = batch.reduce((sum, f) => sum + f.size, 0);
         const formData = new FormData();
         batch.forEach((f) => formData.append("files", f));
-        if (activeSet) formData.append("collectionId", activeSet);
+        // Upload alors qu'on est sur le set Portfolio ou Réseaux sociaux : on tague les
+        // nouvelles photos plutôt que de les affecter à ce set via collectionId (retour
+        // d'Adriel, 21/08/2026 — même principe que togglePhotoTag ci-dessus), pour qu'elles
+        // restent visibles en "Toutes les photos"/sans set côté client comme les autres.
+        const activeCollectionForUpload = activeSet ? gallery.collections.find((c) => c.id === activeSet) : null;
+        if (activeCollectionForUpload?.isPortfolioDefault) {
+          formData.append("portfolioTagged", "true");
+        } else if (activeCollectionForUpload?.isSocialDefault) {
+          formData.append("socialTagged", "true");
+        } else if (activeSet) {
+          formData.append("collectionId", activeSet);
+        }
         formData.append("duplicateAction", duplicateAction);
         try {
           const res = await xhrPostFormData(
@@ -549,7 +567,7 @@ export function GalleryManager({
       }
       router.refresh();
     },
-    [gallery.id, activeSet, router, t]
+    [gallery.id, gallery.collections, activeSet, router, t]
   );
 
   function stopUpload() {
@@ -636,6 +654,22 @@ export function GalleryManager({
       body: JSON.stringify({ collectionId: collectionId || null }),
     });
     router.refresh();
+  }
+
+  // Ajoute/retire une photo du set Portfolio ou Réseaux sociaux SANS toucher à son set
+  // client réel (collectionId) — voir le commentaire sur Photo.portfolioTagged dans
+  // schema.prisma. Mise à jour optimiste de l'état local pour un rendu immédiat des icônes,
+  // même logique que toggleSelectPhoto.
+  async function togglePhotoTag(photoId: string, tag: "portfolioTagged" | "socialTagged") {
+    const current = localPhotos.find((p) => p.id === photoId);
+    if (!current) return;
+    const nextValue = !current[tag];
+    setLocalPhotos((prev) => prev.map((p) => (p.id === photoId ? { ...p, [tag]: nextValue } : p)));
+    await fetch(`/api/galleries/${gallery.id}/photos/${photoId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [tag]: nextValue }),
+    });
   }
 
   // ---- Sélection multiple (grille Photos) ----
@@ -1057,12 +1091,25 @@ export function GalleryManager({
     setTimeout(() => setRegenMessage(null), 5000);
   }
 
+  // Sets "réels" (avec vraie affectation collectionId) proposés dans "Déplacer vers" et le
+  // menu de déplacement groupé — Portfolio et Réseaux sociaux en sont exclus depuis le
+  // 21/08/2026 : ce ne sont plus des sets qu'on "déplace" une photo vers (ce qui la sortait
+  // de son set client), mais des étiquettes qu'on ajoute/retire via l'icône dédiée sur
+  // chaque vignette, voir togglePhotoTag.
+  const assignableCollections = gallery.collections.filter((c) => !c.isPortfolioDefault && !c.isSocialDefault);
+
   const filteredPhotos = useMemo(() => {
-    const base = localPhotos.filter((p) => (activeSet ? p.collectionId === activeSet : true));
+    const activeCollection = gallery.collections.find((c) => c.id === activeSet) || null;
+    const base = localPhotos.filter((p) => {
+      if (!activeSet) return true;
+      if (activeCollection?.isPortfolioDefault) return p.portfolioTagged;
+      if (activeCollection?.isSocialDefault) return p.socialTagged;
+      return p.collectionId === activeSet;
+    });
     // Même helper que la galerie publique (/g/[slug]) : le tri choisi ici est ce que le
     // client voit, pas juste un tri d'affichage local à ce panel.
     return sortPhotos(base, sortBy);
-  }, [localPhotos, activeSet, sortBy]);
+  }, [localPhotos, activeSet, sortBy, gallery.collections]);
 
   // Set "Réseaux sociaux" ouvert : affiche le bandeau d'explication + le bouton Partager
   // au-dessus de la grille (voir plus bas) — demande d'Adriel, 12/08/2026.
@@ -1440,7 +1487,14 @@ export function GalleryManager({
                 </button>
               </div>
               {gallery.collections.map((c) => {
-                const count = localPhotos.filter((p) => p.collectionId === c.id).length;
+                // Portfolio/Réseaux sociaux : compte sur le tag (portfolioTagged/socialTagged),
+                // pas sur collectionId — voir togglePhotoTag et le commentaire sur ces champs
+                // dans schema.prisma.
+                const count = c.isPortfolioDefault
+                  ? localPhotos.filter((p) => p.portfolioTagged).length
+                  : c.isSocialDefault
+                    ? localPhotos.filter((p) => p.socialTagged).length
+                    : localPhotos.filter((p) => p.collectionId === c.id).length;
                 return (
                   <div key={c.id} className="group flex items-center">
                     <button
@@ -1644,7 +1698,7 @@ export function GalleryManager({
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          {gallery.collections.length > 0 && (
+                          {assignableCollections.length > 0 && (
                             <div className="relative">
                               <button
                                 type="button"
@@ -1666,7 +1720,7 @@ export function GalleryManager({
                                     >
                                       {t("gm.noSetOption")}
                                     </button>
-                                    {gallery.collections.map((c) => (
+                                    {assignableCollections.map((c) => (
                                       <button
                                         key={c.id}
                                         type="button"
@@ -1818,20 +1872,43 @@ export function GalleryManager({
                             {sortBy === "sizeDesc" || sortBy === "sizeAsc" ? (
                               <span className="text-[10px] text-white/80">{formatFileSize(photo.sizeBytes)}</span>
                             ) : null}
-                            {gallery.collections.length > 0 && (
+                            {assignableCollections.length > 0 && (
                               <select
                                 value={photo.collectionId || ""}
                                 onChange={(e) => movePhoto(photo.id, e.target.value)}
                                 className="rounded bg-black/60 px-1 py-0.5 text-xs text-white"
                               >
                                 <option value="">{t("gm.noSetOption")}</option>
-                                {gallery.collections.map((c) => (
+                                {assignableCollections.map((c) => (
                                   <option key={c.id} value={c.id}>
                                     {c.title}
                                   </option>
                                 ))}
                               </select>
                             )}
+                            {/* Tags Portfolio/Réseaux sociaux : indépendants de collectionId, la
+                                photo reste dans son set ci-dessus (retour d'Adriel, 21/08/2026) —
+                                voir togglePhotoTag. */}
+                            <div className="flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() => togglePhotoTag(photo.id, "portfolioTagged")}
+                                className={`flex-1 rounded px-1 py-0.5 text-[10px] font-medium ${
+                                  photo.portfolioTagged ? "bg-brand-500 text-white" : "bg-black/60 text-white/80 hover:bg-black/70"
+                                }`}
+                              >
+                                {t("gm.tagPortfolio")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => togglePhotoTag(photo.id, "socialTagged")}
+                                className={`flex-1 rounded px-1 py-0.5 text-[10px] font-medium ${
+                                  photo.socialTagged ? "bg-brand-500 text-white" : "bg-black/60 text-white/80 hover:bg-black/70"
+                                }`}
+                              >
+                                {t("gm.tagSocial")}
+                              </button>
+                            </div>
                             <button
                               onClick={() => deletePhoto(photo.id)}
                               className="self-end rounded bg-black/60 px-2 py-0.5 text-xs text-white hover:bg-red-600"

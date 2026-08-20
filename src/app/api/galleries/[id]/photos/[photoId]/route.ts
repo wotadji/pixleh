@@ -4,7 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { requireStudioSession, AccessError, handleApiError } from "@/lib/access";
 import { getStorage } from "@/lib/storage";
 
-/** Déplace une photo vers un set (Collection) ou la remet dans "Toutes les photos" (null). */
+/**
+ * Déplace une photo vers un set (Collection) ou la remet dans "Toutes les photos" (null).
+ * Accepte aussi, indépendamment, `portfolioTagged`/`socialTagged` (booléens) pour
+ * ajouter/retirer la photo du set Portfolio ou Réseaux sociaux SANS toucher à collectionId
+ * (retour d'Adriel, 21/08/2026 — voir le commentaire sur ces champs dans schema.prisma).
+ * Ces deux champs sont lus/écrits via $executeRaw : trop récents pour le Prisma Client
+ * généré du sandbox (même limitation que Collection.isSocialDefault).
+ */
 export async function PATCH(
   req: Request,
   { params }: { params: { id: string; photoId: string } }
@@ -22,17 +29,30 @@ export async function PATCH(
     if (!photo) throw new AccessError("Photo introuvable", 404);
 
     const body = await req.json();
-    if (body.collectionId) {
-      const collection = await prisma.collection.findFirst({
-        where: { id: body.collectionId, galleryId: gallery.id },
+
+    if (body.collectionId !== undefined) {
+      if (body.collectionId) {
+        const collection = await prisma.collection.findFirst({
+          where: { id: body.collectionId, galleryId: gallery.id },
+        });
+        if (!collection) throw new AccessError("Set introuvable", 404);
+      }
+      await prisma.photo.update({
+        where: { id: photo.id },
+        data: { collectionId: body.collectionId || null },
       });
-      if (!collection) throw new AccessError("Set introuvable", 404);
     }
 
-    const updated = await prisma.photo.update({
-      where: { id: photo.id },
-      data: { collectionId: body.collectionId || null },
-    });
+    if (typeof body.portfolioTagged === "boolean") {
+      await prisma.$executeRaw`UPDATE "Photo" SET "portfolioTagged" = ${body.portfolioTagged} WHERE id = ${photo.id}`;
+    }
+    if (typeof body.socialTagged === "boolean") {
+      await prisma.$executeRaw`UPDATE "Photo" SET "socialTagged" = ${body.socialTagged} WHERE id = ${photo.id}`;
+    }
+
+    const [updated] = await prisma.$queryRaw<
+      { id: string; collectionId: string | null; portfolioTagged: boolean; socialTagged: boolean }[]
+    >`SELECT "id", "collectionId", "portfolioTagged", "socialTagged" FROM "Photo" WHERE id = ${photo.id}`;
 
     return NextResponse.json({ photo: updated });
   } catch (e) {

@@ -669,6 +669,23 @@ model Photo {
   /// (ex: désactiver le filigrane) ne se voit pas tant que le cache HTTP n'expire pas,
   /// puisque l'URL de l'image ne change jamais autrement.
   updatedAt    DateTime    @default(now()) @updatedAt
+  /// Photo mise en avant sur le portfolio public du studio (set "Portfolio", voir
+  /// Collection.isPortfolioDefault) — INDÉPENDANT de collectionId depuis le 21/08/2026
+  /// (retour d'Adriel : "quand le photographe met les images dans le set portifolio les
+  /// meme images doivent rester" dans leur set client). Avant, mettre une photo en avant
+  /// la sortait de son set d'origine (collectionId réassigné vers le set Portfolio), donc
+  /// invisible au client. Désormais c'est une étiquette à part : la photo garde son
+  /// collectionId réel (visible au client comme avant) ET peut en plus être taguée ici,
+  /// comme une copie virtuelle réservée au portfolio public/au panel studio. Ajouté après
+  /// le dernier `prisma generate` du sandbox (même limitation que isSocialDefault sur
+  /// Collection ci-dessus) : lu/écrit via $queryRaw/$executeRaw en attendant qu'Adriel
+  /// relance `prisma generate && prisma db push` — voir ce commit pour le script de
+  /// migration à lancer une fois (bascule des photos déjà "dans" ces sets vers les tags).
+  portfolioTagged Boolean @default(false)
+  /// Même principe que portfolioTagged ci-dessus, pour le set "Réseaux sociaux" (voir
+  /// Collection.isSocialDefault) — jamais public, sert uniquement à la curation dans le
+  /// panel studio (bouton Partager).
+  socialTagged    Boolean @default(false)
 
   selections    Selection[]
   downloadEvents DownloadEvent[]

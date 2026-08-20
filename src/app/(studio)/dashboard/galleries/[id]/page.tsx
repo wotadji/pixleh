@@ -33,6 +33,13 @@ export default async function GalleryDetailPage({ params }: { params: { id: stri
   `;
   const socialDefaultById = new Map(socialDefaultRows.map((r) => [r.id, r.isSocialDefault]));
 
+  // portfolioTagged/socialTagged (Photo) : même limitation/workaround que isSocialDefault
+  // ci-dessus (voir le commentaire sur ces deux champs dans schema.prisma).
+  const photoTagRows = await prisma.$queryRaw<
+    { id: string; portfolioTagged: boolean; socialTagged: boolean }[]
+  >`SELECT "id", "portfolioTagged", "socialTagged" FROM "Photo" WHERE "galleryId" = ${gallery.id}`;
+  const photoTagsById = new Map(photoTagRows.map((r) => [r.id, r]));
+
   // Tags déjà utilisés sur d'autres galeries du studio, pour l'autocomplétion du champ
   // "Catégorie / tag" (créer = taper un nom nouveau, réutiliser = choisir dans la liste).
   const tagRows = await prisma.gallery.findMany({
@@ -79,6 +86,8 @@ export default async function GalleryDetailPage({ params }: { params: { id: stri
           updatedAt: p.updatedAt.toISOString(),
           createdAt: p.createdAt.toISOString(),
           sizeBytes: p.sizeBytes,
+          portfolioTagged: photoTagsById.get(p.id)?.portfolioTagged ?? false,
+          socialTagged: photoTagsById.get(p.id)?.socialTagged ?? false,
         })),
         collections: gallery.collections.map((c) => ({
           id: c.id,

@@ -43,8 +43,9 @@ export async function GET(_req: Request, { params }: { params: { path: string[] 
     where: { id: galleryId },
     include: {
       studio: { include: { settings: true } },
-      // Nécessaire pour isPublicPortfolioPhoto ci-dessous — seuls id/visibility comptent.
-      collections: { select: { id: true, visibility: true } },
+      // Nécessaire pour isPublicPortfolioPhoto ci-dessous — seuls id/visibility/isPortfolioDefault
+      // comptent.
+      collections: { select: { id: true, visibility: true, isPortfolioDefault: true } },
     },
   });
   if (!gallery) return NextResponse.json({ error: "Introuvable" }, { status: 404 });
@@ -70,14 +71,36 @@ export async function GET(_req: Request, { params }: { params: { path: string[] 
   // cette page ne pourrait jamais afficher la moindre image puisque checkGalleryOrGuestAccess
   // exige toujours une session — demandé par Adriel le 30/07/2026 pour que le portfolio
   // public ne fuite QUE ces photos-là, jamais les sets Client/Invité.
-  const isPortfolioVisible =
-    gallery.status === "PUBLISHED" &&
-    (gallery.collections.length > 0
-      ? Boolean(
-          photo.collectionId &&
-            gallery.collections.some((c) => c.id === photo.collectionId && c.visibility.includes("PORTFOLIO"))
-        )
-      : gallery.defaultVisibility.includes("PORTFOLIO"));
+  // Le set "Portfolio" auto-créé (isPortfolioDefault) fonctionne différemment des sets
+  // "normaux" depuis le 21/08/2026 (retour d'Adriel) : ses photos ne quittent plus leur set
+  // client d'origine (collectionId inchangé), donc pas d'appartenance via collectionId à
+  // vérifier pour lui — on lit portfolioTagged à la place, seulement si ce set précis est
+  // activé (visibility PORTFOLIO). Les autres sets qu'un studio marque PORTFOLIO restent
+  // inchangés (vraie appartenance via collectionId).
+  let isPortfolioVisible = false;
+  if (gallery.status === "PUBLISHED") {
+    if (gallery.collections.length > 0) {
+      const isRegularPortfolioMember = Boolean(
+        photo.collectionId &&
+          gallery.collections.some(
+            (c) => c.id === photo.collectionId && c.visibility.includes("PORTFOLIO") && !c.isPortfolioDefault
+          )
+      );
+      const defaultPortfolioActive = gallery.collections.some(
+        (c) => c.isPortfolioDefault && c.visibility.includes("PORTFOLIO")
+      );
+      if (isRegularPortfolioMember) {
+        isPortfolioVisible = true;
+      } else if (defaultPortfolioActive) {
+        const [{ portfolioTagged }] = await prisma.$queryRaw<{ portfolioTagged: boolean }[]>`
+          SELECT "portfolioTagged" FROM "Photo" WHERE id = ${photo.id}
+        `;
+        isPortfolioVisible = portfolioTagged;
+      }
+    } else {
+      isPortfolioVisible = gallery.defaultVisibility.includes("PORTFOLIO");
+    }
+  }
   const isPublicPortfolioPhoto = isPortfolioVisible && (variant === "preview" || variant === "thumb");
 
   if (!isPublicCoverPreview && !isPublicPortfolioPhoto) {
