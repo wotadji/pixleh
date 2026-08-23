@@ -25,6 +25,7 @@
   "dependencies": {
     "@prisma/client": "^5.20.0",
     "@react-pdf/renderer": "^3.4.4",
+    "@sentry/nextjs": "^8.34.0",
     "archiver": "^7.0.1",
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.1",

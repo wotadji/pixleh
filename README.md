@@ -218,6 +218,26 @@ attribut produit manquant, adresse invalide...), la commande reste visible dans 
 avec le détail de l'erreur et un bouton « Réessayer » — rien n'est perdu, mais rien n'est non
 plus renvoyé automatiquement sans action de votre part après un échec.
 
+## 11. Monitoring d'erreurs (Sentry)
+
+Sans ça, la seule façon de savoir qu'une page ou une API casse en production est qu'un studio
+ou un client s'en plaigne. Le SDK [Sentry](https://sentry.io) est intégré (client, serveur,
+edge/middleware) et capture automatiquement les erreurs non gérées.
+
+1. Créez un compte sur [sentry.io](https://sentry.io) (gratuit jusqu'à un certain volume),
+   puis un projet de type « Next.js ».
+2. Renseignez `NEXT_PUBLIC_SENTRY_DSN` et `SENTRY_DSN` dans `.env` (même valeur, voir
+   `.env.example`) avec le DSN affiché dans Réglages du projet > Client Keys.
+3. Optionnel : renseignez `SENTRY_ORG`, `SENTRY_PROJECT` et `SENTRY_AUTH_TOKEN` pour que les
+   stack traces affichées dans Sentry pointent vers votre vrai code source plutôt que du JS
+   minifié (upload automatique des source maps à chaque build).
+4. Tant qu'aucun DSN n'est renseigné, le SDK reste inactif (aucun envoi réseau) — sûr par
+   défaut en développement local.
+
+**Après `npm install`** (le SDK `@sentry/nextjs` doit être installé avant de builder — voir
+section 3) : les erreurs serveur (API, Server Components) et navigateur remontent automatique-
+ment dans l'onglet **Issues** de votre projet Sentry, avec la page/route concernée.
+
 ---
 
 ## Limite importante de cette livraison

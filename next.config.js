@@ -23,7 +23,12 @@ const CSP = [
   // le CSP bloque silencieusement le fetch() (aucune erreur visible hors console), ce qui
   // rendait l'autocomplétion inopérante malgré un code correct (bug remonté par Adriel le
   // 01/08/2026 : "l'autocompletion ne fonctionne pas").
-  "connect-src 'self' https://api.stripe.com https://api-adresse.data.gouv.fr",
+  // *.ingest.*.sentry.io : envoi des erreurs/traces côté navigateur vers Sentry (voir
+  // sentry.client.config.ts) — même piège que ci-dessus si oublié : le SDK échouerait à
+  // envoyer silencieusement, sans erreur visible hors console. Les 3 domaines couvrent les
+  // régions d'hébergement Sentry (par défaut US/EU) ; sans DSN configuré, ce trafic n'existe
+  // simplement jamais.
+  "connect-src 'self' https://api.stripe.com https://api-adresse.data.gouv.fr https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -65,7 +70,32 @@ const nextConfig = {
   // si vous mettez à jour Next.js, déplacez simplement ce tableau à la racine.
   experimental: {
     serverComponentsExternalPackages: ["sharp", "ssh2-sftp-client"],
+    // Obligatoire sur Next.js 14 pour que src/instrumentation.ts (chargement de Sentry au
+    // démarrage du serveur) soit pris en compte — devient stable sans ce flag à partir de
+    // Next.js 15, à retirer lors d'une future mise à jour.
+    instrumentationHook: true,
   },
 };
 
-module.exports = nextConfig;
+// withSentryConfig ajoute le plugin webpack Sentry (instrumentation automatique des routes API
+// et Server Components, upload des source maps) — voir sentry.{client,server,edge}.config.ts
+// et src/instrumentation.ts pour l'initialisation du SDK lui-même. On ne l'active QUE si
+// Adriel a renseigné SENTRY_ORG/SENTRY_PROJECT (après création d'un compte sur sentry.io,
+// voir README section 11) : sans ça, le plugin tenterait de s'authentifier auprès de l'API
+// Sentry à chaque build et risquerait de faire échouer `next build` pour rien — le SDK
+// continue de fonctionner normalement (capture d'erreurs) même sans upload de source maps.
+const { withSentryConfig } = require("@sentry/nextjs");
+
+module.exports =
+  process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
+    ? withSentryConfig(nextConfig, {
+        org: process.env.SENTRY_ORG,
+        project: process.env.SENTRY_PROJECT,
+        authToken: process.env.SENTRY_AUTH_TOKEN,
+        // N'affiche les logs d'upload que dans la CI, pour ne pas polluer les builds locaux.
+        silent: !process.env.CI,
+        // Le projet n'a pas de Server Actions Sentry-instrumentées manuellement pour l'instant
+        // ; laisser l'auto-instrumentation par défaut du plugin (routes API + Server Components).
+        widenClientFileUpload: true,
+      })
+    : nextConfig;
