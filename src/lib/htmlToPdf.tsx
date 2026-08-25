@@ -61,7 +61,7 @@ export interface HtmlPdfTheme {
 }
 
 function buildTheme(overrides?: Partial<HtmlPdfTheme>): HtmlPdfTheme {
-  const accent = overrides?.accent || "#7c3aed";
+  const accent = overrides?.accent || "#4f46e5";
   return {
     accent,
     headingFontFamily: "Times-Bold",

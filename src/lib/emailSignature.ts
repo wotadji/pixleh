@@ -28,7 +28,7 @@ function absoluteUrl(path: string) {
 }
 
 export function buildEmailSignature(studio: SignatureStudio, settings: SignatureSettings) {
-  const accent = studio.brandColor || "#7c3aed";
+  const accent = studio.brandColor || "#4f46e5";
   const siteUrl = absoluteUrl(`/s/${studio.slug}`);
   const logoAbsoluteUrl = studio.logoUrl ? absoluteUrl(studio.logoUrl) : null;
 

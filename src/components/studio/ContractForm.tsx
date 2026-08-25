@@ -108,7 +108,7 @@ export function ContractForm({
   createdAtDisplay?: string;
 }) {
   const { t } = useLanguage();
-  const accent = studioBrandColor || "#7c3aed";
+  const accent = studioBrandColor || "#4f46e5";
   const applyVat = !studioVatExempt && studioVatRate != null;
   const [form, setForm] = useState({
     title: initial.title,

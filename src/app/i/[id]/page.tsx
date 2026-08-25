@@ -160,7 +160,7 @@ export default async function InvoicePage({ params }: { params: { id: string } }
               ) : (
                 <span
                   className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold text-white"
-                  style={{ backgroundColor: invoice.studio.brandColor || "#7c3aed" }}
+                  style={{ backgroundColor: invoice.studio.brandColor || "#4f46e5" }}
                 >
                   {invoice.studio.name.slice(0, 1).toUpperCase()}
                 </span>

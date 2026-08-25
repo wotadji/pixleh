@@ -41,7 +41,7 @@ model Studio {
   slug        String   @unique // utilisé pour /s/[slug] (site public) et sous-domaine
   customDomain String? @unique
   logoUrl     String?
-  brandColor  String?  @default("#7c3aed")
+  brandColor  String?  @default("#4f46e5")
   timezone    String   @default("Europe/Paris")
   currency    String   @default("EUR")
   createdAt   DateTime @default(now())

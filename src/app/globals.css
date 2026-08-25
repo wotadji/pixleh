@@ -3,7 +3,9 @@
 @tailwind utilities;
 
 :root {
-  --brand: #7c3aed;
+  /* Non référencée ailleurs dans le code (aucun var(--brand) trouvé) mais gardée en phase
+     avec brand-600 (voir tailwind.config.ts) au cas où un script externe s'y attendrait. */
+  --brand: #4f46e5;
 }
 
 /* Garde-fou anti-scroll-horizontal (11/08/2026, demande d'Adriel : "dans galerie il y'a

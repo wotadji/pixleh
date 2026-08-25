@@ -118,7 +118,7 @@ export function InvoiceForm({
   onSubmit: (values: InvoiceFormValues) => void;
 }) {
   const { t } = useLanguage();
-  const accent = studioBrandColor || "#7c3aed";
+  const accent = studioBrandColor || "#4f46e5";
   const [form, setForm] = useState<InvoiceFormValues>({
     ...initial,
     template: initial.template || DEFAULT_INVOICE_TEMPLATE,

@@ -7,7 +7,15 @@
 // fragment. Voir la doc Sentry Next.js "Capture React Render Errors".
 import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
+import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
+
+// Ce fichier remplace ENTIÈREMENT le <html> du RootLayout (voir commentaire plus bas), donc
+// les classes de police définies dans RootLayout (variable CSS --font-*) ne sont jamais
+// appliquées ici — sans son propre chargement, font-sans/font-serif tomberaient sur les
+// polices système par défaut du navigateur.
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk" });
 
 export default function GlobalError({
   error,
@@ -21,7 +29,7 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <html lang="fr">
+    <html lang="fr" className={`${inter.variable} ${spaceGrotesk.variable}`}>
       <body>
         <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
           <h1 className="font-serif text-2xl font-semibold text-gray-900">

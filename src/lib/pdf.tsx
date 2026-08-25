@@ -310,7 +310,7 @@ export async function renderContractPdf(params: {
     template,
   } = params;
   const tmpl: ContractTemplateId = isContractTemplateId(template) ? template : DEFAULT_CONTRACT_TEMPLATE;
-  const accent = brandColor || "#7c3aed";
+  const accent = brandColor || "#4f46e5";
   const logoAbsoluteUrl = studioLogoUrl ? absoluteUrl(studioLogoUrl) : null;
   const footerLine = [studioName, studioAddress, studioContactEmail, studioContactPhone]
     .filter(Boolean)
@@ -515,7 +515,7 @@ export async function renderInvoicePdf(params: {
   } = params;
 
   const tmpl: InvoiceTemplateId = isInvoiceTemplateId(template) ? template : DEFAULT_INVOICE_TEMPLATE;
-  const accent = brandColor || "#7c3aed";
+  const accent = brandColor || "#4f46e5";
   const logoAbsoluteUrl = studioLogoUrl ? absoluteUrl(studioLogoUrl) : null;
   const footerLine = [studioName, studioAddress, studioContactEmail, studioContactPhone]
     .filter(Boolean)

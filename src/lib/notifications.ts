@@ -26,7 +26,7 @@ export function generateSecureToken() {
 }
 
 const BUTTON_STYLE =
-  "display:inline-block;margin-top:16px;padding:11px 22px;background:#7c3aed;color:#ffffff;" +
+  "display:inline-block;margin-top:16px;padding:11px 22px;background:#4f46e5;color:#ffffff;" +
   "font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:600;text-decoration:none;border-radius:8px;";
 
 function wrapEmail(bodyHtml: string) {
@@ -135,7 +135,7 @@ export async function sendGalleryReadyEmail(params: {
     <a href="${link}" style="${BUTTON_STYLE}">Voir ma galerie</a>
     <p style="margin-top:16px;font-size:12px;color:#9ca3af;">
       Astuce : retrouvez toutes vos galeries (même de plusieurs photographes) dans
-      <a href="${appUrl("/client/login")}" style="color:#7c3aed;">votre espace client</a>.
+      <a href="${appUrl("/client/login")}" style="color:#4f46e5;">votre espace client</a>.
     </p>
   `);
 
@@ -190,7 +190,7 @@ export async function sendGalleryAdditionalAccessEmail(params: {
     <a href="${link}" style="${BUTTON_STYLE}">Voir la galerie</a>
     <p style="margin-top:16px;font-size:12px;color:#9ca3af;">
       Retrouvez toutes vos galeries dans
-      <a href="${appUrl("/client/login")}" style="color:#7c3aed;">votre espace client</a>.
+      <a href="${appUrl("/client/login")}" style="color:#4f46e5;">votre espace client</a>.
     </p>
   `);
 
@@ -402,8 +402,8 @@ function buildBankDetailsBlock(
 
   return {
     html: `
-      <div style="background:#f5f3ff;border-radius:8px;padding:12px 14px;margin-top:10px;">
-        <p style="margin:0 0 6px;font-weight:600;color:#5b21b6;">Réglez par virement</p>
+      <div style="background:#eef2ff;border-radius:8px;padding:12px 14px;margin-top:10px;">
+        <p style="margin:0 0 6px;font-weight:600;color:#3730a3;">Réglez par virement</p>
         ${lines.map((l) => `<p style="margin:0;color:#374151;">${l.label} : <strong>${escapeHtml(l.value as string)}</strong></p>`).join("")}
       </div>
     `,

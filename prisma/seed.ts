@@ -16,7 +16,7 @@ async function main() {
     create: {
       name: "Studio Démo",
       slug: "demo-studio",
-      brandColor: "#7c3aed",
+      brandColor: "#4f46e5",
       users: {
         create: {
           name: "Alex Photographe",
