@@ -11,13 +11,20 @@ import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { MultiSearchableSelect } from "@/components/ui/MultiSearchableSelect";
 import { CoverFocalPointModal } from "@/components/studio/CoverFocalPointModal";
 import {
-  COLOR_PALETTES,
   COVER_STYLES,
+  COVER_MODES,
+  LAYOUT_STYLES,
+  SECTIONS_NAV_MODES,
+  SLIDESHOW_TRANSITIONS,
+  VIDEO_DISPLAY_MODES,
+  BACKGROUND_THEMES,
+  ACCENT_COLORS,
   FONTS,
   GRID_COLUMNS_OPTIONS,
   resolveGalleryDesign,
   getFont,
-  getPalette,
+  getDesignRootStyle,
+  resolveAccentHex,
   type GalleryDesign,
   type CoverStyle,
 } from "@/lib/galleryDesign";
@@ -139,18 +146,48 @@ interface GalleryDTO {
   photoSortOrder: string;
   photos: PhotoDTO[];
   collections: CollectionDTO[];
+  // ---- Nouveaux champs (chantier refonte Réglages, 12/09/2026) ----
+  description: string | null;
+  tags: string[];
+  projectName: string | null;
+  allowComments: boolean;
+  containsPortraits: boolean;
+  selectionLimit: number | null;
+  showMetadata: boolean;
+  downloadWebOptimized: boolean;
+  downloadSocialFormats: boolean;
+  credits: GalleryCreditDTO[];
 }
 
-type MainTab = "photos" | "design" | "video" | "settings" | "remarks";
-type DesignSection = "cover" | "typography" | "color" | "grid";
+interface GalleryCreditDTO {
+  id: string;
+  role: string;
+  name: string;
+  url: string | null;
+}
+
+interface GalleryPresetDTO {
+  id: string;
+  name: string;
+  design: unknown;
+}
+
+type MainTab = "photos" | "video" | "settings" | "remarks";
+type DesignSection = "cover" | "typography" | "ambiance" | "layout";
+/** Sous-onglets du panneau "Réglages" unifié (chantier du 12/09/2026, référence Picstudio :
+ * fusion des anciens onglets Design + Réglages en un seul, avec aperçu live permanent). */
+type SettingsSubTab = "publication" | "presentation" | "delivery" | "security";
 
 export function GalleryManager({
   gallery,
   existingTags = [],
+  presets = [],
 }: {
   gallery: GalleryDTO;
   /** Tags déjà utilisés sur d'autres galeries du studio, proposés en autocomplétion. */
   existingTags?: string[];
+  /** Modèles de réglages du studio (voir GalleryPreset), proposés dans l'onglet Présentation. */
+  presets?: GalleryPresetDTO[];
 }) {
   const router = useRouter();
   const { t, locale } = useLanguage();
@@ -273,13 +310,55 @@ export function GalleryManager({
   // Écraser / Conserver dans la modale correspondante.
   const [duplicateConfirm, setDuplicateConfirm] = useState<{ files: File[]; count: number } | null>(null);
 
-  // ---- Onglets (Photos / Design / Réglages) ----
+  // ---- Onglets (Photos / Vidéo / Remarques / Réglages) ----
   const [activeTab, setActiveTab] = useState<MainTab>("photos");
+  // Sous-onglets du panneau "Réglages" unifié (fusion Design+Réglages, 12/09/2026) — voir
+  // SettingsSubTab. "publication" par défaut : c'est la première chose qu'on veut voir/faire
+  // en ouvrant les réglages (statut, publier), comme chez Picstudio.
+  const [settingsSubTab, setSettingsSubTab] = useState<SettingsSubTab>("publication");
   const [designSection, setDesignSection] = useState<DesignSection>("cover");
   const [design, setDesign] = useState<GalleryDesign>(() => resolveGalleryDesign(gallery.design));
   const [coverPhotoId, setCoverPhotoId] = useState<string | null>(gallery.coverPhotoId);
   const [coverPickerOpen, setCoverPickerOpen] = useState(false);
   const [focalPointModalOpen, setFocalPointModalOpen] = useState(false);
+
+  // ---- Onglet Publication : description, tags multiples, projet (12/09/2026) ----
+  const [description, setDescription] = useState(gallery.description || "");
+  const [tags, setTags] = useState<string[]>(gallery.tags || []);
+  const [tagInput, setTagInput] = useState("");
+  const [projectName, setProjectName] = useState(gallery.projectName || "");
+  function addTag(raw: string) {
+    const value = raw.trim();
+    if (!value || tags.includes(value)) return;
+    setTags((prev) => [...prev, value]);
+    setTagInput("");
+  }
+  function removeTag(value: string) {
+    setTags((prev) => prev.filter((t) => t !== value));
+  }
+
+  // ---- Onglet Livraison : nouveaux réglages (12/09/2026) ----
+  const [deliveryForm, setDeliveryForm] = useState({
+    allowComments: gallery.allowComments,
+    containsPortraits: gallery.containsPortraits,
+    selectionLimit: gallery.selectionLimit ? String(gallery.selectionLimit) : "",
+    showMetadata: gallery.showMetadata,
+    downloadWebOptimized: gallery.downloadWebOptimized,
+    downloadSocialFormats: gallery.downloadSocialFormats,
+  });
+
+  // ---- Crédits prestataires (GalleryCredit) ----
+  const [credits, setCredits] = useState<GalleryCreditDTO[]>(gallery.credits);
+  const [creditFormRole, setCreditFormRole] = useState<string | null>(null);
+  const [creditFormName, setCreditFormName] = useState("");
+  const [creditFormUrl, setCreditFormUrl] = useState("");
+  const [creditSaving, setCreditSaving] = useState(false);
+
+  // ---- Presets de réglages (GalleryPreset) — "Réutiliser cette mise en scène" ----
+  const [presetList, setPresetList] = useState<GalleryPresetDTO[]>(presets);
+  const [presetNameInput, setPresetNameInput] = useState("");
+  const [presetSaving, setPresetSaving] = useState(false);
+  const [presetsOpen, setPresetsOpen] = useState(false);
 
   // ---- Réglages de la galerie (titre, client, mot de passe, téléchargement, favoris...) ----
   const [settingsForm, setSettingsForm] = useState({
@@ -1231,6 +1310,15 @@ export function GalleryManager({
           eventDate: settingsForm.eventDate || null,
           categoryTag: settingsForm.categoryTag.trim() || null,
           defaultVisibility: visibility,
+          description: description.trim() || null,
+          tags,
+          projectName: projectName.trim() || null,
+          allowComments: deliveryForm.allowComments,
+          containsPortraits: deliveryForm.containsPortraits,
+          selectionLimit: deliveryForm.selectionLimit ? Number(deliveryForm.selectionLimit) : null,
+          showMetadata: deliveryForm.showMetadata,
+          downloadWebOptimized: deliveryForm.downloadWebOptimized,
+          downloadSocialFormats: deliveryForm.downloadSocialFormats,
         }),
       });
       if (!res.ok) {
@@ -1253,7 +1341,83 @@ export function GalleryManager({
     }
   }
 
+  // ---- Crédits prestataires (GalleryCredit) — section "Crédits" onglet Publication ----
+  async function addCredit(role: string) {
+    if (!creditFormName.trim()) return;
+    setCreditSaving(true);
+    try {
+      const res = await fetch(`/api/galleries/${gallery.id}/credits`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role, name: creditFormName.trim(), url: creditFormUrl.trim() || null }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setCredits((prev) => [...prev, created]);
+        setCreditFormRole(null);
+        setCreditFormName("");
+        setCreditFormUrl("");
+      }
+    } finally {
+      setCreditSaving(false);
+    }
+  }
+  async function deleteCredit(id: string) {
+    setCredits((prev) => prev.filter((c) => c.id !== id));
+    await fetch(`/api/galleries/${gallery.id}/credits?creditId=${id}`, { method: "DELETE" });
+  }
+
+  // ---- Presets de réglages (GalleryPreset) — "Réutiliser cette mise en scène" ----
+  async function savePreset() {
+    const name = presetNameInput.trim();
+    if (!name) return;
+    setPresetSaving(true);
+    try {
+      const res = await fetch(`/api/gallery-presets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, design }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setPresetList((prev) => [created, ...prev]);
+        setPresetNameInput("");
+      }
+    } finally {
+      setPresetSaving(false);
+    }
+  }
+  async function applyPreset(preset: GalleryPresetDTO) {
+    const merged = resolveGalleryDesign(preset.design);
+    setDesign(merged);
+    await fetch(`/api/galleries/${gallery.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ design: merged }),
+    });
+  }
+  async function deletePreset(id: string) {
+    setPresetList((prev) => prev.filter((p) => p.id !== id));
+    await fetch(`/api/gallery-presets?presetId=${id}`, { method: "DELETE" });
+  }
+
   const pendingRemarksCount = remarks?.filter((r) => !r.resolved).length ?? 0;
+
+  /** Rôles proposés en saisie rapide pour un crédit prestataire (section Crédits) — liste
+   * ouverte : "Autre" permet de créditer un rôle non prévu ici sans attendre de migration
+   * (voir GalleryCredit.role, en String libre). */
+  const CREDIT_ROLES = [
+    "florist",
+    "venue",
+    "decor",
+    "caterer",
+    "dj",
+    "weddingPlanner",
+    "videographer",
+    "makeup",
+    "hair",
+    "dress",
+  ] as const;
 
   const SORT_OPTIONS: { key: PhotoSortKey; label: string }[] = [
     { key: "manual", label: t("gm.sortManual") },
@@ -1267,7 +1431,6 @@ export function GalleryManager({
 
   const TABS: { key: MainTab; label: string; icon: JSX.Element }[] = [
     { key: "photos", label: t("gm.tabPhotos"), icon: <IconPhotos /> },
-    { key: "design", label: t("gm.tabDesign"), icon: <IconDesign /> },
     { key: "video", label: t("gm.tabVideo"), icon: <IconVideo /> },
     { key: "remarks", label: t("gm.tabRemarks"), icon: <IconRemarksTab /> },
     { key: "settings", label: t("gm.tabSettings"), icon: <IconSettings /> },
@@ -2005,188 +2168,62 @@ export function GalleryManager({
           );
         })()}
 
-        {activeTab === "design" && (
-          <>
-            {/* Options + aperçu live */}
-            <main className="flex-1 overflow-y-auto bg-[#EBEBEB] p-6 lg:p-10">
+        {activeTab === "settings" && (
+          <main className="flex flex-1 flex-col overflow-y-auto bg-[#EBEBEB]">
+            {/* En-tête façon overlay (chantier UX "onglets + aperçu live", 12/09/2026,
+                référence Picstudio) — fusionne les anciens onglets Design et Réglages en un
+                seul, avec un aperçu live permanent. Le ✕ ramène simplement à l'onglet Photos
+                (pas de vraie modale par-dessus le reste : le contenu reste inline dans la même
+                arborescence, plus simple et cohérent avec le reste du panel). */}
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-semibold uppercase tracking-wide text-neutral-400">
+                  {t("gs.title")}
+                </span>
+                <span className="text-neutral-300">·</span>
+                <span className="font-medium text-neutral-900">{gallery.title}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab("photos")}
+                aria-label={t("common.close")}
+                title={t("common.close")}
+                className="rounded-lg px-2 py-1 text-lg leading-none text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-2 border-b border-neutral-200 bg-white px-6 py-3">
+              {(
+                [
+                  { key: "publication", label: t("gs.tabPublication") },
+                  { key: "presentation", label: t("gs.tabPresentation") },
+                  { key: "delivery", label: t("gs.tabDelivery") },
+                  { key: "security", label: t("gs.tabSecurity") },
+                ] as { key: SettingsSubTab; label: string }[]
+              ).map((s) => (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => setSettingsSubTab(s.key)}
+                  className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                    settingsSubTab === s.key
+                      ? "bg-neutral-900 text-white"
+                      : "text-neutral-600 hover:bg-neutral-100"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            <form onSubmit={saveSettings} className="flex-1 overflow-y-auto p-6 lg:p-10">
               <div className="mx-auto max-w-6xl">
-                {/* Sous-nav Design : Cover / Typography / Color / Grid — horizontale, en haut
-                    du panel (plutôt qu'une colonne verticale à gauche). */}
-                <div className="mb-8 flex flex-wrap gap-2">
-                  {(
-                    [
-                      { key: "cover", label: t("design.sectionCover") },
-                      { key: "typography", label: t("design.sectionTypography") },
-                      { key: "color", label: t("design.sectionColor") },
-                      { key: "grid", label: t("design.sectionGrid") },
-                    ] as { key: DesignSection; label: string }[]
-                  ).map((s) => (
-                    <button
-                      key={s.key}
-                      onClick={() => setDesignSection(s.key)}
-                      className={`rounded-full px-4 py-1.5 text-sm transition-colors ${
-                        designSection === s.key
-                          ? "bg-neutral-600 text-white"
-                          : "text-neutral-600 hover:bg-white/60 hover:text-neutral-900"
-                      }`}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[380px_1fr] lg:gap-12">
-                  <div className="min-w-0 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
-                  {designSection === "cover" && (
-                    <div className="space-y-6">
-                      <div className="flex items-center gap-3 border-b border-neutral-100 pb-6">
-                        {activeCoverPhotoId ? (
-                          <div className="h-16 w-16 shrink-0 overflow-hidden rounded border border-neutral-200">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={thumbUrl(activeCoverPhotoId)}
-                              alt=""
-                              className="h-full w-full object-cover"
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded border border-dashed border-neutral-300 text-[10px] text-neutral-500">
-                            {t("gm.noPhotosYet")}
-                          </div>
-                        )}
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setCoverPickerOpen(true)}
-                            disabled={localPhotos.length === 0}
-                            className="btn-secondary text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {t("design.choosePhoto")}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setFocalPointModalOpen(true)}
-                            disabled={!activeCoverPhotoId}
-                            className="btn-secondary text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {t("design.repositionCover")}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-6">
-                        {COVER_STYLES.map((c) => (
-                          <button key={c.key} onClick={() => updateDesign("coverStyle", c.key)} className="text-center">
-                            <div
-                              className={`aspect-[4/3] overflow-hidden rounded-lg border ${
-                                design.coverStyle === c.key ? "border-brand-500" : "border-[#808080]"
-                              }`}
-                            >
-                              <CoverStylePreviewThumb
-                                style={c.key}
-                                photoUrl={activeCoverPhotoId ? thumbUrl(activeCoverPhotoId) : null}
-                              />
-                            </div>
-                            <p className="mt-2 truncate text-xs text-neutral-600">{t(c.labelKey)}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {designSection === "typography" && (
-                    <div className="grid grid-cols-2 gap-4">
-                      {FONTS.map((f) => (
-                        <button
-                          key={f.key}
-                          onClick={() => updateDesign("font", f.key)}
-                          className={`rounded-lg border-2 bg-neutral-50 px-4 py-6 text-center transition-colors hover:bg-neutral-100 ${
-                            design.font === f.key ? "border-brand-500" : "border-neutral-200"
-                          }`}
-                        >
-                          <p
-                            className={`text-2xl text-neutral-900 ${f.className}`}
-                            style={{ fontFamily: f.stack }}
-                          >
-                            Aa
-                          </p>
-                          <p className="mt-2 text-xs text-neutral-500">{t(f.labelKey)}</p>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {designSection === "color" && (
-                    <div className="grid grid-cols-2 gap-4">
-                      {COLOR_PALETTES.map((p) => (
-                        <button
-                          key={p.key}
-                          onClick={() => updateDesign("color", p.key)}
-                          className={`rounded-lg border-2 bg-neutral-50 p-4 transition-colors hover:bg-neutral-100 ${
-                            design.color === p.key ? "border-brand-500" : "border-neutral-200"
-                          }`}
-                        >
-                          <div className="flex gap-1.5">
-                            <span
-                              className="h-6 w-6 rounded-full border border-black/10"
-                              style={{ backgroundColor: p.bg }}
-                            />
-                            <span
-                              className="h-6 w-6 rounded-full border border-black/10"
-                              style={{ backgroundColor: p.text }}
-                            />
-                            <span
-                              className="h-6 w-6 rounded-full border border-black/10"
-                              style={{ backgroundColor: p.accent }}
-                            />
-                          </div>
-                          <p className="mt-2 text-left text-xs text-neutral-500">{t(p.labelKey)}</p>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {designSection === "grid" && (
-                    <div className="space-y-6">
-                      <DesignOptionGroup
-                        label={t("design.gridStyleLabel")}
-                        options={[
-                          { key: "vertical", label: t("design.gridStyle.vertical") },
-                          { key: "horizontal", label: t("design.gridStyle.horizontal") },
-                        ]}
-                        value={design.gridStyle}
-                        onChange={(v) => updateDesign("gridStyle", v as GalleryDesign["gridStyle"])}
-                      />
-                      <DesignOptionGroup
-                        label={t("design.columnsPerRowLabel")}
-                        options={GRID_COLUMNS_OPTIONS.map((n) => ({ key: String(n), label: String(n) }))}
-                        value={String(design.columnsPerRow)}
-                        onChange={(v) => updateDesign("columnsPerRow", Number(v) as GalleryDesign["columnsPerRow"])}
-                        columns={5}
-                      />
-                      <DesignOptionGroup
-                        label={t("design.gridSpacingLabel")}
-                        options={[
-                          { key: "regular", label: t("design.gridSpacing.regular") },
-                          { key: "large", label: t("design.gridSpacing.large") },
-                        ]}
-                        value={design.gridSpacing}
-                        onChange={(v) => updateDesign("gridSpacing", v as GalleryDesign["gridSpacing"])}
-                      />
-                      <DesignOptionGroup
-                        label={t("design.navigationStyleLabel")}
-                        options={[
-                          { key: "icon", label: t("design.navigationStyle.icon") },
-                          { key: "iconText", label: t("design.navigationStyle.iconText") },
-                        ]}
-                        value={design.navigationStyle}
-                        onChange={(v) => updateDesign("navigationStyle", v as GalleryDesign["navigationStyle"])}
-                      />
-                    </div>
-                  )}
-                  </div>
-
-                  {/* Aperçu live */}
-                  <div className="min-w-0 lg:sticky lg:top-6">
+                <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[1fr_380px] lg:gap-12">
+                  {/* Aperçu live — à GAUCHE, toujours visible quel que soit le sous-onglet
+                      actif (référence Picstudio), pas seulement pour la Présentation. */}
+                  <div className="min-w-0 lg:sticky lg:top-24 lg:order-1">
                     <DesignLivePreview
                       design={design}
                       title={gallery.title}
@@ -2195,319 +2232,978 @@ export function GalleryManager({
                       t={t}
                     />
                   </div>
-                </div>
-              </div>
-            </main>
-          </>
-        )}
 
-        {activeTab === "settings" && (
-          <main className="flex-1 overflow-y-auto bg-white p-6">
-            <form onSubmit={saveSettings} className="max-w-xl space-y-6">
-              <h2 className="font-serif text-lg font-semibold">{t("gs.title")}</h2>
+                  <div className="min-w-0 space-y-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5 lg:order-2">
+                    {settingsSubTab === "publication" && (
+                      <div className="space-y-6">
+                        <div>
+                          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                            {t("gs.sectionInformation")}
+                          </h3>
+                          <div className="space-y-4">
+                            <div>
+                              <label className="mb-1 block text-sm font-medium">{t("galleryForm.titleLabel")}</label>
+                              <input
+                                required
+                                type="text"
+                                className="input"
+                                value={settingsForm.title}
+                                onChange={(e) => setSettingsForm((f) => ({ ...f, title: e.target.value }))}
+                              />
+                            </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium">{t("galleryForm.titleLabel")}</label>
-                <input
-                  required
-                  type="text"
-                  className="input"
-                  value={settingsForm.title}
-                  onChange={(e) => setSettingsForm((f) => ({ ...f, title: e.target.value }))}
-                />
-              </div>
+                            <div>
+                              <label className="mb-1 block text-sm font-medium">{t("gs.description")}</label>
+                              <textarea
+                                rows={3}
+                                className="input"
+                                placeholder={t("gs.descriptionPlaceholder")}
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                              />
+                            </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium">{t("galleryForm.clientLabel")}</label>
-                <SearchableSelect
-                  value={settingsForm.clientId}
-                  onChange={(clientId) => {
-                    // Le client principal ne peut pas apparaître aussi dans les additionnels
-                    // (même règle qu'à la création, voir NewGalleryForm).
-                    setSettingsForm((f) => ({ ...f, clientId }));
-                    if (clientId) setAdditionalClientIds((ids) => ids.filter((id) => id !== clientId));
-                  }}
-                  placeholder={t("common.noClientOption")}
-                  searchPlaceholder={t("common.searchPlaceholder")}
-                  emptyOptionLabel={t("common.noClientOption")}
-                  options={clients.map((c) => ({ value: c.id, label: c.name }))}
-                />
-              </div>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                              <div>
+                                <label className="mb-1 block text-sm font-medium">{t("galleryForm.clientLabel")}</label>
+                                <SearchableSelect
+                                  value={settingsForm.clientId}
+                                  onChange={(clientId) => {
+                                    // Le client principal ne peut pas apparaître aussi dans les
+                                    // additionnels (même règle qu'à la création, NewGalleryForm).
+                                    setSettingsForm((f) => ({ ...f, clientId }));
+                                    if (clientId) setAdditionalClientIds((ids) => ids.filter((id) => id !== clientId));
+                                  }}
+                                  placeholder={t("common.noClientOption")}
+                                  searchPlaceholder={t("common.searchPlaceholder")}
+                                  emptyOptionLabel={t("common.noClientOption")}
+                                  options={clients.map((c) => ({ value: c.id, label: c.name }))}
+                                />
+                              </div>
+                              <div>
+                                {/* "Projet" : texte libre plutôt qu'un modèle Project dédié —
+                                    évite une nouvelle table pour un simple repère textuel
+                                    (voir Gallery.projectName dans schema.prisma). */}
+                                <label className="mb-1 block text-sm font-medium">{t("gs.project")}</label>
+                                <input
+                                  type="text"
+                                  className="input"
+                                  placeholder={t("gs.projectPlaceholder")}
+                                  value={projectName}
+                                  onChange={(e) => setProjectName(e.target.value)}
+                                />
+                              </div>
+                            </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium">{t("galleryForm.additionalClientsLabel")}</label>
-                <MultiSearchableSelect
-                  values={additionalClientIds}
-                  onChange={setAdditionalClientIds}
-                  placeholder={t("galleryForm.additionalClientsPlaceholder")}
-                  searchPlaceholder={t("common.searchPlaceholder")}
-                  options={clients
-                    .filter((c) => c.id !== settingsForm.clientId)
-                    .map((c) => ({ value: c.id, label: c.name }))}
-                />
-                <p className="mt-1 text-xs text-gray-500">{t("galleryForm.additionalClientsHint")}</p>
-              </div>
+                            <div>
+                              <label className="mb-1 block text-sm font-medium">{t("galleryForm.additionalClientsLabel")}</label>
+                              <MultiSearchableSelect
+                                values={additionalClientIds}
+                                onChange={setAdditionalClientIds}
+                                placeholder={t("galleryForm.additionalClientsPlaceholder")}
+                                searchPlaceholder={t("common.searchPlaceholder")}
+                                options={clients
+                                  .filter((c) => c.id !== settingsForm.clientId)
+                                  .map((c) => ({ value: c.id, label: c.name }))}
+                              />
+                              <p className="mt-1 text-xs text-gray-500">{t("galleryForm.additionalClientsHint")}</p>
+                            </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium">{t("gs.categoryTag")}</label>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder={t("gs.categoryTagPlaceholder")}
-                  value={settingsForm.categoryTag}
-                  onChange={(e) => setSettingsForm((f) => ({ ...f, categoryTag: e.target.value }))}
-                  list="category-tag-options"
-                  autoComplete="off"
-                />
-                {/* Autocomplétion native : suggère les tags déjà utilisés sur les autres
-                    galeries du studio (ex: "Mariage", "Portrait") ; taper un nom qui n'existe
-                    pas encore le crée simplement au moment de l'enregistrement. */}
-                <datalist id="category-tag-options">
-                  {existingTags.map((tag) => (
-                    <option key={tag} value={tag} />
-                  ))}
-                </datalist>
-                {existingTags.length > 0 && (
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {existingTags.map((tag) => (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => setSettingsForm((f) => ({ ...f, categoryTag: tag }))}
-                        className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
-                          settingsForm.categoryTag === tag
-                            ? "border-gray-900 bg-gray-900 text-white"
-                            : "border-gray-200 text-gray-600 hover:border-gray-400"
-                        }`}
-                      >
-                        {tag}
-                      </button>
-                    ))}
+                            <div>
+                              <label className="mb-1 block text-sm font-medium">{t("gs.eventDate")}</label>
+                              <input
+                                type="date"
+                                className="input w-48"
+                                value={settingsForm.eventDate}
+                                onChange={(e) => setSettingsForm((f) => ({ ...f, eventDate: e.target.value }))}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-neutral-100 pt-6">
+                          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                            {t("gs.sectionTags")}
+                          </h3>
+                          {/* Tags multiples (nouveau) — distincts de "Catégorie" ci-dessous, qui
+                              reste la seule catégorie unique utilisée par les filtres de la
+                              liste des galeries (voir /dashboard/galleries) : changer sa forme
+                              casserait ces filtres. Les deux coexistent, usages différents. */}
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {tags.map((tag) => (
+                              <span
+                                key={tag}
+                                className="flex items-center gap-1 rounded-full bg-neutral-100 px-2.5 py-1 text-xs text-neutral-700"
+                              >
+                                {tag}
+                                <button
+                                  type="button"
+                                  onClick={() => removeTag(tag)}
+                                  className="text-neutral-400 hover:text-neutral-700"
+                                  aria-label={t("common.remove")}
+                                >
+                                  ✕
+                                </button>
+                              </span>
+                            ))}
+                            <input
+                              type="text"
+                              value={tagInput}
+                              onChange={(e) => setTagInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === ",") {
+                                  e.preventDefault();
+                                  addTag(tagInput);
+                                }
+                              }}
+                              onBlur={() => addTag(tagInput)}
+                              placeholder={t("gs.addTagPlaceholder")}
+                              className="min-w-[8rem] flex-1 border-none bg-transparent text-sm outline-none placeholder:text-neutral-400"
+                            />
+                          </div>
+
+                          <div className="mt-4">
+                            <label className="mb-1 block text-sm font-medium">{t("gs.categoryTag")}</label>
+                            <input
+                              type="text"
+                              className="input"
+                              placeholder={t("gs.categoryTagPlaceholder")}
+                              value={settingsForm.categoryTag}
+                              onChange={(e) => setSettingsForm((f) => ({ ...f, categoryTag: e.target.value }))}
+                              list="category-tag-options"
+                              autoComplete="off"
+                            />
+                            <datalist id="category-tag-options">
+                              {existingTags.map((tag) => (
+                                <option key={tag} value={tag} />
+                              ))}
+                            </datalist>
+                            {existingTags.length > 0 && (
+                              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                {existingTags.map((tag) => (
+                                  <button
+                                    key={tag}
+                                    type="button"
+                                    onClick={() => setSettingsForm((f) => ({ ...f, categoryTag: tag }))}
+                                    className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                                      settingsForm.categoryTag === tag
+                                        ? "border-gray-900 bg-gray-900 text-white"
+                                        : "border-gray-200 text-gray-600 hover:border-gray-400"
+                                    }`}
+                                  >
+                                    {tag}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Automatisations : simple vitrine pour l'instant (aucun moteur de
+                            déclenchement réel derrière) — volontairement présentée comme
+                            indisponible plutôt que de simuler un comportement qui n'existe pas
+                            (voir tâche de suivi #512/#518). */}
+                        <div className="border-t border-neutral-100 pt-6">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                              {t("gs.sectionAutomations")}
+                            </h3>
+                            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-500">
+                              {t("gs.comingSoon")}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-sm text-neutral-500">{t("gs.automationsEmpty")}</p>
+                          <button
+                            type="button"
+                            disabled
+                            title={t("gs.comingSoon")}
+                            className="mt-2 w-full cursor-not-allowed rounded-lg border border-dashed border-neutral-300 px-3 py-2 text-left text-sm text-neutral-400"
+                          >
+                            {t("gs.chooseAutomation")}
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-3 border-t border-neutral-100 pt-6">
+                          <button type="submit" disabled={settingsSaving} className="btn-primary text-sm">
+                            {settingsSaving ? t("common.saving") : t("gs.save")}
+                          </button>
+                          {settingsSaved && <span className="text-sm text-green-600">{t("gs.saved")} ✓</span>}
+                          {settingsError && <span className="text-sm text-red-600">{settingsError}</span>}
+                        </div>
+                      </div>
+                    )}
+
+                    {settingsSubTab === "presentation" && (
+                      <div className="space-y-8">
+                        {/* Sous-nav Présentation : Couverture / Police / Ambiance / Style —
+                            horizontale, en haut du panel (plutôt qu'une colonne verticale). */}
+                        <div className="flex flex-wrap gap-2">
+                          {(
+                            [
+                              { key: "cover", label: t("design.sectionCover") },
+                              { key: "typography", label: t("design.sectionTypography") },
+                              { key: "ambiance", label: t("design.sectionAmbiance") },
+                              { key: "layout", label: t("design.sectionLayout") },
+                            ] as { key: DesignSection; label: string }[]
+                          ).map((s) => (
+                            <button
+                              key={s.key}
+                              type="button"
+                              onClick={() => setDesignSection(s.key)}
+                              className={`rounded-full px-3.5 py-1.5 text-sm transition-colors ${
+                                designSection === s.key
+                                  ? "bg-neutral-600 text-white"
+                                  : "text-neutral-600 hover:bg-neutral-100"
+                              }`}
+                            >
+                              {s.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {designSection === "cover" && (
+                          <div className="space-y-6">
+                            <DesignOptionGroup
+                              label={t("design.coverModeLabel")}
+                              options={COVER_MODES.map((m) => ({ key: m.key, label: t(m.labelKey) }))}
+                              value={design.coverMode}
+                              onChange={(v) => updateDesign("coverMode", v as GalleryDesign["coverMode"])}
+                              columns={3}
+                            />
+
+                            {design.coverMode !== "none" && (
+                              <>
+                                <div className="flex items-center gap-3 border-b border-neutral-100 pb-6">
+                                  {activeCoverPhotoId ? (
+                                    <div className="h-16 w-16 shrink-0 overflow-hidden rounded border border-neutral-200">
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img
+                                        src={thumbUrl(activeCoverPhotoId)}
+                                        alt=""
+                                        className="h-full w-full object-cover"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded border border-dashed border-neutral-300 text-[10px] text-neutral-500">
+                                      {t("gm.noPhotosYet")}
+                                    </div>
+                                  )}
+                                  <div className="flex flex-wrap gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setCoverPickerOpen(true)}
+                                      disabled={localPhotos.length === 0}
+                                      className="btn-secondary text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      {t("design.choosePhoto")}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setFocalPointModalOpen(true)}
+                                      disabled={!activeCoverPhotoId}
+                                      className="btn-secondary text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      {t("design.repositionCover")}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-600">
+                                    {t("design.compositionLabel")}
+                                  </p>
+                                  <div className="grid grid-cols-2 gap-x-6 gap-y-6">
+                                    {COVER_STYLES.map((c) => (
+                                      <button key={c.key} onClick={() => updateDesign("coverStyle", c.key)} className="text-center">
+                                        <div
+                                          className={`aspect-[4/3] overflow-hidden rounded-lg border ${
+                                            design.coverStyle === c.key ? "border-brand-500" : "border-[#808080]"
+                                          }`}
+                                        >
+                                          <CoverStylePreviewThumb
+                                            style={c.key}
+                                            photoUrl={activeCoverPhotoId ? thumbUrl(activeCoverPhotoId) : null}
+                                          />
+                                        </div>
+                                        <p className="mt-2 truncate text-xs text-neutral-600">{t(c.labelKey)}</p>
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div className="space-y-4 border-t border-neutral-100 pt-6">
+                                  <label className="flex items-center justify-between text-sm">
+                                    <span className="font-medium">{t("design.showCoverTitleLabel")}</span>
+                                    <input
+                                      type="checkbox"
+                                      checked={design.showCoverTitle}
+                                      onChange={(e) => updateDesign("showCoverTitle", e.target.checked)}
+                                    />
+                                  </label>
+                                  {design.showCoverTitle && (
+                                    <div className="grid grid-cols-2 gap-4">
+                                      <DesignOptionGroup
+                                        label={t("design.coverTitleScaleLabel")}
+                                        options={[
+                                          { key: "sm", label: "Aa" },
+                                          { key: "md", label: "Aa" },
+                                          { key: "lg", label: "Aa" },
+                                        ]}
+                                        value={design.coverTitleScale}
+                                        onChange={(v) => updateDesign("coverTitleScale", v as GalleryDesign["coverTitleScale"])}
+                                        columns={3}
+                                      />
+                                      <DesignOptionGroup
+                                        label={t("design.coverTitleCaseLabel")}
+                                        options={[
+                                          { key: "uppercase", label: t("design.coverTitleCase.uppercase") },
+                                          { key: "normal", label: t("design.coverTitleCase.normal") },
+                                        ]}
+                                        value={design.coverTitleCase}
+                                        onChange={(v) => updateDesign("coverTitleCase", v as GalleryDesign["coverTitleCase"])}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="border-t border-neutral-100 pt-6">
+                                  <label className="mb-1 block text-sm font-medium">{t("design.coverVideoUrlLabel")}</label>
+                                  <input
+                                    type="url"
+                                    className="input"
+                                    placeholder="https://..."
+                                    value={design.coverVideoUrl || ""}
+                                    onChange={(e) => updateDesign("coverVideoUrl", e.target.value || null)}
+                                  />
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
+
+                        {designSection === "typography" && (
+                          <div className="grid grid-cols-2 gap-4">
+                            {FONTS.map((f) => (
+                              <button
+                                key={f.key}
+                                onClick={() => updateDesign("font", f.key)}
+                                className={`rounded-lg border-2 bg-neutral-50 px-4 py-6 text-center transition-colors hover:bg-neutral-100 ${
+                                  design.font === f.key ? "border-brand-500" : "border-neutral-200"
+                                }`}
+                              >
+                                <p
+                                  className={`text-2xl text-neutral-900 ${f.className}`}
+                                  style={{ fontFamily: f.stack }}
+                                >
+                                  Aa
+                                </p>
+                                <p className="mt-2 text-xs text-neutral-500">{t(f.labelKey)}</p>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {designSection === "ambiance" && (
+                          <div className="space-y-6">
+                            <div>
+                              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-neutral-600">
+                                {t("design.backgroundLabel")}
+                              </p>
+                              <p className="mb-3 text-xs text-neutral-400">{t("design.backgroundHint")}</p>
+                              <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+                                {BACKGROUND_THEMES.map((bgTheme) => (
+                                  <button
+                                    key={bgTheme.key}
+                                    type="button"
+                                    onClick={() => {
+                                      updateDesign("backgroundTheme", bgTheme.key);
+                                      updateDesign("backgroundCustomHex", null);
+                                      updateDesign("backgroundCustomTextHex", null);
+                                    }}
+                                    className={`overflow-hidden rounded-lg border-2 text-left transition-colors ${
+                                      !design.backgroundCustomHex && design.backgroundTheme === bgTheme.key
+                                        ? "border-brand-500"
+                                        : "border-neutral-200 hover:border-neutral-300"
+                                    }`}
+                                  >
+                                    <div
+                                      className="flex h-10 items-center justify-center border-b border-black/5 text-[10px] font-medium"
+                                      style={{ backgroundColor: bgTheme.bg, color: bgTheme.text }}
+                                    >
+                                      Aa
+                                    </div>
+                                    <p className="px-2 py-1 text-[11px] text-neutral-600">{t(bgTheme.labelKey)}</p>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="border-t border-neutral-100 pt-6">
+                              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-neutral-600">
+                                {t("design.accentLabel")}
+                              </p>
+                              <p className="mb-3 text-xs text-neutral-400">{t("design.accentHint")}</p>
+                              <div className="flex flex-wrap gap-2.5">
+                                {ACCENT_COLORS.map((accentColorOption) => (
+                                  <button
+                                    key={accentColorOption.key}
+                                    type="button"
+                                    onClick={() => updateDesign("accentTheme", accentColorOption.key)}
+                                    title={t(accentColorOption.labelKey)}
+                                    className={`h-8 w-8 rounded-full border-2 ${
+                                      design.accentTheme === accentColorOption.key
+                                        ? "border-neutral-900"
+                                        : "border-transparent"
+                                    }`}
+                                    style={{
+                                      backgroundColor:
+                                        accentColorOption.key === "custom"
+                                          ? design.accentCustomHex || accentColorOption.hex
+                                          : accentColorOption.hex,
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                              {design.accentTheme === "custom" && (
+                                <input
+                                  type="text"
+                                  className="input mt-3 w-40"
+                                  placeholder="#4f6bf6"
+                                  value={design.accentCustomHex || ""}
+                                  onChange={(e) => updateDesign("accentCustomHex", e.target.value || null)}
+                                />
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {designSection === "layout" && (
+                          <div className="space-y-6">
+                            <DesignOptionGroup
+                              label={t("design.layoutStyleLabel")}
+                              options={LAYOUT_STYLES.map((l) => ({ key: l.key, label: t(l.labelKey) }))}
+                              value={design.layoutStyle}
+                              onChange={(v) => updateDesign("layoutStyle", v as GalleryDesign["layoutStyle"])}
+                              columns={3}
+                            />
+                            {design.layoutStyle === "slideshow" && (
+                              <DesignOptionGroup
+                                label={t("design.slideshowTransitionLabel")}
+                                options={SLIDESHOW_TRANSITIONS.map((tr) => ({ key: tr.key, label: t(tr.labelKey) }))}
+                                value={design.slideshowTransition}
+                                onChange={(v) => updateDesign("slideshowTransition", v as GalleryDesign["slideshowTransition"])}
+                                columns={3}
+                              />
+                            )}
+                            <DesignOptionGroup
+                              label={t("design.gridStyleLabel")}
+                              options={[
+                                { key: "vertical", label: t("design.gridStyle.vertical") },
+                                { key: "horizontal", label: t("design.gridStyle.horizontal") },
+                              ]}
+                              value={design.gridStyle}
+                              onChange={(v) => updateDesign("gridStyle", v as GalleryDesign["gridStyle"])}
+                            />
+                            <DesignOptionGroup
+                              label={t("design.columnsPerRowLabel")}
+                              options={GRID_COLUMNS_OPTIONS.map((n) => ({ key: String(n), label: String(n) }))}
+                              value={String(design.columnsPerRow)}
+                              onChange={(v) => updateDesign("columnsPerRow", Number(v) as GalleryDesign["columnsPerRow"])}
+                              columns={5}
+                            />
+                            <DesignOptionGroup
+                              label={t("design.gridSpacingLabel")}
+                              options={[
+                                { key: "regular", label: t("design.gridSpacing.regular") },
+                                { key: "large", label: t("design.gridSpacing.large") },
+                              ]}
+                              value={design.gridSpacing}
+                              onChange={(v) => updateDesign("gridSpacing", v as GalleryDesign["gridSpacing"])}
+                            />
+                            <DesignOptionGroup
+                              label={t("design.navigationStyleLabel")}
+                              options={[
+                                { key: "icon", label: t("design.navigationStyle.icon") },
+                                { key: "iconText", label: t("design.navigationStyle.iconText") },
+                              ]}
+                              value={design.navigationStyle}
+                              onChange={(v) => updateDesign("navigationStyle", v as GalleryDesign["navigationStyle"])}
+                            />
+                            <DesignOptionGroup
+                              label={t("design.sectionsNavModeLabel")}
+                              options={SECTIONS_NAV_MODES.map((m) => ({ key: m.key, label: t(m.labelKey) }))}
+                              value={design.sectionsNavMode}
+                              onChange={(v) => updateDesign("sectionsNavMode", v as GalleryDesign["sectionsNavMode"])}
+                            />
+                            <DesignOptionGroup
+                              label={t("design.videoDisplayModeLabel")}
+                              options={VIDEO_DISPLAY_MODES.map((m) => ({ key: m.key, label: t(m.labelKey) }))}
+                              value={design.videoDisplayMode}
+                              onChange={(v) => updateDesign("videoDisplayMode", v as GalleryDesign["videoDisplayMode"])}
+                              columns={3}
+                            />
+                            <div>
+                              <label className="mb-1 block text-sm font-medium">{t("design.musicUrlLabel")}</label>
+                              <input
+                                type="url"
+                                className="input"
+                                placeholder="https://.../musique.mp3"
+                                value={design.musicUrl || ""}
+                                onChange={(e) => updateDesign("musicUrl", e.target.value || null)}
+                              />
+                              <p className="mt-1 text-xs text-gray-500">{t("design.musicUrlHint")}</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Presets — "Réutiliser cette mise en scène ?" (voir GalleryPreset) */}
+                        <div className="border-t border-neutral-100 pt-6">
+                          <button
+                            type="button"
+                            onClick={() => setPresetsOpen((v) => !v)}
+                            className="flex w-full items-center justify-between text-left text-sm font-medium text-neutral-700"
+                          >
+                            {t("gs.presetsTitle")}
+                            <span className="text-neutral-400">{presetsOpen ? "▴" : "▾"}</span>
+                          </button>
+                          {presetsOpen && (
+                            <div className="mt-3 space-y-3">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  className="input flex-1"
+                                  placeholder={t("gs.presetNamePlaceholder")}
+                                  value={presetNameInput}
+                                  onChange={(e) => setPresetNameInput(e.target.value)}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={savePreset}
+                                  disabled={presetSaving || !presetNameInput.trim()}
+                                  className="btn-secondary shrink-0 whitespace-nowrap text-xs disabled:opacity-50"
+                                >
+                                  {presetSaving ? t("common.saving") : t("gs.savePreset")}
+                                </button>
+                              </div>
+                              {presetList.length > 0 && (
+                                <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200">
+                                  {presetList.map((preset) => (
+                                    <li key={preset.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                                      <span className="truncate text-neutral-700">{preset.name}</span>
+                                      <span className="flex shrink-0 items-center gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => applyPreset(preset)}
+                                          className="text-xs font-medium text-brand-600 hover:text-brand-700"
+                                        >
+                                          {t("gs.applyPreset")}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => deletePreset(preset.id)}
+                                          aria-label={t("common.remove")}
+                                          className="text-neutral-400 hover:text-red-600"
+                                        >
+                                          🗑
+                                        </button>
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Crédits prestataires (GalleryCredit) — affichés en pied de galerie
+                            publique (voir tâche de suivi côté rendu public, #516). */}
+                        <div className="border-t border-neutral-100 pt-6">
+                          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                            {t("gs.creditsTitle")}
+                          </h3>
+                          {credits.length > 0 && (
+                            <ul className="mt-2 space-y-1.5">
+                              {credits.map((credit) => (
+                                <li
+                                  key={credit.id}
+                                  className="flex items-center justify-between rounded-lg border border-neutral-200 px-3 py-2 text-sm"
+                                >
+                                  <span>
+                                    <span className="font-medium text-neutral-800">{credit.name}</span>
+                                    <span className="ml-2 text-xs uppercase tracking-wide text-neutral-400">
+                                      {t(`gs.creditRole.${credit.role}`)}
+                                    </span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteCredit(credit.id)}
+                                    aria-label={t("common.remove")}
+                                    className="text-neutral-400 hover:text-red-600"
+                                  >
+                                    🗑
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+
+                          {creditFormRole ? (
+                            <div className="mt-3 space-y-2 rounded-lg border border-neutral-200 p-3">
+                              <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+                                {t(`gs.creditRole.${creditFormRole}`)}
+                              </p>
+                              <input
+                                type="text"
+                                className="input"
+                                placeholder={t("gs.creditNamePlaceholder")}
+                                value={creditFormName}
+                                onChange={(e) => setCreditFormName(e.target.value)}
+                              />
+                              <input
+                                type="url"
+                                className="input"
+                                placeholder={t("gs.creditUrlPlaceholder")}
+                                value={creditFormUrl}
+                                onChange={(e) => setCreditFormUrl(e.target.value)}
+                              />
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => addCredit(creditFormRole)}
+                                  disabled={creditSaving || !creditFormName.trim()}
+                                  className="btn-primary text-xs disabled:opacity-50"
+                                >
+                                  {creditSaving ? t("common.saving") : t("gs.addCredit")}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setCreditFormRole(null)}
+                                  className="text-xs text-neutral-500 hover:text-neutral-800"
+                                >
+                                  {t("common.cancel")}
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                              {CREDIT_ROLES.map((role) => (
+                                <button
+                                  key={role}
+                                  type="button"
+                                  onClick={() => setCreditFormRole(role)}
+                                  className="rounded-lg border border-neutral-200 px-2 py-2.5 text-center text-xs text-neutral-600 hover:border-neutral-400 hover:text-neutral-900"
+                                >
+                                  {t(`gs.creditRole.${role}`)}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {settingsSubTab === "delivery" && (
+                      <div className="space-y-6">
+                        <div className="rounded-lg border border-gray-200 p-4">
+                          <p className="block text-sm font-medium">{t("gs.galleryLinkLabel")}</p>
+                          <p className="mt-0.5 text-xs text-gray-500">{t("gs.galleryLinkHint")}</p>
+                          <div className="mt-2 flex items-center gap-2">
+                            <input
+                              type="text"
+                              readOnly
+                              className="input flex-1 text-xs"
+                              value={galleryUrl}
+                              onFocus={(e) => e.target.select()}
+                            />
+                            <button
+                              type="button"
+                              onClick={handleShare}
+                              className="btn-secondary shrink-0 whitespace-nowrap text-xs"
+                            >
+                              {copied ? t("gm.linkCopied") : t("gs.copyLink")}
+                            </button>
+                          </div>
+                        </div>
+
+                        <label className="flex items-start gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={settingsForm.allowDownload}
+                            onChange={(e) => setSettingsForm((f) => ({ ...f, allowDownload: e.target.checked }))}
+                          />
+                          <span>
+                            <span className="block font-medium">{t("gs.download")}</span>
+                            <span className="block text-xs text-gray-500">{t("gs.downloadHint")}</span>
+                          </span>
+                        </label>
+
+                        {settingsForm.allowDownload && (
+                          <div className="ml-6 space-y-3">
+                            <div>
+                              <label className="mb-1 block text-sm font-medium">{t("gs.downloadLimit")}</label>
+                              <input
+                                type="number"
+                                min={1}
+                                className="input w-40"
+                                placeholder={t("gs.downloadLimitPlaceholder")}
+                                value={settingsForm.downloadLimit}
+                                onChange={(e) => setSettingsForm((f) => ({ ...f, downloadLimit: e.target.value }))}
+                              />
+                            </div>
+                            <label className="flex items-start gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                className="mt-0.5"
+                                checked={deliveryForm.downloadWebOptimized}
+                                onChange={(e) =>
+                                  setDeliveryForm((f) => ({ ...f, downloadWebOptimized: e.target.checked }))
+                                }
+                              />
+                              <span>
+                                <span className="block font-medium">{t("gs.downloadWebOptimized")}</span>
+                                <span className="block text-xs text-gray-500">{t("gs.downloadWebOptimizedHint")}</span>
+                              </span>
+                            </label>
+                            <label className="flex items-start gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                className="mt-0.5"
+                                checked={deliveryForm.downloadSocialFormats}
+                                onChange={(e) =>
+                                  setDeliveryForm((f) => ({ ...f, downloadSocialFormats: e.target.checked }))
+                                }
+                              />
+                              <span>
+                                <span className="block font-medium">{t("gs.downloadSocialFormats")}</span>
+                                <span className="block text-xs text-gray-500">{t("gs.downloadSocialFormatsHint")}</span>
+                              </span>
+                            </label>
+                          </div>
+                        )}
+
+                        <label className="flex items-start gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={settingsForm.allowFavorites}
+                            onChange={(e) => setSettingsForm((f) => ({ ...f, allowFavorites: e.target.checked }))}
+                          />
+                          <span>
+                            <span className="block font-medium">{t("gs.favorites")}</span>
+                            <span className="block text-xs text-gray-500">{t("gs.favoritesHint")}</span>
+                          </span>
+                        </label>
+
+                        <label className="flex items-start gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={deliveryForm.allowComments}
+                            onChange={(e) => setDeliveryForm((f) => ({ ...f, allowComments: e.target.checked }))}
+                          />
+                          <span>
+                            <span className="block font-medium">{t("gs.allowComments")}</span>
+                            <span className="block text-xs text-gray-500">{t("gs.allowCommentsHint")}</span>
+                          </span>
+                        </label>
+
+                        <label className="flex items-start gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={settingsForm.showWatermark}
+                            onChange={(e) => setSettingsForm((f) => ({ ...f, showWatermark: e.target.checked }))}
+                          />
+                          <span>
+                            <span className="block font-medium">{t("gs.watermark")}</span>
+                            <span className="block text-xs text-gray-500">{t("gs.watermarkHint")}</span>
+                          </span>
+                        </label>
+
+                        <label className="flex items-start gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={deliveryForm.containsPortraits}
+                            onChange={(e) => setDeliveryForm((f) => ({ ...f, containsPortraits: e.target.checked }))}
+                          />
+                          <span>
+                            <span className="block font-medium">{t("gs.containsPortraits")}</span>
+                            <span className="block text-xs text-gray-500">{t("gs.containsPortraitsHint")}</span>
+                          </span>
+                        </label>
+
+                        <label className="flex items-start gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={deliveryForm.showMetadata}
+                            onChange={(e) => setDeliveryForm((f) => ({ ...f, showMetadata: e.target.checked }))}
+                          />
+                          <span>
+                            <span className="block font-medium">{t("gs.showMetadata")}</span>
+                            <span className="block text-xs text-gray-500">{t("gs.showMetadataHint")}</span>
+                          </span>
+                        </label>
+
+                        <div>
+                          <label className="mb-1 block text-sm font-medium">{t("gs.selectionLimit")}</label>
+                          <input
+                            type="number"
+                            min={1}
+                            className="input w-40"
+                            placeholder={t("gs.selectionLimitPlaceholder")}
+                            value={deliveryForm.selectionLimit}
+                            onChange={(e) => setDeliveryForm((f) => ({ ...f, selectionLimit: e.target.value }))}
+                          />
+                          <p className="mt-1 text-xs text-gray-500">{t("gs.selectionLimitHint")}</p>
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-sm font-medium">{t("gs.expiry")}</label>
+                          <input
+                            type="date"
+                            className="input"
+                            value={settingsForm.expiresAt}
+                            onChange={(e) => setSettingsForm((f) => ({ ...f, expiresAt: e.target.value }))}
+                          />
+                          <p className="mt-1 text-xs text-gray-500">{t("gs.expiryHint")}</p>
+                        </div>
+
+                        <div className="flex items-center gap-3 border-t border-neutral-100 pt-6">
+                          <button type="submit" disabled={settingsSaving} className="btn-primary text-sm">
+                            {settingsSaving ? t("common.saving") : t("gs.save")}
+                          </button>
+                          {settingsSaved && <span className="text-sm text-green-600">{t("gs.saved")} ✓</span>}
+                          {settingsError && <span className="text-sm text-red-600">{settingsError}</span>}
+                        </div>
+                      </div>
+                    )}
+
+                    {settingsSubTab === "security" && (
+                      <div className="space-y-6">
+                        <div>
+                          <label className="mb-1 block text-sm font-medium">{t("gs.password")}</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              className="input flex-1"
+                              placeholder={t("gs.passwordPlaceholder")}
+                              value={settingsForm.password}
+                              onChange={(e) => setSettingsForm((f) => ({ ...f, password: e.target.value }))}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setSettingsForm((f) => ({ ...f, password: generateGalleryPassword() }))}
+                              className="btn-secondary shrink-0 whitespace-nowrap text-xs"
+                            >
+                              {t("gs.generatePassword")}
+                            </button>
+                          </div>
+                          <p className="mt-1 text-xs text-gray-500">{t("gs.passwordHint")}</p>
+                        </div>
+
+                        <div>
+                          <p className="mb-1 block text-sm font-medium">{t("gm.setVisibilityLabel")}</p>
+                          <p className="mb-1.5 text-xs text-gray-500">{t("galleryForm.visibilityHint")}</p>
+                          <div className="space-y-1.5">
+                            {(
+                              [
+                                { key: "CLIENT", label: t("gm.setVisibilityClient") },
+                                { key: "GUEST", label: t("gm.setVisibilityGuest") },
+                              ] as { key: SetVisibility; label: string }[]
+                            ).map((opt) => (
+                              <label key={opt.key} className="flex items-center gap-2 text-sm text-gray-700">
+                                <input
+                                  type="checkbox"
+                                  checked={visibility.includes(opt.key)}
+                                  onChange={() => toggleVisibility(opt.key)}
+                                />
+                                {opt.label}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Lien UNIQUE à partager avec le client (voir GalleryEntryChooser) : à
+                            l'ouverture, le visiteur choisit lui-même "Client" (mot de passe) ou
+                            "Invité" (email, soumis à validation). Le lien invité juste en dessous
+                            n'est qu'une alternative directe (saute le choix, utile pour un
+                            post-it ou une story Instagram). */}
+                        <div className="rounded-lg border border-gray-200 p-4">
+                          <p className="block text-sm font-medium">{t("gs.guestLinkLabel")}</p>
+                          <p className="mt-0.5 text-xs text-gray-500">{t("gs.guestLinkHint")}</p>
+                          <div className="mt-2 flex items-center gap-2">
+                            <input
+                              type="text"
+                              readOnly
+                              className="input flex-1 text-xs"
+                              value={guestUrl || t("gs.guestLinkNotGenerated")}
+                              onFocus={(e) => e.target.select()}
+                            />
+                            <button
+                              type="button"
+                              onClick={handleShareGuest}
+                              disabled={guestSlugLoading}
+                              className="btn-secondary shrink-0 whitespace-nowrap text-xs"
+                            >
+                              {guestSlugLoading
+                                ? t("gm.loading")
+                                : copiedGuest
+                                  ? t("gm.linkCopied")
+                                  : guestUrl
+                                    ? t("gs.copyLink")
+                                    : t("gs.generateGuestLink")}
+                            </button>
+                          </div>
+
+                          <label className="mt-3 flex items-start gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5"
+                              checked={settingsForm.allowGuestDownload}
+                              onChange={(e) =>
+                                setSettingsForm((f) => ({ ...f, allowGuestDownload: e.target.checked }))
+                              }
+                            />
+                            <span>
+                              <span className="block font-medium">{t("gs.allowGuestDownload")}</span>
+                              <span className="block text-xs text-gray-500">{t("gs.allowGuestDownloadHint")}</span>
+                            </span>
+                          </label>
+
+                          <label className="mt-3 flex items-start gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5"
+                              checked={settingsForm.requireGuestApproval}
+                              onChange={(e) =>
+                                setSettingsForm((f) => ({ ...f, requireGuestApproval: e.target.checked }))
+                              }
+                            />
+                            <span>
+                              <span className="block font-medium">{t("gs.requireGuestApproval")}</span>
+                              <span className="block text-xs text-gray-500">{t("gs.requireGuestApprovalHint")}</span>
+                            </span>
+                          </label>
+
+                          <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                            {t("gs.visibilityDisclaimer")}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-3 border-t border-neutral-100 pt-6">
+                          <button type="submit" disabled={settingsSaving} className="btn-primary text-sm">
+                            {settingsSaving ? t("common.saving") : t("gs.save")}
+                          </button>
+                          {settingsSaved && <span className="text-sm text-green-600">{t("gs.saved")} ✓</span>}
+                          {settingsError && <span className="text-sm text-red-600">{settingsError}</span>}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-
-              <div>
-                <p className="mb-1 block text-sm font-medium">{t("gm.setVisibilityLabel")}</p>
-                <p className="mb-1.5 text-xs text-gray-500">{t("galleryForm.visibilityHint")}</p>
-                {/* PORTFOLIO retiré ici : la visibilité portfolio est désormais gouvernée
-                    uniquement par le set "Portfolio" dédié (onglet Photos > Sets), créé
-                    automatiquement sur chaque galerie et activable indépendamment — plus
-                    cohérent qu'un réglage global qui s'appliquait à toute la galerie. */}
-                <div className="space-y-1.5">
-                  {(
-                    [
-                      { key: "CLIENT", label: t("gm.setVisibilityClient") },
-                      { key: "GUEST", label: t("gm.setVisibilityGuest") },
-                    ] as { key: SetVisibility; label: string }[]
-                  ).map((opt) => (
-                    <label key={opt.key} className="flex items-center gap-2 text-sm text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={visibility.includes(opt.key)}
-                        onChange={() => toggleVisibility(opt.key)}
-                      />
-                      {opt.label}
-                    </label>
-                  ))}
                 </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium">{t("gs.password")}</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    className="input flex-1"
-                    placeholder={t("gs.passwordPlaceholder")}
-                    value={settingsForm.password}
-                    onChange={(e) => setSettingsForm((f) => ({ ...f, password: e.target.value }))}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setSettingsForm((f) => ({ ...f, password: generateGalleryPassword() }))}
-                    className="btn-secondary shrink-0 whitespace-nowrap text-xs"
-                  >
-                    {t("gs.generatePassword")}
-                  </button>
-                </div>
-                <p className="mt-1 text-xs text-gray-500">{t("gs.passwordHint")}</p>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium">{t("gs.eventDate")}</label>
-                <input
-                  type="date"
-                  className="input"
-                  value={settingsForm.eventDate}
-                  onChange={(e) => setSettingsForm((f) => ({ ...f, eventDate: e.target.value }))}
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium">{t("gs.expiry")}</label>
-                <input
-                  type="date"
-                  className="input"
-                  value={settingsForm.expiresAt}
-                  onChange={(e) => setSettingsForm((f) => ({ ...f, expiresAt: e.target.value }))}
-                />
-                <p className="mt-1 text-xs text-gray-500">{t("gs.expiryHint")}</p>
-              </div>
-
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-0.5"
-                  checked={settingsForm.allowDownload}
-                  onChange={(e) => setSettingsForm((f) => ({ ...f, allowDownload: e.target.checked }))}
-                />
-                <span>
-                  <span className="block font-medium">{t("gs.download")}</span>
-                  <span className="block text-xs text-gray-500">{t("gs.downloadHint")}</span>
-                </span>
-              </label>
-
-              {settingsForm.allowDownload && (
-                <div>
-                  <label className="mb-1 block text-sm font-medium">{t("gs.downloadLimit")}</label>
-                  <input
-                    type="number"
-                    min={1}
-                    className="input w-40"
-                    placeholder={t("gs.downloadLimitPlaceholder")}
-                    value={settingsForm.downloadLimit}
-                    onChange={(e) => setSettingsForm((f) => ({ ...f, downloadLimit: e.target.value }))}
-                  />
-                </div>
-              )}
-
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-0.5"
-                  checked={settingsForm.allowFavorites}
-                  onChange={(e) => setSettingsForm((f) => ({ ...f, allowFavorites: e.target.checked }))}
-                />
-                <span>
-                  <span className="block font-medium">{t("gs.favorites")}</span>
-                  <span className="block text-xs text-gray-500">{t("gs.favoritesHint")}</span>
-                </span>
-              </label>
-
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-0.5"
-                  checked={settingsForm.showWatermark}
-                  onChange={(e) => setSettingsForm((f) => ({ ...f, showWatermark: e.target.checked }))}
-                />
-                <span>
-                  <span className="block font-medium">{t("gs.watermark")}</span>
-                  <span className="block text-xs text-gray-500">{t("gs.watermarkHint")}</span>
-                </span>
-              </label>
-
-              {/* Lien UNIQUE à partager avec le client (voir GalleryEntryChooser) : à l'ouverture,
-                  le visiteur choisit lui-même "Client" (mot de passe) ou "Invité" (email, soumis
-                  à validation) — c'est donc CE lien-ci qu'il faut communiquer par défaut, le lien
-                  invité juste en dessous n'étant qu'une alternative directe (saute le choix,
-                  utile pour un post-it ou une story Instagram par ex.). Demandé par Adriel le
-                  30/07/2026, qui ne le trouvait pas assez visible dans ce panneau (seul le bouton
-                  "Partager" tout en haut le proposait jusqu'ici). */}
-              <div className="rounded-lg border border-gray-200 p-4">
-                <p className="block text-sm font-medium">{t("gs.galleryLinkLabel")}</p>
-                <p className="mt-0.5 text-xs text-gray-500">{t("gs.galleryLinkHint")}</p>
-                <div className="mt-2 flex items-center gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    className="input flex-1 text-xs"
-                    value={galleryUrl}
-                    onFocus={(e) => e.target.select()}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleShare}
-                    className="btn-secondary shrink-0 whitespace-nowrap text-xs"
-                  >
-                    {copied ? t("gm.linkCopied") : t("gs.copyLink")}
-                  </button>
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-gray-200 p-4">
-                <p className="block text-sm font-medium">{t("gs.guestLinkLabel")}</p>
-                <p className="mt-0.5 text-xs text-gray-500">{t("gs.guestLinkHint")}</p>
-                <div className="mt-2 flex items-center gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    className="input flex-1 text-xs"
-                    value={guestUrl || t("gs.guestLinkNotGenerated")}
-                    onFocus={(e) => e.target.select()}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleShareGuest}
-                    disabled={guestSlugLoading}
-                    className="btn-secondary shrink-0 whitespace-nowrap text-xs"
-                  >
-                    {guestSlugLoading
-                      ? t("gm.loading")
-                      : copiedGuest
-                        ? t("gm.linkCopied")
-                        : guestUrl
-                          ? t("gs.copyLink")
-                          : t("gs.generateGuestLink")}
-                  </button>
-                </div>
-
-                <label className="mt-3 flex items-start gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5"
-                    checked={settingsForm.allowGuestDownload}
-                    onChange={(e) =>
-                      setSettingsForm((f) => ({ ...f, allowGuestDownload: e.target.checked }))
-                    }
-                  />
-                  <span>
-                    <span className="block font-medium">{t("gs.allowGuestDownload")}</span>
-                    <span className="block text-xs text-gray-500">{t("gs.allowGuestDownloadHint")}</span>
-                  </span>
-                </label>
-
-                {/* Interrupteur explicite (05/08/2026, demande d'Adriel) — remplace le texte
-                    informatif introduit le 29/07/2026 : l'approbation automatique dérivée de
-                    "Visible pour mes invités" sur les sets n'était pas assez lisible pour le
-                    studio, qui veut pouvoir activer/désactiver ce comportement directement. */}
-                <label className="mt-3 flex items-start gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5"
-                    checked={settingsForm.requireGuestApproval}
-                    onChange={(e) =>
-                      setSettingsForm((f) => ({ ...f, requireGuestApproval: e.target.checked }))
-                    }
-                  />
-                  <span>
-                    <span className="block font-medium">{t("gs.requireGuestApproval")}</span>
-                    <span className="block text-xs text-gray-500">{t("gs.requireGuestApprovalHint")}</span>
-                  </span>
-                </label>
-
-                <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  {t("gs.visibilityDisclaimer")}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button type="submit" disabled={settingsSaving} className="btn-primary text-sm">
-                  {settingsSaving ? t("common.saving") : t("gs.save")}
-                </button>
-                {settingsSaved && <span className="text-sm text-green-600">{t("gs.saved")} ✓</span>}
-                {settingsError && <span className="text-sm text-red-600">{settingsError}</span>}
               </div>
             </form>
           </main>
@@ -3153,7 +3849,12 @@ function DesignLivePreview({
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const isMobile = device === "mobile";
   const font = getFont(design.font);
-  const palette = getPalette(design.color);
+  // Voir le même commentaire dans GalleryView.tsx (chantier "Ambiance", 12/09/2026) : `palette`
+  // garde la forme {bg, text, accent} pour ne pas toucher aux appels ci-dessous, seule la
+  // source change (fond+accent indépendants avec migration douce, au lieu de l'ancienne
+  // palette combinée `getPalette(design.color)`).
+  const rootStyle = getDesignRootStyle(design);
+  const palette = { bg: rootStyle.backgroundColor, text: rootStyle.color, accent: resolveAccentHex(design) };
   const bg = coverPhotoUrl ? { backgroundImage: `url(${coverPhotoUrl})` } : {};
 
   const titleEl = (
