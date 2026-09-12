@@ -255,6 +255,41 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       }
     }
 
+    // Nouveaux champs du chantier refonte Réglages (12/09/2026, onglets Publication/Livraison)
+    // — colonnes trop récentes pour le Prisma Client généré du sandbox (voir schema.prisma),
+    // donc persistées ici via $executeRaw plutôt que dans le `data` typé de prisma.gallery.update
+    // ci-dessus, même limitation qu'ailleurs dans cette route (GalleryClientAccess, publishedAt).
+    // Chaque colonne n'est mise à jour que si sa clé est PRÉSENTE dans le body (pas seulement
+    // "truthy"), pour ne jamais écraser une valeur existante quand un seul champ est modifié
+    // (ex: l'auto-save d'un simple changement de description ne doit pas réinitialiser tags).
+    if (data.description !== undefined) {
+      await prisma.$executeRaw`UPDATE "Gallery" SET "description" = ${data.description || null} WHERE id = ${gallery.id}`;
+    }
+    if (data.tags !== undefined) {
+      await prisma.$executeRaw`UPDATE "Gallery" SET "tags" = ${data.tags} WHERE id = ${gallery.id}`;
+    }
+    if (data.projectName !== undefined) {
+      await prisma.$executeRaw`UPDATE "Gallery" SET "projectName" = ${data.projectName || null} WHERE id = ${gallery.id}`;
+    }
+    if (data.allowComments !== undefined) {
+      await prisma.$executeRaw`UPDATE "Gallery" SET "allowComments" = ${data.allowComments} WHERE id = ${gallery.id}`;
+    }
+    if (data.containsPortraits !== undefined) {
+      await prisma.$executeRaw`UPDATE "Gallery" SET "containsPortraits" = ${data.containsPortraits} WHERE id = ${gallery.id}`;
+    }
+    if (data.selectionLimit !== undefined) {
+      await prisma.$executeRaw`UPDATE "Gallery" SET "selectionLimit" = ${data.selectionLimit} WHERE id = ${gallery.id}`;
+    }
+    if (data.showMetadata !== undefined) {
+      await prisma.$executeRaw`UPDATE "Gallery" SET "showMetadata" = ${data.showMetadata} WHERE id = ${gallery.id}`;
+    }
+    if (data.downloadWebOptimized !== undefined) {
+      await prisma.$executeRaw`UPDATE "Gallery" SET "downloadWebOptimized" = ${data.downloadWebOptimized} WHERE id = ${gallery.id}`;
+    }
+    if (data.downloadSocialFormats !== undefined) {
+      await prisma.$executeRaw`UPDATE "Gallery" SET "downloadSocialFormats" = ${data.downloadSocialFormats} WHERE id = ${gallery.id}`;
+    }
+
     // Le titre/statut/client affichés dans la liste /dashboard/galleries peuvent changer
     // ici : on invalide son cache pour que la liste soit à jour à la prochaine visite.
     revalidatePath("/dashboard/galleries");

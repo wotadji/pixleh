@@ -52,9 +52,52 @@ export default async function GalleryDetailPage({ params }: { params: { id: stri
     .filter((tag): tag is string => !!tag && tag.trim().length > 0)
     .sort((a, b) => a.localeCompare(b));
 
+  // Nouveaux champs Gallery du chantier refonte Réglages (12/09/2026) : trop récents pour le
+  // Prisma Client généré du sandbox (voir schema.prisma sur ces champs) — même workaround
+  // $queryRaw que additionalClientIds/isSocialDefault ci-dessus, en un seul aller-retour.
+  const extraFieldsRows = await prisma.$queryRaw<
+    {
+      description: string | null;
+      tags: string[];
+      projectName: string | null;
+      allowComments: boolean;
+      containsPortraits: boolean;
+      selectionLimit: number | null;
+      showMetadata: boolean;
+      downloadWebOptimized: boolean;
+      downloadSocialFormats: boolean;
+    }[]
+  >`SELECT "description", "tags", "projectName", "allowComments", "containsPortraits",
+      "selectionLimit", "showMetadata", "downloadWebOptimized", "downloadSocialFormats"
+    FROM "Gallery" WHERE "id" = ${gallery.id}`;
+  const extraFields = extraFieldsRows[0] ?? {
+    description: null,
+    tags: [],
+    projectName: null,
+    allowComments: false,
+    containsPortraits: false,
+    selectionLimit: null,
+    showMetadata: false,
+    downloadWebOptimized: false,
+    downloadSocialFormats: false,
+  };
+
+  // Crédits prestataires (voir modèle GalleryCredit) — même workaround $queryRaw, table trop
+  // récente pour le Prisma Client généré du sandbox.
+  const creditRows = await prisma.$queryRaw<
+    { id: string; role: string; name: string; url: string | null }[]
+  >`SELECT "id", "role", "name", "url" FROM "GalleryCredit" WHERE "galleryId" = ${gallery.id} ORDER BY "position" ASC`;
+
+  // Presets de réglages du studio (voir modèle GalleryPreset), proposés dans l'onglet
+  // Présentation ("Réutiliser cette mise en scène") — mêmes limitations $queryRaw.
+  const presetRows = await prisma.$queryRaw<
+    { id: string; name: string; design: unknown }[]
+  >`SELECT "id", "name", "design" FROM "GalleryPreset" WHERE "studioId" = ${session!.user.studioId} ORDER BY "createdAt" DESC`;
+
   return (
     <GalleryManager
       existingTags={existingTags}
+      presets={presetRows}
       gallery={{
         id: gallery.id,
         studioId: gallery.studioId,
@@ -79,6 +122,16 @@ export default async function GalleryDetailPage({ params }: { params: { id: stri
         defaultVisibility: gallery.defaultVisibility,
         design: gallery.design,
         photoSortOrder: gallery.photoSortOrder,
+        description: extraFields.description,
+        tags: extraFields.tags,
+        projectName: extraFields.projectName,
+        allowComments: extraFields.allowComments,
+        containsPortraits: extraFields.containsPortraits,
+        selectionLimit: extraFields.selectionLimit,
+        showMetadata: extraFields.showMetadata,
+        downloadWebOptimized: extraFields.downloadWebOptimized,
+        downloadSocialFormats: extraFields.downloadSocialFormats,
+        credits: creditRows,
         photos: gallery.photos.map((p) => ({
           id: p.id,
           filename: p.filename,

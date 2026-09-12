@@ -23,6 +23,41 @@ export const galleryDesignSchema = z.object({
   columnsPerRow: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]).optional(),
   coverFocalX: z.number().min(0).max(1).optional(),
   coverFocalY: z.number().min(0).max(1).optional(),
+
+  // ---- Nouveaux champs "Présentation" (chantier refonte Réglages, 12/09/2026) — voir
+  // src/lib/galleryDesign.ts (GalleryDesign) pour le détail de chaque champ. Sans ces clés
+  // ici, zod les aurait silencieusement retirées du JSON envoyé par updateDesign() côté
+  // GalleryManager (un objet z.object() ignore par défaut les clés non déclarées).
+  coverMode: z.enum(["hero", "bandeau", "none"]).optional(),
+  showCoverTitle: z.boolean().optional(),
+  coverTitleScale: z.enum(["sm", "md", "lg"]).optional(),
+  coverTitleCase: z.enum(["uppercase", "normal"]).optional(),
+  coverVideoUrl: z.string().optional().nullable(),
+  layoutStyle: z.enum(["masonry", "grid", "editorial", "slideshow", "contactSheet"]).optional(),
+  sectionsNavMode: z.enum(["overview", "sectionsFirst", "sectionsOnly"]).optional(),
+  slideshowTransition: z.enum(["fade", "kenburns", "slide"]).optional(),
+  videoDisplayMode: z.enum(["standard", "cinema", "immersive"]).optional(),
+  backgroundTheme: z
+    .enum([
+      "light",
+      "ivory",
+      "sand",
+      "powdered",
+      "dark",
+      "anthracite",
+      "espresso",
+      "olive",
+      "brandLight",
+      "brandDark",
+    ])
+    .optional(),
+  backgroundCustomHex: z.string().optional().nullable(),
+  backgroundCustomTextHex: z.string().optional().nullable(),
+  accentTheme: z
+    .enum(["blue", "custom", "black", "brown", "rust", "amber", "burgundy", "olive"])
+    .optional(),
+  accentCustomHex: z.string().optional().nullable(),
+  musicUrl: z.string().optional().nullable(),
 });
 
 export const gallerySchema = z.object({
@@ -50,6 +85,19 @@ export const gallerySchema = z.object({
   // Gallery.defaultVisibility) — au moins une catégorie requise si le champ est fourni,
   // pour ne jamais rendre une galerie invisible partout par erreur.
   defaultVisibility: z.array(z.enum(["CLIENT", "GUEST", "PORTFOLIO"])).min(1).optional(),
+
+  // ---- Nouveaux champs Gallery du chantier refonte Réglages (12/09/2026) — voir
+  // schema.prisma pour le commentaire complet sur chacun (persistés via $executeRaw côté
+  // PATCH /api/galleries/[id], trop récents pour le Prisma Client généré du sandbox).
+  description: z.string().optional().nullable(),
+  tags: z.array(z.string()).optional(),
+  projectName: z.string().optional().nullable(),
+  allowComments: z.boolean().optional(),
+  containsPortraits: z.boolean().optional(),
+  selectionLimit: z.number().int().positive().optional().nullable(),
+  showMetadata: z.boolean().optional(),
+  downloadWebOptimized: z.boolean().optional(),
+  downloadSocialFormats: z.boolean().optional(),
 });
 
 export const clientSchema = z.object({
