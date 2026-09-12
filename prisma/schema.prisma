@@ -74,6 +74,9 @@ model Studio {
   pages      Page[]
   blogPosts  BlogPost[]
   settings   StudioSettings?
+  /// Modèles de réglages de galerie réutilisables (voir GalleryPreset) — chantier refonte
+  /// panneau Réglages (12/09/2026), onglet Présentation > "Sauvegarder comme preset".
+  galleryPresets GalleryPreset[]
 }
 
 /// Palier tarifaire — entièrement gérable depuis le panel admin plateforme (/admin/plans,
@@ -476,6 +479,22 @@ model Gallery {
   clientId        String?
   client          Client?       @relation(fields: [clientId], references: [id])
   title           String
+  /// Texte libre affiché sous le titre (onglet Réglages > Publication > Informations),
+  /// distinct du texte "Style > Musique de fond"/légendes de couverture — chantier refonte
+  /// panneau Réglages (12/09/2026, référence Picstudio). Ajouté après le dernier
+  /// `prisma generate` du sandbox : lu/écrit via $queryRaw/$executeRaw en attendant qu'Adriel
+  /// relance `prisma generate && prisma db push` (même limitation que publishedAt plus haut).
+  description     String?
+  /// Étiquettes libres multiples (onglet Publication > Tags) — distinct de `categoryTag`
+  /// (catégorie unique historique utilisée par les filtres de la liste des galeries, non
+  /// remplacée pour ne rien casser). Postgres supporte nativement String[], pas de table de
+  /// jonction nécessaire. Même limitation raw SQL que description ci-dessus.
+  tags            String[]      @default([])
+  /// Nom de projet libre (onglet Publication > Informations > "Projet") — pas de modèle
+  /// Project dédié pour l'instant, simple texte comme le champ "Client" existant côté guest
+  /// sans compte (voir Invoice.guestClientName pour un précédent similaire dans ce code).
+  /// Même limitation raw SQL que description ci-dessus.
+  projectName     String?
   slug            String        @unique
   coverPhotoId    String?
   status          GalleryStatus @default(DRAFT)
@@ -530,6 +549,36 @@ model Gallery {
   /// valeurs de PhotoSortKey (voir src/lib/photoSort.ts) — stocké en String plutôt qu'en
   /// enum pour ne pas nécessiter de migration à chaque nouvel ordre de tri ajouté.
   photoSortOrder  String        @default("manual")
+  /// Autorise les remarques/commentaires client sur les photos (onglet Livraison >
+  /// Interaction > "Autoriser les commentaires") — réutilise le système PhotoRemark déjà
+  /// existant (icône remarque sur chaque vignette côté galerie client) plutôt que de créer un
+  /// système de commentaires séparé : ce booléen se contente de piloter si l'icône est
+  /// proposée au client, aucune nouvelle table nécessaire. Même limitation raw SQL que
+  /// description plus haut (voir ce champ pour le détail de la convention).
+  allowComments   Boolean       @default(false)
+  /// Affiche un rappel de consentement (droit à l'image) lors du partage sur réseaux sociaux
+  /// depuis la galerie publique — simple indicateur informatif, aucune vérification légale
+  /// automatisée. Même limitation raw SQL que description plus haut.
+  containsPortraits Boolean     @default(false)
+  /// Nombre max de photos que le client peut ajouter à sa sélection (onglet Livraison), null
+  /// = illimité — distinct de `downloadLimit` (téléchargements HD) : ceci limite la
+  /// SÉLECTION (favoris/impression/collections privées), pas le téléchargement. Même
+  /// limitation raw SQL que description plus haut.
+  selectionLimit  Int?
+  /// Affiche les métadonnées EXIF (date, appareil...) sous chaque photo côté galerie
+  /// publique. Même limitation raw SQL que description plus haut.
+  showMetadata    Boolean       @default(false)
+  /// Propose un téléchargement "web (optimisé)" en plus de l'original — réutilise le même
+  /// pipeline de redimensionnement que l'option "taille web" déjà disponible sur le
+  /// téléchargement groupé (voir /api/galleries/[id]/download-all, tâche #99), exposé ici
+  /// comme réglage par défaut au niveau de la galerie plutôt qu'un choix ponctuel à chaque
+  /// téléchargement. Même limitation raw SQL que description plus haut.
+  downloadWebOptimized Boolean  @default(false)
+  /// Propose des formats prêts à publier (recadrages carré/story) pour Instagram/Facebook/
+  /// TikTok — réglage capturé ici ; génération effective des formats recadrés non câblée
+  /// dans cette première passe (voir tâche de suivi #514/#518), traité comme une préférence
+  /// stockée en attendant. Même limitation raw SQL que description plus haut.
+  downloadSocialFormats Boolean @default(false)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -546,9 +595,52 @@ model Gallery {
   /// Collections privées créées par les clients de cette galerie — voir ClientCollection,
   /// jamais exposé côté studio.
   clientCollections ClientCollection[]
+  /// Crédits prestataires (fleuriste, lieu, traiteur...) — voir GalleryCredit, onglet
+  /// Réglages > Publication/Présentation > "Crédits".
+  credits         GalleryCredit[]
 
   @@index([studioId])
   @@index([clientId])
+}
+
+/// Modèle de réglages de galerie réutilisable (chantier refonte panneau Réglages,
+/// 12/09/2026, référence Picstudio : "Réutiliser cette mise en scène ? Sauvegardez-la comme
+/// preset") — capture un instantané de `Gallery.design` (apparence : couverture, style,
+/// ambiance...) sous un nom choisi par le studio, ré-applicable à n'importe quelle autre
+/// galerie du même studio. Volontairement scindé de Gallery.design lui-même (qui reste la
+/// source de vérité de CE QUI est affiché) : un preset n'est qu'un modèle de départ, jamais
+/// synchronisé après coup avec les galeries qui l'ont utilisé.
+model GalleryPreset {
+  id        String   @id @default(cuid())
+  studioId  String
+  studio    Studio   @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  name      String
+  /// Même forme que Gallery.design (voir src/lib/galleryDesign.ts) — Json libre plutôt que
+  /// colonnes dédiées, pour rester en phase avec Gallery.design sans dupliquer sa structure.
+  design    Json
+  createdAt DateTime @default(now())
+
+  @@index([studioId])
+}
+
+/// Prestataire crédité sur une galerie (fleuriste, lieu, décoration, traiteur, DJ, wedding
+/// planner, vidéaste, maquillage, coiffure, robe...) — affiché en pied de galerie publique
+/// (chantier refonte panneau Réglages, 12/09/2026, référence Picstudio : section "Crédits").
+/// `role` en String libre (pas d'enum) : les rôles proposés dans l'UI ne sont que des
+/// suggestions rapides (boutons de saisie assistée), un studio doit pouvoir créditer un rôle
+/// non prévu dans cette liste sans attendre une migration.
+model GalleryCredit {
+  id        String   @id @default(cuid())
+  galleryId String
+  gallery   Gallery  @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  role      String
+  name      String
+  /// Site web, Instagram ou autre lien de contact du prestataire — optionnel.
+  url       String?
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([galleryId])
 }
 
 /// Vidéo d'une galerie (film de mariage, teaser, clip...) — affichée dans un onglet

@@ -6,7 +6,8 @@ import { photoDisplayFilename } from "@/lib/photoNaming";
 import {
   resolveGalleryDesign,
   getFont,
-  getPalette,
+  getDesignRootStyle,
+  resolveAccentHex,
   gridColsClass,
   gridGapClass,
   masonryColumnCount,
@@ -447,7 +448,17 @@ export function GalleryView({
 
   const design = resolveGalleryDesign(gallery.design);
   const font = getFont(design.font);
-  const palette = getPalette(design.color);
+  // Chantier "Ambiance" (12/09/2026, refonte Réglages) : `palette` garde la même forme
+  // {bg, text, accent} qu'avant pour ne toucher à AUCUN des appels ci-dessous (des dizaines,
+  // voir palette.bg/palette.text/palette.accent plus bas) — seule la SOURCE change, désormais
+  // `getDesignRootStyle`/`resolveAccentHex` (fond+accent indépendants, avec migration douce
+  // des galeries existantes) plutôt que l'ancienne palette combinée `getPalette(design.color)`.
+  const rootStyle = getDesignRootStyle(design);
+  const palette = {
+    bg: rootStyle.backgroundColor,
+    text: rootStyle.color,
+    accent: resolveAccentHex(design),
+  };
 
   // Nombre de colonnes réel de la grille mosaïque, recalculé à chaque redimensionnement
   // de fenêtre pour respecter les mêmes seuils responsives que le reste de l'app (voir

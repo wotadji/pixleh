@@ -34,6 +34,55 @@ export type NavigationStyle = "icon" | "iconText";
 /** Nombre de colonnes affichées sur la plus grande largeur d'écran (desktop). */
 export type GridColumns = 2 | 3 | 4 | 5 | 6;
 
+/**
+ * Champs ajoutés lors du chantier de refonte du panneau Réglages (12/09/2026, référence
+ * Picstudio) — voir GalleryManager.tsx, onglet Présentation. Volontairement ADDITIFS : les
+ * champs existants ci-dessus (coverStyle, font, color, gridStyle...) restent inchangés et
+ * continuent de piloter le rendu public (src/components/gallery/GalleryView.tsx) sans aucune
+ * régression pour les galeries déjà configurées — ces nouveaux champs s'y superposent plutôt
+ * que de les remplacer, avec repli sur le comportement historique tant qu'ils sont absents
+ * (voir resolveGalleryDesign plus bas).
+ */
+
+/** "Mode de couverture" (nouveau, distinct du style/composition existant `coverStyle`). */
+export type CoverMode = "hero" | "bandeau" | "none";
+export type CoverTitleScale = "sm" | "md" | "lg";
+export type CoverTitleCase = "uppercase" | "normal";
+/**
+ * "Style d'affichage" de la grille (Picstudio) — distinct de l'existant `gridStyle`
+ * (vertical/horizontal, qui continue de piloter la mosaïque actuelle). "masonry"/"grid"
+ * réutilisent le rendu existant (mosaïque / grille classique) ; "editorial"/"slideshow"/
+ * "contactSheet" sont capturés et sauvegardés mais retombent sur le rendu "grid" côté page
+ * publique tant qu'un rendu dédié n'est pas construit (voir tâche de suivi #513/#518).
+ */
+export type LayoutStyle = "masonry" | "grid" | "editorial" | "slideshow" | "contactSheet";
+export type SectionsNavMode = "overview" | "sectionsFirst" | "sectionsOnly";
+export type SlideshowTransition = "fade" | "kenburns" | "slide";
+export type VideoDisplayMode = "standard" | "cinema" | "immersive";
+/** Thème de fond "Ambiance" — indépendant de l'existant `color` (palette combinée fond+texte+
+ * accent). "brandLight"/"brandDark" dérivent de Studio.brandColor (voir getBackgroundTheme). */
+export type BackgroundThemeKey =
+  | "light"
+  | "ivory"
+  | "sand"
+  | "powdered"
+  | "dark"
+  | "anthracite"
+  | "espresso"
+  | "olive"
+  | "brandLight"
+  | "brandDark";
+/** "custom" = utiliser accentCustomHex ci-dessous plutôt qu'une des teintes curatées. */
+export type AccentThemeKey =
+  | "blue"
+  | "custom"
+  | "black"
+  | "brown"
+  | "rust"
+  | "amber"
+  | "burgundy"
+  | "olive";
+
 export interface GalleryDesign {
   coverStyle: CoverStyle;
   font: FontKey;
@@ -51,6 +100,32 @@ export interface GalleryDesign {
    */
   coverFocalX: number;
   coverFocalY: number;
+
+  // ---- Nouveaux champs "Présentation" (12/09/2026, voir commentaire plus haut) ----
+  coverMode: CoverMode;
+  showCoverTitle: boolean;
+  coverTitleScale: CoverTitleScale;
+  coverTitleCase: CoverTitleCase;
+  /** URL Vimeo/YouTube/MP4 direct affichée en fond de couverture à la place de la photo. */
+  coverVideoUrl: string | null;
+  layoutStyle: LayoutStyle;
+  sectionsNavMode: SectionsNavMode;
+  slideshowTransition: SlideshowTransition;
+  videoDisplayMode: VideoDisplayMode;
+  backgroundTheme: BackgroundThemeKey;
+  /** Non nul dans deux cas : (1) migration douce d'une galerie créée avant ce chantier (voir
+   * resolveGalleryDesign, dérivé de l'ancienne palette `color`) — alors prioritaire sur
+   * `backgroundTheme` pour ne rien changer au rendu déjà publié ; (2) réservé pour un futur
+   * sélecteur de teinte libre côté fond, non exposé dans l'UI de cette première passe. */
+  backgroundCustomHex: string | null;
+  /** Couleur de texte associée à backgroundCustomHex (calculée une fois à la migration, pas
+   * recalculée à chaque rendu) — null tant que backgroundCustomHex est null. */
+  backgroundCustomTextHex: string | null;
+  accentTheme: AccentThemeKey;
+  /** Hex utilisé quand accentTheme === "custom". */
+  accentCustomHex: string | null;
+  /** URL directe (MP3/OGG) — pas d'iframe YouTube (autoplay bloqué par les navigateurs). */
+  musicUrl: string | null;
 }
 
 // Par défaut on reproduit le rendu "classique" d'une galerie Pixieset : photo de
@@ -67,6 +142,25 @@ export const DEFAULT_GALLERY_DESIGN: GalleryDesign = {
   columnsPerRow: 5,
   coverFocalX: 0.5,
   coverFocalY: 0.5,
+
+  // Repli neutre : reproduit exactement le rendu historique (cover pleine largeur toujours
+  // visible, grille mosaïque, thème clair, aucune vidéo/musique) pour les galeries créées
+  // avant ce chantier — voir resolveGalleryDesign.
+  coverMode: "hero",
+  showCoverTitle: true,
+  coverTitleScale: "md",
+  coverTitleCase: "uppercase",
+  coverVideoUrl: null,
+  layoutStyle: "masonry",
+  sectionsNavMode: "overview",
+  slideshowTransition: "fade",
+  videoDisplayMode: "standard",
+  backgroundTheme: "light",
+  backgroundCustomHex: null,
+  backgroundCustomTextHex: null,
+  accentTheme: "blue",
+  accentCustomHex: null,
+  musicUrl: null,
 };
 
 export const GRID_COLUMNS_OPTIONS: GridColumns[] = [2, 3, 4, 5, 6];
@@ -74,7 +168,27 @@ export const GRID_COLUMNS_OPTIONS: GridColumns[] = [2, 3, 4, 5, 6];
 /** Fusionne un design partiel/potentiellement null (venant de la base) avec les valeurs par défaut. */
 export function resolveGalleryDesign(design: unknown): GalleryDesign {
   if (!design || typeof design !== "object") return { ...DEFAULT_GALLERY_DESIGN };
-  return { ...DEFAULT_GALLERY_DESIGN, ...(design as Partial<GalleryDesign>) };
+  const raw = design as Partial<GalleryDesign>;
+  const merged: GalleryDesign = { ...DEFAULT_GALLERY_DESIGN, ...raw };
+
+  // Migration douce "Ambiance" (chantier du 12/09/2026) : une galerie créée AVANT ce chantier
+  // n'a jamais eu `backgroundTheme`/`accentTheme` dans son JSON stocké — sans ce repli, elle
+  // retomberait sur les défauts "light"/"blue" ci-dessus, ce qui romprait le rendu déjà publié
+  // de toute galerie utilisant une autre palette `color` (ex: "dark"). On dérive donc les
+  // nouveaux champs de l'ancienne palette la première fois qu'on la lit, plutôt que de
+  // dépendre d'un défaut générique — uniquement quand ces clés sont absentes du JSON BRUT
+  // (`raw`), jamais depuis `merged` qui les a déjà remplies par les valeurs par défaut.
+  if (raw.backgroundTheme === undefined && raw.backgroundCustomHex === undefined) {
+    const legacyPalette = getPalette(raw.color ?? DEFAULT_GALLERY_DESIGN.color);
+    merged.backgroundCustomHex = legacyPalette.bg;
+    merged.backgroundCustomTextHex = legacyPalette.text;
+  }
+  if (raw.accentTheme === undefined && raw.accentCustomHex === undefined) {
+    const legacyPalette = getPalette(raw.color ?? DEFAULT_GALLERY_DESIGN.color);
+    merged.accentTheme = "custom";
+    merged.accentCustomHex = legacyPalette.accent;
+  }
+  return merged;
 }
 
 export const COVER_STYLES: { key: CoverStyle; labelKey: string }[] = [
@@ -122,17 +236,156 @@ export function getPalette(key: ColorKey) {
   return COLOR_PALETTES.find((c) => c.key === key) || COLOR_PALETTES[0];
 }
 
-/** Style inline CSS à appliquer au conteneur racine de la galerie (couleurs + police). */
-export function getDesignRootStyle(design: GalleryDesign): {
+// ---- Nouveaux réglages "Présentation" (12/09/2026, voir commentaire en tête de fichier) ----
+
+export const COVER_MODES: { key: CoverMode; labelKey: string }[] = [
+  { key: "hero", labelKey: "design.coverMode.hero" },
+  { key: "bandeau", labelKey: "design.coverMode.bandeau" },
+  { key: "none", labelKey: "design.coverMode.none" },
+];
+
+export const LAYOUT_STYLES: { key: LayoutStyle; labelKey: string }[] = [
+  { key: "masonry", labelKey: "design.layout.masonry" },
+  { key: "grid", labelKey: "design.layout.grid" },
+  { key: "editorial", labelKey: "design.layout.editorial" },
+  { key: "slideshow", labelKey: "design.layout.slideshow" },
+  { key: "contactSheet", labelKey: "design.layout.contactSheet" },
+];
+
+export const SECTIONS_NAV_MODES: { key: SectionsNavMode; labelKey: string; descKey: string }[] = [
+  { key: "overview", labelKey: "design.sectionsNav.overview", descKey: "design.sectionsNav.overviewDesc" },
+  {
+    key: "sectionsFirst",
+    labelKey: "design.sectionsNav.sectionsFirst",
+    descKey: "design.sectionsNav.sectionsFirstDesc",
+  },
+  {
+    key: "sectionsOnly",
+    labelKey: "design.sectionsNav.sectionsOnly",
+    descKey: "design.sectionsNav.sectionsOnlyDesc",
+  },
+];
+
+export const SLIDESHOW_TRANSITIONS: { key: SlideshowTransition; labelKey: string }[] = [
+  { key: "fade", labelKey: "design.transition.fade" },
+  { key: "kenburns", labelKey: "design.transition.kenburns" },
+  { key: "slide", labelKey: "design.transition.slide" },
+];
+
+export const VIDEO_DISPLAY_MODES: { key: VideoDisplayMode; labelKey: string }[] = [
+  { key: "standard", labelKey: "design.videoDisplay.standard" },
+  { key: "cinema", labelKey: "design.videoDisplay.cinema" },
+  { key: "immersive", labelKey: "design.videoDisplay.immersive" },
+];
+
+/** "Ambiance > Le fond" — indépendant de COLOR_PALETTES (voir migration dans
+ * resolveGalleryDesign). brandLight/brandDark n'ont pas de bg/text fixes : ils sont dérivés de
+ * Studio.brandColor au moment du rendu, voir getBackgroundTheme. */
+export const BACKGROUND_THEMES: {
+  key: BackgroundThemeKey;
+  labelKey: string;
+  group: "light" | "dark" | "brand";
+  bg: string;
+  text: string;
+}[] = [
+  { key: "light", labelKey: "design.background.light", group: "light", bg: "#ffffff", text: "#18181b" },
+  { key: "ivory", labelKey: "design.background.ivory", group: "light", bg: "#faf6ee", text: "#2b2620" },
+  { key: "sand", labelKey: "design.background.sand", group: "light", bg: "#f2e9d8", text: "#332c1e" },
+  { key: "powdered", labelKey: "design.background.powdered", group: "light", bg: "#f7e9e6", text: "#3a2b28" },
+  { key: "dark", labelKey: "design.background.dark", group: "dark", bg: "#18181b", text: "#f5f5f5" },
+  { key: "anthracite", labelKey: "design.background.anthracite", group: "dark", bg: "#26262b", text: "#f0f0f0" },
+  { key: "espresso", labelKey: "design.background.espresso", group: "dark", bg: "#2a1e18", text: "#f2ece7" },
+  { key: "olive", labelKey: "design.background.olive", group: "dark", bg: "#22261c", text: "#eef0e6" },
+  // bg/text ci-dessous ne servent que de repli si jamais appelés sans studioBrandColorHex —
+  // voir getBackgroundTheme, qui les recalcule normalement à partir de la couleur de marque.
+  { key: "brandLight", labelKey: "design.background.brandLight", group: "brand", bg: "#eef2ff", text: "#1e1b4b" },
+  { key: "brandDark", labelKey: "design.background.brandDark", group: "brand", bg: "#1e1b4b", text: "#eef2ff" },
+];
+
+/** "Ambiance > L'accent" — teintes curatées ; "custom" utilise `accentCustomHex` à la place. */
+export const ACCENT_COLORS: { key: AccentThemeKey; labelKey: string; hex: string }[] = [
+  { key: "blue", labelKey: "design.accent.blue", hex: "#4f6bf6" },
+  { key: "custom", labelKey: "design.accent.custom", hex: "#9ca3af" },
+  { key: "black", labelKey: "design.accent.black", hex: "#18181b" },
+  { key: "brown", labelKey: "design.accent.brown", hex: "#92400e" },
+  { key: "rust", labelKey: "design.accent.rust", hex: "#c2410c" },
+  { key: "amber", labelKey: "design.accent.amber", hex: "#d97706" },
+  { key: "burgundy", labelKey: "design.accent.burgundy", hex: "#9f1239" },
+  { key: "olive", labelKey: "design.accent.olive", hex: "#65742e" },
+];
+
+function clampChannel(n: number) {
+  return Math.max(0, Math.min(255, Math.round(n)));
+}
+
+/** Mélange `hex` avec du blanc (`ratio` > 0) ou du noir (`ratio` < 0), `ratio` dans [-1, 1] —
+ * utilisé uniquement pour dériver brandLight/brandDark de Studio.brandColor (pas de dépendance
+ * externe pour un calcul aussi simple). */
+function tintShade(hex: string, ratio: number): string {
+  const clean = hex.replace("#", "");
+  const full = clean.length === 3 ? clean.split("").map((c) => c + c).join("") : clean;
+  const num = parseInt(full, 16);
+  if (Number.isNaN(num)) return hex;
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  const mix = ratio >= 0 ? 255 : 0;
+  const amount = Math.abs(ratio);
+  const nr = clampChannel(r + (mix - r) * amount);
+  const ng = clampChannel(g + (mix - g) * amount);
+  const nb = clampChannel(b + (mix - b) * amount);
+  return `#${[nr, ng, nb].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/**
+ * Résout un thème de fond en {bg, text} — `studioBrandColorHex` (Studio.brandColor) permet de
+ * dériver brandLight/brandDark de la couleur de marque active (voir description de
+ * BackgroundThemeKey) ; sans elle, repli sur les valeurs neutres de BACKGROUND_THEMES.
+ */
+export function getBackgroundTheme(key: BackgroundThemeKey, studioBrandColorHex?: string | null) {
+  const entry = BACKGROUND_THEMES.find((b) => b.key === key) || BACKGROUND_THEMES[0];
+  if (studioBrandColorHex && key === "brandLight") {
+    return { ...entry, bg: tintShade(studioBrandColorHex, 0.9), text: "#18181b" };
+  }
+  if (studioBrandColorHex && key === "brandDark") {
+    return { ...entry, bg: tintShade(studioBrandColorHex, -0.7), text: "#f5f5f5" };
+  }
+  return entry;
+}
+
+export function getAccentColor(key: AccentThemeKey) {
+  return ACCENT_COLORS.find((a) => a.key === key) || ACCENT_COLORS[0];
+}
+
+/** Couleur d'accent effective (boutons, sélection, liens) — résout "custom" via
+ * `accentCustomHex`, avec repli sur le bleu par défaut si jamais absent. */
+export function resolveAccentHex(design: GalleryDesign): string {
+  if (design.accentTheme === "custom") return design.accentCustomHex || ACCENT_COLORS[0].hex;
+  return getAccentColor(design.accentTheme).hex;
+}
+
+/** Style inline CSS à appliquer au conteneur racine de la galerie (couleurs + police).
+ * `studioBrandColorHex` : voir getBackgroundTheme (thèmes "À votre marque"). */
+export function getDesignRootStyle(
+  design: GalleryDesign,
+  studioBrandColorHex?: string | null
+): {
   backgroundColor: string;
   color: string;
   fontFamily: string;
 } {
-  const palette = getPalette(design.color);
   const font = getFont(design.font);
+  if (design.backgroundCustomHex) {
+    return {
+      backgroundColor: design.backgroundCustomHex,
+      color: design.backgroundCustomTextHex || "#18181b",
+      fontFamily: font.stack,
+    };
+  }
+  const theme = getBackgroundTheme(design.backgroundTheme, studioBrandColorHex);
   return {
-    backgroundColor: palette.bg,
-    color: palette.text,
+    backgroundColor: theme.bg,
+    color: theme.text,
     fontFamily: font.stack,
   };
 }
