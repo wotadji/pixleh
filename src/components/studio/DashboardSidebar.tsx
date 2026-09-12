@@ -51,6 +51,16 @@ export function DashboardSidebar({
     return pathname === href || pathname?.startsWith(`${href}/`);
   }
 
+  // Sidebar rétractable en icônes seules dans une galerie (12/09/2026, chantier UX/UI demandé
+  // par Adriel, inspiré de Picstudio : "quand on clique sur galerie le sidebar recule et cela
+  // crée plus d'espace"). Ne concerne QUE la page détail d'une galerie (/dashboard/galleries/
+  // [id] et ses sous-pages), pas la liste (/dashboard/galleries) ni le formulaire de création
+  // (/dashboard/galleries/new) — c'est là que la place manque le plus (grille de photos +
+  // panneau Réglages). `collapsed` ne doit produire son effet qu'à partir de md (voir classes
+  // `md:` ci-dessous) : sous md la sidebar est un tiroir plein écran temporaire, la place n'y
+  // est pas un problème, donc on y garde toujours les libellés complets.
+  const collapsed = /^\/dashboard\/galleries\/(?!new(?:\/|$))[^/]+/.test(pathname ?? "");
+
   // `onboarding` : identifiant ciblé par OnboardingGuide (voir data-onboarding-target
   // ci-dessous) pour dessiner une flèche vers CE lien précis pendant l'étape correspondante
   // du guide de bienvenue — undefined pour les liens non couverts par le guide.
@@ -100,9 +110,9 @@ export function DashboardSidebar({
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-50 flex h-screen w-64 shrink-0 -translate-x-full flex-col overflow-y-auto border-r border-gray-100 bg-gray-50 p-4 transition-transform duration-200 ease-in-out md:sticky md:top-0 md:translate-x-0 ${
-        open ? "translate-x-0" : ""
-      }`}
+      className={`fixed inset-y-0 left-0 z-50 flex h-screen w-64 shrink-0 -translate-x-full flex-col overflow-y-auto border-r border-gray-100 bg-gray-50 p-4 transition-all duration-200 ease-in-out md:sticky md:top-0 md:translate-x-0 ${
+        collapsed ? "md:w-[76px] md:overflow-x-hidden md:p-3" : "md:w-64"
+      } ${open ? "translate-x-0" : ""}`}
     >
       <div className="mb-5 flex items-center justify-between px-1">
         <PixlehLogo size={24} />
@@ -118,8 +128,13 @@ export function DashboardSidebar({
       </div>
 
       {/* Identité studio — remplace le simple texte par une carte façon "compte actif",
-          plus reconnaissable en un coup d'œil quand on jongle entre plusieurs studios. */}
-      <div className="mb-5 flex items-center gap-2.5 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
+          plus reconnaissable en un coup d'œil quand on jongle entre plusieurs studios.
+          Repliée sur l'avatar seul (nom masqué) en mode icônes (voir `collapsed`). */}
+      <div
+        className={`mb-5 flex items-center gap-2.5 rounded-xl border border-gray-200 bg-white px-3 py-2.5 ${
+          collapsed ? "md:justify-center md:px-2" : ""
+        }`}
+      >
         <div className="relative shrink-0">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-700">
             {studioName.trim().slice(0, 1).toUpperCase() || "?"}
@@ -163,13 +178,17 @@ export function DashboardSidebar({
             </div>
           )}
         </div>
-        <p className="truncate text-sm font-medium text-gray-900">{studioName}</p>
+        <p className={`truncate text-sm font-medium text-gray-900 ${collapsed ? "md:hidden" : ""}`}>{studioName}</p>
       </div>
 
       <nav className="flex-1 space-y-5">
         {groups.map((group) => (
           <div key={group.label}>
-            <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+            <p
+              className={`mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400 ${
+                collapsed ? "md:hidden" : ""
+              }`}
+            >
               {group.label}
             </p>
             <div className="space-y-0.5">
@@ -178,17 +197,22 @@ export function DashboardSidebar({
                   key={item.href}
                   href={item.href}
                   data-onboarding-target={item.onboarding}
+                  title={collapsed ? item.label : undefined}
                   className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors ${
                     isActive(item.href)
                       ? "border-brand-600 bg-white font-medium text-gray-900 shadow-sm"
                       : "border-transparent text-gray-600 hover:bg-gray-100"
-                  }`}
+                  } ${collapsed ? "md:relative md:justify-center md:px-2" : ""}`}
                 >
                   <span className={isActive(item.href) ? "text-brand-600" : "text-gray-400"}>{item.icon}</span>
-                  <span className="flex-1 truncate">{item.label}</span>
+                  <span className={`flex-1 truncate ${collapsed ? "md:hidden" : ""}`}>{item.label}</span>
                   {item.href === "/dashboard/clients" && unreadClientsCount > 0 && (
-                    <span className="flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-semibold text-white">
-                      {unreadClientsCount}
+                    <span
+                      className={`flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-semibold text-white ${
+                        collapsed ? "md:absolute md:right-1.5 md:top-1.5 md:h-2.5 md:min-w-0 md:w-2.5 md:p-0" : ""
+                      }`}
+                    >
+                      <span className={collapsed ? "md:hidden" : ""}>{unreadClientsCount}</span>
                     </span>
                   )}
                 </Link>
@@ -202,10 +226,13 @@ export function DashboardSidebar({
         <div className="mt-5 border-t border-gray-200 pt-4">
           <Link
             href="/admin"
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            title={collapsed ? "Administration pixleh" : undefined}
+            className={`flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 ${
+              collapsed ? "md:px-2" : ""
+            }`}
           >
             <IconShield />
-            Administration pixleh
+            <span className={collapsed ? "md:hidden" : ""}>Administration pixleh</span>
           </Link>
         </div>
       )}
@@ -214,18 +241,27 @@ export function DashboardSidebar({
         <Link
           href={`/s/${studioSlug}`}
           target="_blank"
-          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-brand-600 hover:bg-brand-50"
+          title={collapsed ? t("nav.viewPublicSite") : undefined}
+          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-brand-600 hover:bg-brand-50 ${
+            collapsed ? "md:justify-center md:px-2" : ""
+          }`}
         >
           <IconExternalLink />
-          <span className="truncate">{t("nav.viewPublicSite")}</span>
+          <span className={`truncate ${collapsed ? "md:hidden" : ""}`}>{t("nav.viewPublicSite")}</span>
         </Link>
         <SignOutButton
-          label={t("nav.signOut")}
+          label={<span className={collapsed ? "md:hidden" : ""}>{t("nav.signOut")}</span>}
           icon={<IconLogout />}
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-600 hover:bg-gray-100"
+          title={collapsed ? t("nav.signOut") : undefined}
+          className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-600 hover:bg-gray-100 ${
+            collapsed ? "md:justify-center md:px-2" : ""
+          }`}
         />
       </div>
-      <div className="mt-3 border-t border-gray-200 pt-3">
+      {/* Sélecteur de langue masqué en mode icônes (md) : son bouton pleine largeur avec
+          texte + dropdown ne peut pas se réduire proprement à une icône — reste accessible
+          sur mobile (tiroir) et sur toutes les autres pages du dashboard. */}
+      <div className={`mt-3 border-t border-gray-200 pt-3 ${collapsed ? "md:hidden" : ""}`}>
         <LanguageSwitcher />
       </div>
     </aside>
