@@ -224,6 +224,9 @@ export function GalleryManager({
   // galerie publiée, pas seulement à cette vue admin — voir setPhotoSortOrder ci-dessous.
   const [sortBy, setSortBy] = useState<PhotoSortKey>(resolvePhotoSortKey(gallery.photoSortOrder));
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  // Affichage de la grille Photos : "grid" (vignettes carrées, historique) ou "list" (une
+  // ligne par photo avec nom + métadonnées) — demande d'Adriel le 13/09/2026.
+  const [photoViewMode, setPhotoViewMode] = useState<"grid" | "list">("grid");
   // Sélection multiple (grille Photos) : cases à cocher sur les vignettes + barre d'actions
   // groupées (déplacer vers un set, supprimer) qui remplace la barre d'outils normale tant
   // qu'au moins une photo est sélectionnée.
@@ -1666,6 +1669,10 @@ export function GalleryManager({
                   {t("gm.addSet")}
                 </button>
               </div>
+              {/* Ligne de séparation après chaque set (demande d'Adriel le 13/09/2026) :
+                  `divide-y` place un trait fin entre les sets sans en ajouter un après le
+                  dernier, plus propre qu'un `border-b` sur chaque ligne. */}
+              <div className="mt-1 divide-y divide-gray-200">
               {gallery.collections.map((c) => {
                 // Portfolio/Réseaux sociaux : compte sur le tag (portfolioTagged/socialTagged),
                 // pas sur collectionId — voir togglePhotoTag et le commentaire sur ces champs
@@ -1762,6 +1769,7 @@ export function GalleryManager({
                   </div>
                 );
               })}
+              </div>
             </aside>
 
             {/* Grille de photos, sur fond clair (pas de fond noir derrière les images) */}
@@ -1939,6 +1947,29 @@ export function GalleryManager({
                             {filteredPhotos.length} {t("gm.photosCountLabel")}
                           </p>
                         </div>
+                        <div className="flex items-center gap-2">
+                        {/* Toggle grille/liste (demande d'Adriel le 13/09/2026) — même charte
+                            que la bascule vue de /admin/guests. */}
+                        <div className="flex items-center rounded-lg border border-gray-200 p-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setPhotoViewMode("grid")}
+                            title={t("gm.viewGrid")}
+                            aria-label={t("gm.viewGrid")}
+                            className={`rounded-md p-1.5 ${photoViewMode === "grid" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+                          >
+                            <IconGridView />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPhotoViewMode("list")}
+                            title={t("gm.viewList")}
+                            aria-label={t("gm.viewList")}
+                            className={`rounded-md p-1.5 ${photoViewMode === "list" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+                          >
+                            <IconListView />
+                          </button>
+                        </div>
                         <div className="relative">
                           <button
                             type="button"
@@ -1975,10 +2006,130 @@ export function GalleryManager({
                             </>
                           )}
                         </div>
+                        </div>
                       </>
                     )}
                   </div>
 
+                  {photoViewMode === "list" ? (
+                    /* Vue liste (demande d'Adriel le 13/09/2026) : une ligne compacte par
+                       photo avec vignette + nom + taille, plutôt que la grille de vignettes
+                       carrées — mêmes actions (sélection, set, tags, partage, suppression)
+                       que la vue grille, juste réarrangées horizontalement. */
+                    <div className="divide-y divide-gray-200">
+                      {filteredPhotos.map((photo) => {
+                        const selected = selectedPhotoIds.has(photo.id);
+                        return (
+                          <div
+                            key={photo.id}
+                            onClick={() => setLightboxPhotoId(photo.id)}
+                            className={`group flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-gray-50 ${
+                              selected ? "bg-brand-50" : ""
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleSelectPhoto(photo.id);
+                              }}
+                              title={t("gm.selectPhoto")}
+                              aria-label={t("gm.selectPhoto")}
+                              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border ${
+                                selected ? "border-brand-500 bg-brand-500 text-white" : "border-gray-300 bg-white text-transparent"
+                              }`}
+                            >
+                              <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                                <path
+                                  fillRule="evenodd"
+                                  d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0l-3.5-3.5a1 1 0 1 1 1.4-1.4l2.8 2.8 6.8-6.8a1 1 0 0 1 1.4 0Z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                            </button>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={thumbUrl(photo.id)}
+                              alt={photo.filename}
+                              className="h-12 w-12 shrink-0 rounded-md object-cover"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm text-gray-800">{photo.filename}</p>
+                              <p className="text-xs text-gray-400">{formatFileSize(photo.sizeBytes)}</p>
+                            </div>
+                            {assignableCollections.length > 0 && (
+                              <select
+                                value={photo.collectionId || ""}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => movePhoto(photo.id, e.target.value)}
+                                className="hidden shrink-0 rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-600 sm:block"
+                              >
+                                <option value="">{t("gm.noSetOption")}</option>
+                                {assignableCollections.map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    {c.title}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                            <div className="hidden shrink-0 gap-1 md:flex">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  togglePhotoTag(photo.id, "portfolioTagged");
+                                }}
+                                className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                  photo.portfolioTagged ? "bg-brand-500 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                }`}
+                              >
+                                {t("gm.tagPortfolio")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  togglePhotoTag(photo.id, "socialTagged");
+                                }}
+                                className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                  photo.socialTagged ? "bg-brand-500 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                }`}
+                              >
+                                {t("gm.tagSocial")}
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSharePhoto(photo);
+                              }}
+                              disabled={sharingPhotoId === photo.id}
+                              title={t("gm.sharePhoto")}
+                              aria-label={t("gm.sharePhoto")}
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:cursor-wait disabled:opacity-70"
+                            >
+                              {sharingPhotoId === photo.id ? (
+                                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
+                              ) : (
+                                <IconShare />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deletePhoto(photo.id);
+                              }}
+                              className="shrink-0 rounded px-2 py-1 text-xs text-gray-400 hover:bg-red-50 hover:text-red-600"
+                            >
+                              {t("gm.delete")}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
                   <div className="grid grid-cols-3 gap-1 p-1 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
                     {filteredPhotos.map((photo) => {
                       const selected = selectedPhotoIds.has(photo.id);
@@ -2100,6 +2251,7 @@ export function GalleryManager({
                       );
                     })}
                   </div>
+                  )}
                 </>
               )}
               </div>
@@ -4516,6 +4668,28 @@ function IconSort() {
       <path d="M3 17h4" />
       <path d="M17 5v14" />
       <path d="M13 15l4 4 4-4" />
+    </svg>
+  );
+}
+
+// Toggle vue grille/liste de la grille Photos — icônes reprises telles quelles de
+// admin/guests/page.tsx pour garder la même charte visuelle dans tout le dashboard.
+function IconGridView() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.5" />
+      <rect x="13" y="3.5" width="7.5" height="7.5" rx="1.5" />
+      <rect x="3.5" y="13" width="7.5" height="7.5" rx="1.5" />
+      <rect x="13" y="13" width="7.5" height="7.5" rx="1.5" />
+    </svg>
+  );
+}
+
+function IconListView() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M8 6h13M8 12h13M8 18h13" strokeLinecap="round" />
+      <path d="M3 6h.01M3 12h.01M3 18h.01" strokeLinecap="round" />
     </svg>
   );
 }
