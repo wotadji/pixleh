@@ -46,6 +46,20 @@ export type GridColumns = 2 | 3 | 4 | 5 | 6;
 
 /** "Mode de couverture" (nouveau, distinct du style/composition existant `coverStyle`). */
 export type CoverMode = "hero" | "bandeau" | "none";
+/**
+ * "Composition" spécifique au mode de couverture "Bandeau" (13/09/2026, retour d'Adriel avec
+ * captures de PicStudio à l'appui — concurrent direct, picstudio.fr) — DISTINCTE de `coverStyle`
+ * (qui garde ses 9 valeurs, utilisées uniquement par le mode "Hero plein écran"). Une bannière
+ * compacte n'a de sens qu'avec un nombre restreint de mises en page, d'où ces 4 options dédiées
+ * plutôt que de réutiliser les 9 styles "Hero" (dont la plupart, ex. "frame"/"stripe", ne
+ * transposent pas correctement à un format bandeau court) :
+ * - "editorial" : titre au-dessus d'une bande photo courte.
+ * - "centered"  : titre superposé au centre de la bande photo (scrim semi-transparent).
+ * - "sideBySide": bande photo courte à côté d'un panneau titre (au lieu d'empilés).
+ * - "journal"   : bande photo courte, PUIS titre dessous, jamais en surimpression (repli
+ *   historique — c'est le rendu produit par le premier correctif "Bandeau" du 13/09/2026).
+ */
+export type BandeauComposition = "editorial" | "centered" | "sideBySide" | "journal";
 export type CoverTitleScale = "sm" | "md" | "lg";
 export type CoverTitleCase = "uppercase" | "normal";
 /**
@@ -103,6 +117,8 @@ export interface GalleryDesign {
 
   // ---- Nouveaux champs "Présentation" (12/09/2026, voir commentaire plus haut) ----
   coverMode: CoverMode;
+  /** Uniquement pertinent quand coverMode === "bandeau" — voir BandeauComposition. */
+  bandeauComposition: BandeauComposition;
   showCoverTitle: boolean;
   coverTitleScale: CoverTitleScale;
   coverTitleCase: CoverTitleCase;
@@ -147,6 +163,9 @@ export const DEFAULT_GALLERY_DESIGN: GalleryDesign = {
   // visible, grille mosaïque, thème clair, aucune vidéo/musique) pour les galeries créées
   // avant ce chantier — voir resolveGalleryDesign.
   coverMode: "hero",
+  // "journal" reproduit exactement le rendu Bandeau existant (image puis titre dessous) —
+  // aucune régression pour les galeries qui utilisaient déjà "bandeau" avant l'ajout de ce champ.
+  bandeauComposition: "journal",
   showCoverTitle: true,
   coverTitleScale: "md",
   // "normal" (pas "uppercase") : ce champ n'était jusqu'ici jamais réellement appliqué au
@@ -246,6 +265,16 @@ export const COVER_MODES: { key: CoverMode; labelKey: string }[] = [
   { key: "hero", labelKey: "design.coverMode.hero" },
   { key: "bandeau", labelKey: "design.coverMode.bandeau" },
   { key: "none", labelKey: "design.coverMode.none" },
+];
+
+/** 4 compositions du mode "Bandeau" (voir BandeauComposition) — descKey affiche une phrase
+ * d'aide sous la grille de choix, comme chez PicStudio ("Photo pleine largeur, titre dessous —
+ * le titre ne couvre jamais la photo." pour "Journal"). */
+export const BANDEAU_COMPOSITIONS: { key: BandeauComposition; labelKey: string; descKey: string }[] = [
+  { key: "editorial", labelKey: "design.bandeauComposition.editorial", descKey: "design.bandeauComposition.editorialDesc" },
+  { key: "centered", labelKey: "design.bandeauComposition.centered", descKey: "design.bandeauComposition.centeredDesc" },
+  { key: "sideBySide", labelKey: "design.bandeauComposition.sideBySide", descKey: "design.bandeauComposition.sideBySideDesc" },
+  { key: "journal", labelKey: "design.bandeauComposition.journal", descKey: "design.bandeauComposition.journalDesc" },
 ];
 
 export const LAYOUT_STYLES: { key: LayoutStyle; labelKey: string }[] = [

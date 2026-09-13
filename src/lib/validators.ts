@@ -29,6 +29,9 @@ export const galleryDesignSchema = z.object({
   // ici, zod les aurait silencieusement retirées du JSON envoyé par updateDesign() côté
   // GalleryManager (un objet z.object() ignore par défaut les clés non déclarées).
   coverMode: z.enum(["hero", "bandeau", "none"]).optional(),
+  // Composition dédiée au mode "bandeau" (13/09/2026, retour PicStudio) — voir
+  // BandeauComposition dans galleryDesign.ts.
+  bandeauComposition: z.enum(["editorial", "centered", "sideBySide", "journal"]).optional(),
   showCoverTitle: z.boolean().optional(),
   coverTitleScale: z.enum(["sm", "md", "lg"]).optional(),
   coverTitleCase: z.enum(["uppercase", "normal"]).optional(),

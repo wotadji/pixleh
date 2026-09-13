@@ -616,6 +616,7 @@ export function GalleryView({
       <GalleryCover
         design={design.coverStyle}
         coverMode={design.coverMode}
+        bandeauComposition={design.bandeauComposition}
         showTitle={design.showCoverTitle}
         titleCase={design.coverTitleCase}
         titleScale={design.coverTitleScale}
@@ -1411,6 +1412,7 @@ function GalleryFooter({
 function GalleryCover({
   design,
   coverMode = "hero",
+  bandeauComposition = "journal",
   showTitle = true,
   titleCase = "normal",
   titleScale = "md",
@@ -1430,6 +1432,8 @@ function GalleryCover({
   /** "hero" (par défaut, comportement historique) / "bandeau" (couverture compacte) /
    * "none" (aucune couverture) — voir GalleryDesign.coverMode dans galleryDesign.ts. */
   coverMode?: "hero" | "bandeau" | "none";
+  /** Composition du mode "bandeau" uniquement — voir BandeauComposition dans galleryDesign.ts. */
+  bandeauComposition?: "editorial" | "centered" | "sideBySide" | "journal";
   showTitle?: boolean;
   titleCase?: "uppercase" | "normal";
   titleScale?: "sm" | "md" | "lg";
@@ -1515,49 +1519,121 @@ function GalleryCover({
     </Link>
   ) : null;
 
-  // Mode "bandeau" : bannière compacte pleine largeur, occupation de l'espace façon
-  // Pixieset (retour d'Adriel le 13/09/2026, captures à l'appui) — l'ancienne implémentation
-  // se contentait de rogner (overflow-hidden) le haut du rendu "hero" complet, ce qui coupait
-  // le titre/bouton au milieu pour la plupart des 9 styles (ex: "editorial", dont le bloc
-  // titre à lui seul dépasse largement 220px) au lieu de produire une bannière courte et
-  // propre. Ici on ignore volontairement les 9 mises en page "hero" et on rend une bannière
-  // dédiée, unique : image courte pleine largeur, puis une barre titre compacte juste en
-  // dessous (jamais en surimpression) — l'alignement (gauche/centré/droite) suit tout de
-  // même la composition choisie pour garder un minimum de personnalisation.
+  // Mode "bandeau" : bannière compacte pleine largeur, avec 4 compositions dédiées
+  // (bandeauComposition — voir BANDEAU_COMPOSITIONS dans galleryDesign.ts), plutôt que les 9
+  // mises en page "hero" (dont la plupart, ex. "editorial", dont le bloc titre à lui seul
+  // dépasse largement 220px, ne transposent pas correctement à un format court). Retour
+  // d'Adriel le 13/09/2026, captures de PicStudio à l'appui (picstudio.fr, concurrent direct).
+  // Garder ce rendu en phase avec le bloc "bandeau" de DesignLivePreview (GalleryManager.tsx).
   function renderBandeauCover(): JSX.Element {
-    const align = design === "left" ? "left" : design === "right" ? "right" : "center";
-    return (
-      <div className="w-full">
-        <div
-          className="relative h-40 w-full bg-neutral-800 bg-cover bg-center sm:h-56 md:h-64"
-          style={bg}
-        >
+    const titleHeading = (
+      <h1
+        className={`text-center text-sm uppercase tracking-[0.15em] sm:text-base ${font.className}`}
+        style={{ color: palette.text, fontFamily: font.stack }}
+      >
+        {renderTitle()}
+      </h1>
+    );
+    const viewGalleryButton = (
+      <button
+        onClick={onViewGallery}
+        className="shrink-0 border px-4 py-1.5 text-[11px] uppercase tracking-widest transition-colors hover:opacity-80"
+        style={{ borderColor: palette.accent, color: palette.accent }}
+      >
+        Voir la galerie
+      </button>
+    );
+    const photoBand = (heightClass: string) => (
+      <div className={`relative w-full bg-neutral-800 bg-cover bg-center ${heightClass}`} style={bg}>
+        {!loaded && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <Spinner className="text-white/70" />
+          </div>
+        )}
+        {studioBadge}
+      </div>
+    );
+
+    if (bandeauComposition === "editorial") {
+      // Titre au-dessus d'une bande photo courte.
+      return (
+        <div className="w-full">
+          <div
+            className="flex flex-col items-center gap-2 px-4 py-4 sm:gap-3 sm:px-6"
+            style={{ backgroundColor: palette.bg }}
+          >
+            {titleHeading}
+            {viewGalleryButton}
+          </div>
+          {photoBand("h-32 sm:h-44 md:h-52")}
+        </div>
+      );
+    }
+    if (bandeauComposition === "centered") {
+      // Titre superposé au centre de la bande photo (scrim semi-transparent).
+      return (
+        <div className="relative h-48 w-full bg-neutral-800 bg-cover bg-center sm:h-64 md:h-72" style={bg}>
           {!loaded && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <Spinner className="text-white/70" />
             </div>
           )}
           {studioBadge}
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/35 px-4">
+            <h1
+              className={`text-center text-sm uppercase tracking-[0.15em] text-white sm:text-base ${font.className}`}
+              style={{ fontFamily: font.stack }}
+            >
+              {renderTitle()}
+            </h1>
+            <button
+              onClick={onViewGallery}
+              className="shrink-0 border border-white/70 px-4 py-1.5 text-[11px] uppercase tracking-widest text-white transition-colors hover:bg-white/10"
+            >
+              Voir la galerie
+            </button>
+          </div>
         </div>
+      );
+    }
+    if (bandeauComposition === "sideBySide") {
+      // Bande photo courte à côté d'un panneau titre (au lieu d'empilés).
+      const align = design === "right" ? "right" : "left";
+      return (
+        <div
+          className={`flex w-full flex-col sm:flex-row ${align === "right" ? "sm:flex-row-reverse" : ""}`}
+          style={{ backgroundColor: palette.bg }}
+        >
+          <div className="relative h-40 w-full bg-neutral-800 bg-cover bg-center sm:h-56 sm:w-1/2 md:h-64" style={bg}>
+            {!loaded && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <Spinner className="text-white/70" />
+              </div>
+            )}
+            {studioBadge}
+          </div>
+          <div className="flex w-full flex-col items-center justify-center gap-3 px-4 py-4 sm:w-1/2 sm:px-6">
+            {titleHeading}
+            {viewGalleryButton}
+          </div>
+        </div>
+      );
+    }
+    // "journal" (défaut) : bande photo courte, PUIS titre dessous, jamais en surimpression —
+    // l'alignement (gauche/centré/droite) suit la composition "Hero" choisie pour garder un
+    // minimum de personnalisation.
+    const align = design === "left" ? "left" : design === "right" ? "right" : "center";
+    return (
+      <div className="w-full">
+        {photoBand("h-40 sm:h-56 md:h-64")}
         <div
           className={`flex flex-col items-center gap-2 border-b px-4 py-3 sm:flex-row sm:gap-4 sm:px-6 ${
             align === "left" ? "sm:justify-start" : align === "right" ? "sm:justify-end" : "sm:justify-center"
           }`}
           style={{ backgroundColor: palette.bg, borderColor: `${palette.accent}30` }}
         >
-          <h1
-            className={`text-center text-sm uppercase tracking-[0.15em] sm:text-base ${font.className}`}
-            style={{ color: palette.text, fontFamily: font.stack }}
-          >
-            {renderTitle()}
-          </h1>
-          <button
-            onClick={onViewGallery}
-            className="shrink-0 border px-4 py-1.5 text-[11px] uppercase tracking-widest transition-colors hover:opacity-80"
-            style={{ borderColor: palette.accent, color: palette.accent }}
-          >
-            Voir la galerie
-          </button>
+          {titleHeading}
+          {viewGalleryButton}
         </div>
       </div>
     );

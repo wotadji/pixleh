@@ -13,6 +13,7 @@ import { CoverFocalPointModal } from "@/components/studio/CoverFocalPointModal";
 import {
   COVER_STYLES,
   COVER_MODES,
+  BANDEAU_COMPOSITIONS,
   LAYOUT_STYLES,
   SECTIONS_NAV_MODES,
   SLIDESHOW_TRANSITIONS,
@@ -27,6 +28,7 @@ import {
   resolveAccentHex,
   type GalleryDesign,
   type CoverStyle,
+  type BandeauComposition,
 } from "@/lib/galleryDesign";
 import { sortPhotos, resolvePhotoSortKey, formatFileSize, type PhotoSortKey } from "@/lib/photoSort";
 import { formatDuration } from "@/lib/videoEmbed";
@@ -2242,11 +2244,13 @@ export function GalleryManager({
                 chaque colonne porte son propre `overflow-y-auto`. `items-stretch` égalise leur
                 hauteur avant que chacune ne gère son propre dépassement de contenu. */}
             <form onSubmit={saveSettings} className="flex-1 overflow-hidden p-6 lg:p-10">
-              {/* Colonne Réglages réduite à 320px (retour d'Adriel, 13/09/2026 : "augmente
-                  le with de la section de gauche" — l'aperçu live, en 1fr, gagne d'autant
-                  l'espace repris à la colonne fixe de droite) et gap resserré à 8 pour la
-                  même raison. */}
-              <div className="grid h-full grid-cols-1 items-stretch gap-8 lg:grid-cols-[1fr_320px]">
+              {/* Largeurs des deux colonnes (retour d'Adriel, 13/09/2026) : d'abord réduite à
+                  320px ("augmente le with de la section de gauche" — l'aperçu live, en 1fr,
+                  gagne l'espace repris à la colonne de droite), puis Adriel a demandé
+                  d'agrandir À NOUVEAU la colonne Réglages (420px, padding p-8 au lieu de p-6)
+                  une fois la grille "Composition" à 4 vignettes ajoutée (mode Bandeau,
+                  captures PicStudio à l'appui) — plus confortable pour ces vignettes que 320px. */}
+              <div className="grid h-full grid-cols-1 items-stretch gap-8 lg:grid-cols-[1fr_420px]">
                   {/* Aperçu live — à GAUCHE, toujours visible quel que soit le sous-onglet
                       actif (référence Picstudio), pas seulement pour la Présentation. */}
                   <div className="min-w-0 overflow-y-auto lg:order-1">
@@ -2260,7 +2264,7 @@ export function GalleryManager({
                     />
                   </div>
 
-                  <div className="min-w-0 space-y-6 overflow-y-auto rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5 lg:order-2">
+                  <div className="min-w-0 space-y-6 overflow-y-auto rounded-2xl bg-white p-8 shadow-sm ring-1 ring-black/5 lg:order-2">
                     {settingsSubTab === "publication" && (
                       <div className="space-y-6">
                         <div>
@@ -2542,23 +2546,63 @@ export function GalleryManager({
                                   <p className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-600">
                                     {t("design.compositionLabel")}
                                   </p>
-                                  <div className="grid grid-cols-2 gap-x-6 gap-y-6">
-                                    {COVER_STYLES.map((c) => (
-                                      <button key={c.key} onClick={() => updateDesign("coverStyle", c.key)} className="text-center">
-                                        <div
-                                          className={`aspect-[4/3] overflow-hidden rounded-lg border ${
-                                            design.coverStyle === c.key ? "border-brand-500" : "border-[#808080]"
-                                          }`}
-                                        >
-                                          <CoverStylePreviewThumb
-                                            style={c.key}
-                                            photoUrl={activeCoverPhotoId ? thumbUrl(activeCoverPhotoId) : null}
-                                          />
-                                        </div>
-                                        <p className="mt-2 truncate text-xs text-neutral-600">{t(c.labelKey)}</p>
-                                      </button>
-                                    ))}
-                                  </div>
+                                  {/* Mode "Bandeau" : 4 compositions dédiées (Éditorial/Centré/Côte à
+                                      côte/Journal), distinctes des 9 styles "Hero" — retour d'Adriel
+                                      le 13/09/2026, captures de PicStudio à l'appui (picstudio.fr,
+                                      concurrent direct). Une bannière compacte n'a de sens qu'avec un
+                                      choix restreint : les 9 styles "Hero" (frame/stripe/divider...)
+                                      ne transposent pas correctement à ce format court. Voir
+                                      BANDEAU_COMPOSITIONS dans galleryDesign.ts. */}
+                                  {design.coverMode === "bandeau" ? (
+                                    <>
+                                      <div className="grid grid-cols-2 gap-x-6 gap-y-6">
+                                        {BANDEAU_COMPOSITIONS.map((c) => (
+                                          <button
+                                            key={c.key}
+                                            type="button"
+                                            onClick={() => updateDesign("bandeauComposition", c.key)}
+                                            className="text-center"
+                                          >
+                                            <div
+                                              className={`aspect-[4/3] overflow-hidden rounded-lg border ${
+                                                design.bandeauComposition === c.key ? "border-brand-500" : "border-[#808080]"
+                                              }`}
+                                            >
+                                              <BandeauCompositionPreviewThumb
+                                                composition={c.key}
+                                                photoUrl={activeCoverPhotoId ? thumbUrl(activeCoverPhotoId) : null}
+                                              />
+                                            </div>
+                                            <p className="mt-2 truncate text-xs text-neutral-600">{t(c.labelKey)}</p>
+                                          </button>
+                                        ))}
+                                      </div>
+                                      <p className="mt-3 text-xs text-neutral-500">
+                                        {t(
+                                          BANDEAU_COMPOSITIONS.find((c) => c.key === design.bandeauComposition)?.descKey ||
+                                            BANDEAU_COMPOSITIONS[3].descKey
+                                        )}
+                                      </p>
+                                    </>
+                                  ) : (
+                                    <div className="grid grid-cols-2 gap-x-6 gap-y-6">
+                                      {COVER_STYLES.map((c) => (
+                                        <button key={c.key} onClick={() => updateDesign("coverStyle", c.key)} className="text-center">
+                                          <div
+                                            className={`aspect-[4/3] overflow-hidden rounded-lg border ${
+                                              design.coverStyle === c.key ? "border-brand-500" : "border-[#808080]"
+                                            }`}
+                                          >
+                                            <CoverStylePreviewThumb
+                                              style={c.key}
+                                              photoUrl={activeCoverPhotoId ? thumbUrl(activeCoverPhotoId) : null}
+                                            />
+                                          </div>
+                                          <p className="mt-2 truncate text-xs text-neutral-600">{t(c.labelKey)}</p>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
 
                                 <div className="space-y-4 border-t border-neutral-100 pt-6">
@@ -3865,6 +3909,65 @@ function CoverStylePreviewThumb({ style, photoUrl }: { style: CoverStyle; photoU
   }
 }
 
+/** Miniatures des 4 compositions du mode "Bandeau" (voir BANDEAU_COMPOSITIONS) — même esprit
+ * que CoverStylePreviewThumb ci-dessus, mais pour le format compact bandeau plutôt que "Hero"
+ * plein écran. Chaque case reflète le vrai rendu produit par renderBandeauComposition ci-dessous
+ * (et son équivalent GalleryView.tsx). */
+function BandeauCompositionPreviewThumb({
+  composition,
+  photoUrl,
+}: {
+  composition: BandeauComposition;
+  photoUrl: string | null;
+}) {
+  const bg = photoUrl ? { backgroundImage: `url(${photoUrl})` } : {};
+  switch (composition) {
+    case "editorial":
+      // Titre au-dessus d'une bande photo courte.
+      return (
+        <div className="flex h-full w-full flex-col bg-neutral-200">
+          <div className="flex flex-1 flex-col items-center justify-center gap-1">
+            <div className="h-1 w-8 rounded-sm bg-neutral-400" />
+            <div className="h-1.5 w-12 rounded-sm bg-neutral-700" />
+          </div>
+          <div className="h-[45%] w-full bg-neutral-300 bg-cover bg-center" style={bg} />
+        </div>
+      );
+    case "centered":
+      // Titre superposé au centre de la bande photo (scrim semi-transparent).
+      return (
+        <div className="relative h-full w-full bg-neutral-300 bg-cover bg-center" style={bg}>
+          <div className="absolute inset-0 flex items-center justify-center bg-neutral-900/35">
+            <div className="h-1.5 w-12 rounded-sm bg-white/90" />
+          </div>
+        </div>
+      );
+    case "sideBySide":
+      // Bande photo courte à côté d'un panneau titre (au lieu d'empilés).
+      return (
+        <div className="flex h-full w-full bg-neutral-200">
+          <div className="h-full w-[55%] bg-neutral-300 bg-cover bg-center" style={bg} />
+          <div className="flex flex-1 flex-col items-center justify-center gap-1 p-1">
+            <div className="h-1 w-6 rounded-sm bg-neutral-400" />
+            <div className="h-1 w-8 rounded-sm border border-neutral-400" />
+          </div>
+        </div>
+      );
+    case "journal":
+    default:
+      // Bande photo courte, PUIS titre dessous, jamais en surimpression.
+      return (
+        <div className="flex h-full w-full flex-col bg-neutral-200">
+          <div className="h-[55%] w-full bg-neutral-300 bg-cover bg-center" style={bg} />
+          <div className="flex flex-1 flex-col items-center justify-center gap-1">
+            <div className="h-1.5 w-12 rounded-sm bg-neutral-700" />
+            <div className="h-1 w-6 rounded-sm border border-neutral-400" />
+          </div>
+        </div>
+      );
+  }
+}
+
 /** Aperçu "live" (cover + mini grille) qui reflète les réglages de design actuels. */
 function DesignLivePreview({
   design,
@@ -3915,37 +4018,78 @@ function DesignLivePreview({
     );
   }
 
-  // Mode "bandeau" : bannière compacte pleine largeur — même logique que renderBandeauCover
-  // dans GalleryCover (GalleryView.tsx, rendu public), voir le commentaire détaillé là-bas
-  // (corrigé le 13/09/2026, retour d'Adriel avec captures comparant à la concurrence :
-  // l'ancien "max-h-[110px] overflow-hidden" rognait le rendu "hero" complet au lieu de
-  // produire une vraie bannière courte, ce qui coupait le titre/bouton pour la plupart des
-  // 9 styles). On ignore volontairement le style de couverture choisi (comme côté public) et
-  // on ne garde que l'alignement gauche/centré/droite pour un minimum de personnalisation.
+  // Mode "bandeau" : bannière compacte pleine largeur, avec 4 compositions dédiées
+  // (design.bandeauComposition — voir BANDEAU_COMPOSITIONS dans galleryDesign.ts) plutôt que
+  // les 9 styles "Hero" (retour d'Adriel le 13/09/2026, captures de PicStudio à l'appui).
+  // Même logique que renderBandeauComposition dans GalleryCover (GalleryView.tsx, rendu
+  // public) — garder les deux en phase pour que l'aperçu ne mente jamais sur le rendu final.
   let coverContent: JSX.Element | null = null;
   if (design.coverMode === "bandeau") {
-    const align = design.coverStyle === "left" ? "left" : design.coverStyle === "right" ? "right" : "center";
-    coverContent = (
-      <div className="w-full">
-        <div className="h-24 w-full bg-neutral-300 bg-cover bg-center sm:h-32" style={bg} />
-        <div
-          className={`flex flex-col items-center gap-2 border-b px-3 py-2.5 text-xs sm:flex-row sm:gap-3 ${
-            align === "left" ? "sm:justify-start" : align === "right" ? "sm:justify-end" : "sm:justify-center"
-          }`}
-          style={{ backgroundColor: palette.bg, borderColor: `${palette.accent}30` }}
-        >
-          <span className={`text-center uppercase tracking-[0.15em] ${font.className}`} style={{ color: palette.text, fontFamily: font.stack }}>
-            {renderTitle()}
-          </span>
-          <span
-            className="shrink-0 border px-2.5 py-1 text-[9px] uppercase tracking-widest"
-            style={{ borderColor: palette.accent, color: palette.accent }}
-          >
-            {t("design.previewViewGallery")}
-          </span>
-        </div>
-      </div>
+    const viewGalleryBadge = (
+      <span
+        className="shrink-0 border px-2.5 py-1 text-[9px] uppercase tracking-widest"
+        style={{ borderColor: palette.accent, color: palette.accent }}
+      >
+        {t("design.previewViewGallery")}
+      </span>
     );
+    const titleSpan = (
+      <span className={`text-center uppercase tracking-[0.15em] ${font.className}`} style={{ color: palette.text, fontFamily: font.stack }}>
+        {renderTitle()}
+      </span>
+    );
+    if (design.bandeauComposition === "editorial") {
+      coverContent = (
+        <div className="w-full" style={{ backgroundColor: palette.bg }}>
+          <div className="flex flex-col items-center gap-2 px-3 py-3 text-xs">
+            {titleSpan}
+            {viewGalleryBadge}
+          </div>
+          <div className="h-20 w-full bg-neutral-300 bg-cover bg-center sm:h-28" style={bg} />
+        </div>
+      );
+    } else if (design.bandeauComposition === "centered") {
+      coverContent = (
+        <div className="relative h-28 w-full bg-neutral-300 bg-cover bg-center sm:h-36" style={bg}>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-neutral-900/35 px-3 text-xs">
+            <span className={`text-center uppercase tracking-[0.15em] text-white ${font.className}`} style={{ fontFamily: font.stack }}>
+              {renderTitle()}
+            </span>
+            <span className="shrink-0 border border-white/70 px-2.5 py-1 text-[9px] uppercase tracking-widest text-white">
+              {t("design.previewViewGallery")}
+            </span>
+          </div>
+        </div>
+      );
+    } else if (design.bandeauComposition === "sideBySide") {
+      const align = design.coverStyle === "right" ? "right" : "left";
+      coverContent = (
+        <div className={`flex w-full ${align === "right" ? "flex-row-reverse" : ""}`} style={{ backgroundColor: palette.bg }}>
+          <div className="h-24 w-[55%] bg-neutral-300 bg-cover bg-center sm:h-32" style={bg} />
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 p-3 text-xs">
+            {titleSpan}
+            {viewGalleryBadge}
+          </div>
+        </div>
+      );
+    } else {
+      // "journal" (défaut) : bande photo courte, PUIS titre dessous, jamais en surimpression.
+      const align = design.coverStyle === "left" ? "left" : design.coverStyle === "right" ? "right" : "center";
+      coverContent = (
+        <div className="w-full">
+          <div className="h-24 w-full bg-neutral-300 bg-cover bg-center sm:h-32" style={bg} />
+          <div
+            className={`flex flex-col items-center gap-2 border-b px-3 py-2.5 text-xs sm:flex-row sm:gap-3 ${
+              align === "left" ? "sm:justify-start" : align === "right" ? "sm:justify-end" : "sm:justify-center"
+            }`}
+            style={{ backgroundColor: palette.bg, borderColor: `${palette.accent}30` }}
+          >
+            {titleSpan}
+            {viewGalleryBadge}
+          </div>
+        </div>
+      );
+    }
   } else if (design.coverMode !== "none") {
   switch (design.coverStyle) {
     case "left":
