@@ -33,15 +33,20 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["var(--font-inter)", "system-ui", "sans-serif"],
-        // "serif" reste le nom de la clé Tailwind (repris dans 66 fichiers via `font-serif`
-        // pour les titres/en-têtes de TOUTE l'interface pixleh) mais pointe maintenant vers
-        // Space Grotesk plutôt que Playfair — direction "Minimal contemporain" : plus aucun
-        // serif dans le chrome du produit. Playfair Display reste chargé séparément (voir
-        // layout.tsx) car src/lib/galleryDesign.ts l'utilise encore comme option de police
-        // "Serif"/"Intemporelle" que les studios peuvent choisir pour LEUR PROPRE galerie
-        // publique — un choix esthétique du photographe, indépendant du redesign de pixleh.
-        serif: ["var(--font-space-grotesk)", "system-ui", "sans-serif"],
+        // 12/09/2026 : alignement de la typographie de TOUT le chrome pixleh (site marketing,
+        // panel studio, panel admin, habillage des galeries publiques) sur celle du concurrent
+        // Pixieset. Inspection live de pixieset.com (getComputedStyle) : leur police déclarée
+        // est `proxima-nova, Lato, ...` — proxima-nova étant une police payante (Adobe), Lato
+        // est leur propre fallback officiel et gratuit (Google Fonts) : c'est le choix le plus
+        // fidèle et légitime. Une seule famille "Lato" couvre maintenant sans/serif (comme chez
+        // Pixieset qui n'utilise qu'une seule police pour tout), via --font-lato (layout.tsx).
+        // NB : Lato n'a pas de graisse 600 native (seulement 100/300/400/700/900) ; les titres
+        // Pixieset (weight 600) sont donc approximés par le poids 700 le plus proche.
+        // --font-inter et --font-playfair restent chargés séparément (voir layout.tsx) car
+        // src/lib/galleryDesign.ts les utilise encore comme polices que les studios peuvent
+        // choisir pour LEUR PROPRE galerie publique — indépendant du chrome pixleh lui-même.
+        sans: ["var(--font-lato)", "system-ui", "sans-serif"],
+        serif: ["var(--font-lato)", "system-ui", "sans-serif"],
       },
     },
   },
