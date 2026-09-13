@@ -2184,7 +2184,7 @@ export function GalleryManager({
         })()}
 
         {activeTab === "settings" && (
-          <main className="flex flex-1 flex-col overflow-y-auto bg-[#EBEBEB]">
+          <main className="flex flex-1 flex-col overflow-hidden bg-[#EBEBEB]">
             {/* En-tête façon overlay (chantier UX "onglets + aperçu live", 12/09/2026,
                 référence Picstudio) — fusionne les anciens onglets Design et Réglages en un
                 seul, avec un aperçu live permanent. Le ✕ ramène simplement à l'onglet Photos
@@ -2236,13 +2236,16 @@ export function GalleryManager({
             {/* Occupation de l'espace façon concurrence (retour d'Adriel le 13/09/2026,
                 captures à l'appui) : les deux colonnes ci-dessous remplissent chacune toute
                 la largeur/hauteur disponible (plus de centrage `max-w-6xl` avec marges mortes
-                de part et d'autre) — `items-stretch` égalise leur hauteur sur la plus grande
-                des deux au lieu de caler chacune sur son propre contenu (`items-start`). */}
-            <form onSubmit={saveSettings} className="flex-1 overflow-y-auto p-6 lg:p-10">
-              <div className="grid grid-cols-1 items-stretch gap-8 lg:grid-cols-[1fr_380px] lg:gap-12">
+                de part et d'autre), et défilent chacune INDÉPENDAMMENT (retour suivant :
+                "on dois avoir deux scroll, pour la gauche et pour la droite") — le `<form>`
+                ne scrolle plus lui-même (`overflow-hidden` + hauteur fixée par le flex parent),
+                chaque colonne porte son propre `overflow-y-auto`. `items-stretch` égalise leur
+                hauteur avant que chacune ne gère son propre dépassement de contenu. */}
+            <form onSubmit={saveSettings} className="flex-1 overflow-hidden p-6 lg:p-10">
+              <div className="grid h-full grid-cols-1 items-stretch gap-8 lg:grid-cols-[1fr_380px] lg:gap-12">
                   {/* Aperçu live — à GAUCHE, toujours visible quel que soit le sous-onglet
                       actif (référence Picstudio), pas seulement pour la Présentation. */}
-                  <div className="min-w-0 lg:sticky lg:top-24 lg:order-1 lg:self-start">
+                  <div className="min-w-0 overflow-y-auto lg:order-1">
                     <DesignLivePreview
                       design={design}
                       title={gallery.title}
@@ -2253,7 +2256,7 @@ export function GalleryManager({
                     />
                   </div>
 
-                  <div className="min-w-0 space-y-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5 lg:order-2">
+                  <div className="min-w-0 space-y-6 overflow-y-auto rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5 lg:order-2">
                     {settingsSubTab === "publication" && (
                       <div className="space-y-6">
                         <div>
