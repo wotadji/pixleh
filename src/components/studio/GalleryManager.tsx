@@ -2252,8 +2252,12 @@ export function GalleryManager({
                   captures PicStudio à l'appui) — plus confortable pour ces vignettes que 320px. */}
               <div className="grid h-full grid-cols-1 items-stretch gap-8 lg:grid-cols-[1fr_420px]">
                   {/* Aperçu live — à GAUCHE, toujours visible quel que soit le sous-onglet
-                      actif (référence Picstudio), pas seulement pour la Présentation. */}
-                  <div className="min-w-0 overflow-y-auto lg:order-1">
+                      actif (référence Picstudio), pas seulement pour la Présentation. Même
+                      traitement "carte" que la colonne Réglages (rounded-2xl/bg-white/shadow-sm/
+                      ring) depuis le retour d'Adriel du 13/09/2026 — padding plus resserré
+                      (p-3 au lieu de p-6) car DesignLivePreview gère déjà ses propres marges
+                      internes autour de la mock-fenêtre du navigateur. */}
+                  <div className="min-w-0 space-y-6 overflow-y-auto rounded-2xl bg-white p-3 shadow-sm ring-1 ring-black/5 lg:order-1">
                     <DesignLivePreview
                       design={design}
                       title={gallery.title}
