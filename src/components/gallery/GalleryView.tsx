@@ -72,6 +72,15 @@ interface ClientCollectionPhotoDTO {
   height: number | null;
 }
 
+/** Crédit prestataire (voir modèle GalleryCredit) — affiché en "générique de fin" dans le
+ * pied de galerie publique (chantier Réglages "Présentation" du 12/09/2026). */
+interface GalleryCreditDTO {
+  id: string;
+  role: string;
+  name: string;
+  url: string | null;
+}
+
 export function GalleryView({
   gallery,
   studioId,
@@ -85,6 +94,7 @@ export function GalleryView({
   allowPrintStore = true,
   shareBaseUrl,
   enableClientCollections = false,
+  credits = [],
 }: {
   gallery: {
     id: string;
@@ -133,6 +143,10 @@ export function GalleryView({
    * séparément plutôt que réutiliser allowRemarks tel quel : sémantiquement distinct, même si
    * les deux sont vrais/faux ensemble aujourd'hui côté /g/[gallerySlug]/page.tsx. */
   enableClientCollections?: boolean;
+  /** Crédits prestataires (GalleryCredit) — "générique de fin" affiché en pied de galerie
+   * publique, voir GalleryFooter plus bas (chantier Réglages "Présentation" du 12/09/2026,
+   * retour d'Adriel : "Crédits ... ne s'affiche pas ... dans la galerie"). */
+  credits?: GalleryCreditDTO[];
 }) {
   const { t } = useLanguage();
   const [favorites, setFavorites] = useState<Set<string>>(new Set(initialFavorites));
@@ -601,6 +615,10 @@ export function GalleryView({
     <div style={{ backgroundColor: palette.bg, color: palette.text, fontFamily: font.stack }}>
       <GalleryCover
         design={design.coverStyle}
+        coverMode={design.coverMode}
+        showTitle={design.showCoverTitle}
+        titleCase={design.coverTitleCase}
+        titleScale={design.coverTitleScale}
         title={gallery.title}
         coverUrl={coverUrl}
         focalX={design.coverFocalX}
@@ -1244,6 +1262,7 @@ export function GalleryView({
         contactPhone={gallery.studioContactPhone}
         instagramUrl={gallery.studioInstagramUrl}
         facebookUrl={gallery.studioFacebookUrl}
+        credits={credits}
         palette={palette}
         font={font}
       />
@@ -1268,6 +1287,7 @@ function GalleryFooter({
   contactPhone,
   instagramUrl,
   facebookUrl,
+  credits = [],
   palette,
   font,
 }: {
@@ -1278,6 +1298,7 @@ function GalleryFooter({
   contactPhone?: string | null;
   instagramUrl?: string | null;
   facebookUrl?: string | null;
+  credits?: GalleryCreditDTO[];
   palette: { bg: string; text: string; accent: string };
   font: { stack: string; className: string };
 }) {
@@ -1337,6 +1358,32 @@ function GalleryFooter({
           </div>
         )}
 
+        {credits.length > 0 && (
+          // Générique de fin : crédits prestataires (maquillage, wedding planner, etc.)
+          // renseignés dans Réglages > Présentation (voir GalleryCredit dans schema.prisma).
+          <div
+            className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 text-xs opacity-70"
+            style={{ color: palette.text }}
+          >
+            {credits.map((credit) => {
+              const label = `${credit.role} — ${credit.name}`;
+              return credit.url ? (
+                <a
+                  key={credit.id}
+                  href={credit.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:underline"
+                >
+                  {label}
+                </a>
+              ) : (
+                <span key={credit.id}>{label}</span>
+              );
+            })}
+          </div>
+        )}
+
         <p className="text-[11px] uppercase tracking-wide opacity-40" style={{ color: palette.text }}>
           © {new Date().getFullYear()} {studioName} — Propulsé par pixleh
         </p>
@@ -1355,6 +1402,10 @@ function GalleryFooter({
  */
 function GalleryCover({
   design,
+  coverMode = "hero",
+  showTitle = true,
+  titleCase = "normal",
+  titleScale = "md",
   title,
   coverUrl,
   focalX = 0.5,
@@ -1368,6 +1419,12 @@ function GalleryCover({
   onViewGallery,
 }: {
   design: string;
+  /** "hero" (par défaut, comportement historique) / "bandeau" (couverture compacte) /
+   * "none" (aucune couverture) — voir GalleryDesign.coverMode dans galleryDesign.ts. */
+  coverMode?: "hero" | "bandeau" | "none";
+  showTitle?: boolean;
+  titleCase?: "uppercase" | "normal";
+  titleScale?: "sm" | "md" | "lg";
   title: string;
   coverUrl: string | null;
   /** Point focal (0 à 1) choisi via "Repositionner" dans le panel — voir galleryDesign.ts. */
@@ -1381,6 +1438,22 @@ function GalleryCover({
   eventDate?: string | null;
   onViewGallery: () => void;
 }) {
+  // Titre affiché : respecte Casse du titre (uppercase forcé en JS plutôt qu'en CSS pour
+  // rester simple sur les ~9 mises en page ci-dessous) et Échelle du titre (léger
+  // agrandissement/réduction via transform:scale, appliqué au span plutôt qu'au <h1> pour
+  // ne pas perturber la boîte/l'alignement flex de chaque mise en page).
+  const displayTitle = titleCase === "uppercase" ? title.toUpperCase() : title;
+  function renderTitle() {
+    if (!showTitle) return null;
+    if (titleScale === "md") return displayTitle;
+    return (
+      <span
+        style={{ display: "inline-block", transform: `scale(${titleScale === "sm" ? 0.82 : 1.18})` }}
+      >
+        {displayTitle}
+      </span>
+    );
+  }
   // La couverture est affichée en pleine largeur d'écran (souvent >1MB avec un CSS
   // `background-image`, contrairement aux vignettes) : `loaded` pilote un spinner affiché
   // par-dessus la couleur de fond neutre le temps du téléchargement. On précharge via un
@@ -1398,7 +1471,7 @@ function GalleryCover({
     if (img.complete) setLoaded(true);
   }, [coverUrl]);
 
-  if (!coverUrl) return null;
+  if (coverMode === "none" || !coverUrl) return null;
   // `bg-center` (classe Tailwind, dans chaque style ci-dessous) reste la valeur par
   // défaut ; ce style inline la surcharge dès qu'un point focal personnalisé a été
   // choisi (l'attribut `style` a toujours priorité sur une classe CSS).
@@ -1434,6 +1507,9 @@ function GalleryCover({
     </Link>
   ) : null;
 
+  // Isolé dans une fonction pour pouvoir envelopper le résultat ci-dessous (mode
+  // "bandeau" : même mise en page, hauteur simplement bridée) sans dupliquer les 9 cas.
+  function renderCoverContent(): JSX.Element | null {
   switch (design) {
     case "frame":
       return (
@@ -1452,7 +1528,7 @@ function GalleryCover({
             className={`mt-4 text-center text-2xl sm:text-3xl ${font.className}`}
             style={{ color: palette.text, fontFamily: font.stack }}
           >
-            {title}
+            {renderTitle()}
           </h1>
         </div>
       );
@@ -1470,7 +1546,7 @@ function GalleryCover({
             style={{ backgroundColor: `${palette.accent}cc` }}
           >
             <h1 className={`text-2xl font-semibold text-white sm:text-4xl ${font.className}`} style={{ fontFamily: font.stack }}>
-              {title}
+              {renderTitle()}
             </h1>
             {viewGalleryBtn}
           </div>
@@ -1493,7 +1569,7 @@ function GalleryCover({
             className={`py-6 text-center text-2xl sm:text-3xl ${font.className}`}
             style={{ color: palette.text, fontFamily: font.stack }}
           >
-            {title}
+            {renderTitle()}
           </h1>
         </div>
       );
@@ -1509,7 +1585,7 @@ function GalleryCover({
           {studioBadge}
           <div className="absolute inset-10 flex items-center justify-center border border-white/80 sm:inset-16">
             <h1 className={`px-4 text-center text-2xl text-white sm:text-3xl ${font.className}`} style={{ fontFamily: font.stack }}>
-              {title}
+              {renderTitle()}
             </h1>
           </div>
           <div className="absolute bottom-6 right-6">{viewGalleryBtn}</div>
@@ -1527,7 +1603,7 @@ function GalleryCover({
           {studioBadge}
           <div className="absolute inset-0 flex items-center justify-center">
             <h1 className={`px-4 text-center text-3xl text-white sm:text-4xl ${font.className}`} style={{ fontFamily: font.stack }}>
-              {title}
+              {renderTitle()}
             </h1>
           </div>
           <div className="absolute bottom-6 right-6">{viewGalleryBtn}</div>
@@ -1565,7 +1641,7 @@ function GalleryCover({
                 className={`text-4xl leading-tight sm:text-5xl ${font.className}`}
                 style={{ color: palette.text, fontFamily: font.stack }}
               >
-                {title}
+                {renderTitle()}
               </h1>
               {eventDate && (
                 <p className="mt-3 text-xs uppercase tracking-[0.15em] opacity-60" style={{ color: palette.text }}>
@@ -1619,7 +1695,7 @@ function GalleryCover({
                   </p>
                 )}
                 <h1 className={`text-lg sm:text-xl ${font.className}`} style={{ color: palette.text, fontFamily: font.stack }}>
-                  {title}
+                  {renderTitle()}
                 </h1>
               </div>
             </div>
@@ -1655,7 +1731,7 @@ function GalleryCover({
               className={`max-w-3xl text-4xl leading-tight sm:text-6xl ${font.className}`}
               style={{ color: palette.text, fontFamily: font.stack }}
             >
-              {title}
+              {renderTitle()}
             </h1>
             {eventDate && (
               <p className="text-xs uppercase tracking-[0.15em] opacity-60" style={{ color: palette.text }}>
@@ -1715,7 +1791,7 @@ function GalleryCover({
                 className={`text-4xl leading-tight sm:text-5xl ${font.className}`}
                 style={{ color: palette.text, fontFamily: font.stack }}
               >
-                {title}
+                {renderTitle()}
               </h1>
               {eventDate && (
                 <p className="mt-3 text-xs uppercase tracking-[0.15em] opacity-60" style={{ color: palette.text }}>
@@ -1747,6 +1823,16 @@ function GalleryCover({
         </div>
       );
   }
+  }
+
+  const coverContent = renderCoverContent();
+  // Mode "bandeau" (compact) : on garde exactement la même mise en page que "hero" pour
+  // chaque style de couverture (aucune duplication), on borne juste sa hauteur visible —
+  // plus simple et plus cohérent qu'une mise en page dédiée par style.
+  if (coverMode === "bandeau") {
+    return <div className="max-h-[220px] w-full overflow-hidden">{coverContent}</div>;
+  }
+  return coverContent;
 }
 
 /** Petit indicateur de chargement réutilisé partout (couverture, visionneuse...). */

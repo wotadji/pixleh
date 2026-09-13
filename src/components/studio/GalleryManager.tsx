@@ -1257,12 +1257,27 @@ export function GalleryManager({
 
   // ---- Design : sauvegarde live (chaque clic patch immédiatement, comme dans Pixieset) ----
   async function updateDesign<K extends keyof GalleryDesign>(key: K, value: GalleryDesign[K]) {
-    const next = { ...design, [key]: value };
+    return updateDesignFields({ [key]: value } as Partial<GalleryDesign>);
+  }
+
+  /**
+   * Variante de `updateDesign` acceptant PLUSIEURS clés à la fois — indispensable dès
+   * qu'un même clic doit changer plus d'un champ (ex: le swatch "Ambiance > Le fond" qui
+   * fixe `backgroundTheme` ET remet `backgroundCustomHex`/`backgroundCustomTextHex` à
+   * null pour sortir du mode migration legacy). Bug corrigé le 13/09/2026 (retour
+   * d'Adriel : "quand je change dans Ambiance rien ne change") : appeler `updateDesign`
+   * plusieurs fois de suite dans le même clic ne fonctionnait pas, chaque appel calculait
+   * `next` à partir du même `design` (encore non mis à jour) capturé dans la fermeture au
+   * moment du rendu — seul le DERNIER appel "gagnait" et les changements précédents
+   * étaient perdus. Un seul `setDesign`/PATCH avec toutes les clés à la fois évite ça.
+   */
+  async function updateDesignFields(patch: Partial<GalleryDesign>) {
+    const next = { ...design, ...patch };
     setDesign(next);
     await fetch(`/api/galleries/${gallery.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ design: { [key]: value } }),
+      body: JSON.stringify({ design: patch }),
     });
   }
 
@@ -2229,6 +2244,7 @@ export function GalleryManager({
                       title={gallery.title}
                       coverPhotoUrl={activeCoverPhotoId ? thumbUrl(activeCoverPhotoId) : null}
                       photos={localPhotos.slice(0, 6).map((p) => thumbUrl(p.id))}
+                      credits={credits}
                       t={t}
                     />
                   </div>
@@ -2436,8 +2452,11 @@ export function GalleryManager({
                     {settingsSubTab === "presentation" && (
                       <div className="space-y-8">
                         {/* Sous-nav Présentation : Couverture / Police / Ambiance / Style —
-                            horizontale, en haut du panel (plutôt qu'une colonne verticale). */}
-                        <div className="flex flex-wrap gap-2">
+                            horizontale, en haut du panel (plutôt qu'une colonne verticale).
+                            flex-nowrap + overflow-x-auto : garde les 4 pastilles sur UNE seule
+                            ligne (retour d'Adriel, 13/09/2026 — "Style" retombait à la ligne
+                            dans la colonne d'options, plus étroite que l'aperçu). */}
+                        <div className="flex flex-nowrap gap-1.5 overflow-x-auto">
                           {(
                             [
                               { key: "cover", label: t("design.sectionCover") },
@@ -2450,7 +2469,7 @@ export function GalleryManager({
                               key={s.key}
                               type="button"
                               onClick={() => setDesignSection(s.key)}
-                              className={`rounded-full px-3.5 py-1.5 text-sm transition-colors ${
+                              className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-sm transition-colors ${
                                 designSection === s.key
                                   ? "bg-neutral-600 text-white"
                                   : "text-neutral-600 hover:bg-neutral-100"
@@ -2615,12 +2634,14 @@ export function GalleryManager({
                                   <button
                                     key={bgTheme.key}
                                     type="button"
-                                    onClick={() => {
-                                      updateDesign("backgroundTheme", bgTheme.key);
-                                      updateDesign("backgroundCustomHex", null);
-                                      updateDesign("backgroundCustomTextHex", null);
-                                    }}
-                                    className={`overflow-hidden rounded-lg border-2 text-left transition-colors ${
+                                    onClick={() =>
+                                      updateDesignFields({
+                                        backgroundTheme: bgTheme.key,
+                                        backgroundCustomHex: null,
+                                        backgroundCustomTextHex: null,
+                                      })
+                                    }
+                                    className={`overflow-hidden rounded-lg border-2 text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${
                                       !design.backgroundCustomHex && design.backgroundTheme === bgTheme.key
                                         ? "border-brand-500"
                                         : "border-neutral-200 hover:border-neutral-300"
@@ -2650,10 +2671,10 @@ export function GalleryManager({
                                     type="button"
                                     onClick={() => updateDesign("accentTheme", accentColorOption.key)}
                                     title={t(accentColorOption.labelKey)}
-                                    className={`h-8 w-8 rounded-full border-2 ${
+                                    className={`h-8 w-8 rounded-full border-2 transition-transform hover:scale-110 hover:shadow-md ${
                                       design.accentTheme === accentColorOption.key
                                         ? "border-neutral-900"
-                                        : "border-transparent"
+                                        : "border-transparent hover:border-neutral-300"
                                     }`}
                                     style={{
                                       backgroundColor:
@@ -2716,9 +2737,11 @@ export function GalleryManager({
                               options={[
                                 { key: "regular", label: t("design.gridSpacing.regular") },
                                 { key: "large", label: t("design.gridSpacing.large") },
+                                { key: "xlarge", label: t("design.gridSpacing.xlarge") },
                               ]}
                               value={design.gridSpacing}
                               onChange={(v) => updateDesign("gridSpacing", v as GalleryDesign["gridSpacing"])}
+                              columns={3}
                             />
                             <DesignOptionGroup
                               label={t("design.navigationStyleLabel")}
@@ -3838,12 +3861,17 @@ function DesignLivePreview({
   title,
   coverPhotoUrl,
   photos,
+  credits = [],
   t,
 }: {
   design: GalleryDesign;
   title: string;
   coverPhotoUrl: string | null;
   photos: string[];
+  /** Crédits prestataires — "générique de fin" affiché sous la grille, voir le même rendu
+   * dans GalleryFooter (GalleryView.tsx, rendu public). Corrigé le 13/09/2026 (retour
+   * d'Adriel : "Crédits ... ne s'affiche pas a l'aperçu"). */
+  credits?: GalleryCreditDTO[];
   t: (key: string) => string;
 }) {
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
@@ -3857,13 +3885,28 @@ function DesignLivePreview({
   const palette = { bg: rootStyle.backgroundColor, text: rootStyle.color, accent: resolveAccentHex(design) };
   const bg = coverPhotoUrl ? { backgroundImage: `url(${coverPhotoUrl})` } : {};
 
-  const titleEl = (
-    <span className={font.className} style={{ fontFamily: font.stack }}>
-      {title}
-    </span>
-  );
+  // Titre affiché dans la couverture : respecte Casse du titre / Échelle du titre / Afficher
+  // le titre de couverture (corrigé le 13/09/2026 — retour d'Adriel : ces 3 réglages
+  // n'avaient jamais été branchés sur l'aperçu). Même logique que GalleryCover dans
+  // GalleryView.tsx (rendu public), voir le commentaire là-bas pour le détail.
+  const displayTitle = design.coverTitleCase === "uppercase" ? title.toUpperCase() : title;
+  function renderTitle() {
+    if (!design.showCoverTitle) return null;
+    const scaleStyle =
+      design.coverTitleScale === "sm"
+        ? { transform: "scale(0.82)" }
+        : design.coverTitleScale === "lg"
+          ? { transform: "scale(1.18)" }
+          : {};
+    return (
+      <span className={font.className} style={{ fontFamily: font.stack, display: "inline-block", ...scaleStyle }}>
+        {displayTitle}
+      </span>
+    );
+  }
 
-  let coverContent: JSX.Element;
+  let coverContent: JSX.Element | null = null;
+  if (design.coverMode !== "none") {
   switch (design.coverStyle) {
     case "left":
       // Même structure que le vrai rendu public (GalleryCover "left") : panneau uni à
@@ -3880,7 +3923,7 @@ function DesignLivePreview({
               {t("design.previewStudioLabel")}
             </span>
             <div className="text-base leading-tight" style={{ color: palette.text }}>
-              {titleEl}
+              {renderTitle()}
             </div>
             <span
               className="w-fit border px-2 py-1 text-[8px] uppercase tracking-widest"
@@ -3908,7 +3951,7 @@ function DesignLivePreview({
               {t("design.previewStudioLabel")}
             </span>
             <div className="text-base leading-tight" style={{ color: palette.text }}>
-              {titleEl}
+              {renderTitle()}
             </div>
             <span
               className="w-fit border px-2 py-1 text-[8px] uppercase tracking-widest"
@@ -3933,7 +3976,7 @@ function DesignLivePreview({
             style={{ backgroundColor: `${palette.bg}e6` }}
           >
             <span className="truncate text-xs" style={{ color: palette.text, fontFamily: font.stack }}>
-              {title}
+              {renderTitle()}
             </span>
             <span
               className="shrink-0 border px-2 py-1 text-[8px] uppercase tracking-widest"
@@ -3954,7 +3997,7 @@ function DesignLivePreview({
               {t("design.previewStudioLabel")}
             </span>
             <div className="text-xl leading-tight" style={{ color: palette.text }}>
-              {titleEl}
+              {renderTitle()}
             </div>
             <span
               className="mt-1 w-fit border px-2 py-1 text-[8px] uppercase tracking-widest"
@@ -3972,7 +4015,7 @@ function DesignLivePreview({
         <div className="aspect-[16/10] w-full p-4" style={{ backgroundColor: palette.bg }}>
           <div className="h-full w-full bg-neutral-300 bg-cover bg-center" style={bg} />
           <p className="mt-2 text-center text-sm" style={{ color: palette.text, fontFamily: font.stack }}>
-            {title}
+            {renderTitle()}
           </p>
         </div>
       );
@@ -3985,7 +4028,7 @@ function DesignLivePreview({
             style={{ backgroundColor: `${palette.accent}cc` }}
           >
             <span className="text-lg font-semibold text-white" style={{ fontFamily: font.stack }}>
-              {title}
+              {renderTitle()}
             </span>
           </div>
         </div>
@@ -4000,7 +4043,7 @@ function DesignLivePreview({
             className="py-3 text-center text-sm"
             style={{ color: palette.text, fontFamily: font.stack }}
           >
-            {title}
+            {renderTitle()}
           </p>
         </div>
       );
@@ -4011,7 +4054,7 @@ function DesignLivePreview({
           <div className="absolute inset-0 bg-neutral-500/25" />
           <div className="absolute inset-6 flex items-center justify-center border border-white/80">
             <span className="px-3 text-lg text-white" style={{ fontFamily: font.stack }}>
-              {title}
+              {renderTitle()}
             </span>
           </div>
         </div>
@@ -4024,12 +4067,19 @@ function DesignLivePreview({
           <div className="absolute inset-0 bg-neutral-500/30" />
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="text-xl text-white" style={{ fontFamily: font.stack }}>
-              {title}
+              {renderTitle()}
             </span>
           </div>
         </div>
       );
       break;
+  }
+  }
+
+  // Mode "bandeau" (compact) : même mise en page que "hero", hauteur simplement bridée —
+  // voir le même commentaire dans GalleryCover (GalleryView.tsx) pour le détail.
+  if (coverContent && design.coverMode === "bandeau") {
+    coverContent = <div className="max-h-[110px] w-full overflow-hidden">{coverContent}</div>;
   }
 
   // Classes littérales (voir GRID_COLS_CLASSES dans galleryDesign.ts pour la même
@@ -4046,7 +4096,8 @@ function DesignLivePreview({
       ? "grid-cols-1"
       : "grid-cols-2"
     : desktopGridColsClasses[design.columnsPerRow] || "grid-cols-3";
-  const gridGapClass = design.gridSpacing === "large" ? "gap-1.5 p-1.5" : "gap-px p-px";
+  const gridGapClass =
+    design.gridSpacing === "xlarge" ? "gap-4 p-4" : design.gridSpacing === "large" ? "gap-1.5 p-1.5" : "gap-px p-px";
 
   // Même nombre de colonnes pour le mode "mosaïque" (masonry), mais réparti en JS
   // (colonnes flex, photo i → colonne i % N) plutôt qu'avec `columns-N` : comme sur la
@@ -4078,7 +4129,7 @@ function DesignLivePreview({
       </div>
       <div
         className={`mx-auto overflow-hidden rounded-xl border border-neutral-800 shadow-xl transition-all ${
-          isMobile ? "max-w-[300px]" : "max-w-xl"
+          isMobile ? "max-w-[320px]" : "max-w-3xl"
         }`}
       >
         {coverContent}
@@ -4137,6 +4188,20 @@ function DesignLivePreview({
               : Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="aspect-square bg-neutral-200" />
                 ))}
+          </div>
+        )}
+        {credits.length > 0 && (
+          // Générique de fin, voir le même rendu dans GalleryFooter (GalleryView.tsx, page
+          // publique) — même règle "role — nom".
+          <div
+            className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-t px-3 py-2.5 text-[10px] opacity-70"
+            style={{ backgroundColor: palette.bg, color: palette.text, borderColor: `${palette.accent}30` }}
+          >
+            {credits.map((credit) => (
+              <span key={credit.id}>
+                {credit.role} — {credit.name}
+              </span>
+            ))}
           </div>
         )}
       </div>
