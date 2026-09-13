@@ -2242,7 +2242,11 @@ export function GalleryManager({
                 chaque colonne porte son propre `overflow-y-auto`. `items-stretch` égalise leur
                 hauteur avant que chacune ne gère son propre dépassement de contenu. */}
             <form onSubmit={saveSettings} className="flex-1 overflow-hidden p-6 lg:p-10">
-              <div className="grid h-full grid-cols-1 items-stretch gap-8 lg:grid-cols-[1fr_380px] lg:gap-12">
+              {/* Colonne Réglages réduite à 320px (retour d'Adriel, 13/09/2026 : "augmente
+                  le with de la section de gauche" — l'aperçu live, en 1fr, gagne d'autant
+                  l'espace repris à la colonne fixe de droite) et gap resserré à 8 pour la
+                  même raison. */}
+              <div className="grid h-full grid-cols-1 items-stretch gap-8 lg:grid-cols-[1fr_320px]">
                   {/* Aperçu live — à GAUCHE, toujours visible quel que soit le sous-onglet
                       actif (référence Picstudio), pas seulement pour la Présentation. */}
                   <div className="min-w-0 overflow-y-auto lg:order-1">
@@ -3935,7 +3939,7 @@ function DesignLivePreview({
           </span>
           <span
             className="shrink-0 border px-2.5 py-1 text-[9px] uppercase tracking-widest"
-            style={{ borderColor: `${palette.text}40`, color: palette.text }}
+            style={{ borderColor: palette.accent, color: palette.accent }}
           >
             {t("design.previewViewGallery")}
           </span>
@@ -3963,7 +3967,7 @@ function DesignLivePreview({
             </div>
             <span
               className="w-fit border px-2 py-1 text-[8px] uppercase tracking-widest"
-              style={{ borderColor: `${palette.text}55`, color: palette.text }}
+              style={{ borderColor: palette.accent, color: palette.accent }}
             >
               {t("design.previewViewGallery")}
             </span>
@@ -3991,7 +3995,7 @@ function DesignLivePreview({
             </div>
             <span
               className="w-fit border px-2 py-1 text-[8px] uppercase tracking-widest"
-              style={{ borderColor: `${palette.text}55`, color: palette.text }}
+              style={{ borderColor: palette.accent, color: palette.accent }}
             >
               {t("design.previewViewGallery")}
             </span>
@@ -4016,7 +4020,7 @@ function DesignLivePreview({
             </span>
             <span
               className="shrink-0 border px-2 py-1 text-[8px] uppercase tracking-widest"
-              style={{ borderColor: `${palette.text}40`, color: palette.text }}
+              style={{ borderColor: palette.accent, color: palette.accent }}
             >
               {t("design.previewViewGallery")}
             </span>
@@ -4037,7 +4041,7 @@ function DesignLivePreview({
             </div>
             <span
               className="mt-1 w-fit border px-2 py-1 text-[8px] uppercase tracking-widest"
-              style={{ borderColor: `${palette.text}55`, color: palette.text }}
+              style={{ borderColor: palette.accent, color: palette.accent }}
             >
               {t("design.previewViewGallery")}
             </span>

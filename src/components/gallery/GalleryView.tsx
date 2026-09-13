@@ -777,10 +777,16 @@ export function GalleryView({
                       </>
                     )}
                     {gallery.allowFavorites && (
+                      // Icône + libellé visible ("Favoris", pas juste une bulle icône) — retour
+                      // d'Adriel le 13/09/2026 : aligner sur PicStudio (captures de leur panel
+                      // Réglages/aperçu à l'appui), qui affiche le texte à côté de l'icône plutôt
+                      // que de le cacher derrière un simple `title` au survol.
                       <IconButton
-                        label={favoritesOnly ? "Toutes les photos" : "Mes favoris"}
+                        label={favoritesOnly ? "Toutes les photos" : "Favoris"}
                         onClick={() => setFavoritesOnly((v) => !v)}
                         active={favoritesOnly}
+                        showLabel
+                        variant="plain"
                       >
                         <IconHeart filled={favoritesOnly} />
                       </IconButton>
@@ -804,7 +810,9 @@ export function GalleryView({
                     )}
                   </>
                 )}
-                <IconButton label="Partager" onClick={() => openShare()}>
+                {/* Pastille bordée icône+texte "PARTAGER" (comme "Voir la galerie") plutôt
+                    qu'une bulle icône seule — même retour PicStudio que pour Favoris. */}
+                <IconButton label="Partager" onClick={() => openShare()} showLabel accentColor={palette.accent}>
                   <IconShare />
                 </IconButton>
                 {mainView === "photos" && photos.length > 0 && (
@@ -1545,8 +1553,8 @@ function GalleryCover({
           </h1>
           <button
             onClick={onViewGallery}
-            className="shrink-0 border px-4 py-1.5 text-[11px] uppercase tracking-widest transition-colors hover:bg-black/5"
-            style={{ borderColor: `${palette.text}40`, color: palette.text }}
+            className="shrink-0 border px-4 py-1.5 text-[11px] uppercase tracking-widest transition-colors hover:opacity-80"
+            style={{ borderColor: palette.accent, color: palette.accent }}
           >
             Voir la galerie
           </button>
@@ -1704,8 +1712,8 @@ function GalleryCover({
             <div className="px-8 pb-8 sm:px-16 sm:pb-14 md:px-[10%]">
               <button
                 onClick={onViewGallery}
-                className="border px-5 py-2.5 text-xs uppercase tracking-widest transition-colors hover:bg-black/5"
-                style={{ borderColor: `${palette.text}55`, color: palette.text }}
+                className="border px-5 py-2.5 text-xs uppercase tracking-widest transition-colors hover:opacity-80"
+                style={{ borderColor: palette.accent, color: palette.accent }}
               >
                 Voir la galerie
               </button>
@@ -1750,7 +1758,7 @@ function GalleryCover({
             <button
               onClick={onViewGallery}
               className="shrink-0 border px-4 py-2 text-xs uppercase tracking-widest transition-colors hover:opacity-70"
-              style={{ borderColor: `${palette.text}40`, color: palette.text }}
+              style={{ borderColor: palette.accent, color: palette.accent }}
             >
               Voir la galerie
             </button>
@@ -1792,8 +1800,8 @@ function GalleryCover({
             )}
             <button
               onClick={onViewGallery}
-              className="mt-2 border px-5 py-2.5 text-xs uppercase tracking-widest transition-colors hover:bg-black/5"
-              style={{ borderColor: `${palette.text}55`, color: palette.text }}
+              className="mt-2 border px-5 py-2.5 text-xs uppercase tracking-widest transition-colors hover:opacity-80"
+              style={{ borderColor: palette.accent, color: palette.accent }}
             >
               Voir la galerie
             </button>
@@ -1854,8 +1862,8 @@ function GalleryCover({
             <div className="px-8 pb-8 sm:px-16 sm:pb-14 md:px-[10%]">
               <button
                 onClick={onViewGallery}
-                className="border px-5 py-2.5 text-xs uppercase tracking-widest transition-colors hover:bg-black/5"
-                style={{ borderColor: `${palette.text}55`, color: palette.text }}
+                className="border px-5 py-2.5 text-xs uppercase tracking-widest transition-colors hover:opacity-80"
+                style={{ borderColor: palette.accent, color: palette.accent }}
               >
                 Voir la galerie
               </button>
@@ -2075,29 +2083,63 @@ function IconButton({
   onClick,
   href,
   active,
+  showLabel,
+  variant = "pill",
+  accentColor,
 }: {
   children: React.ReactNode;
   label: string;
   onClick?: () => void;
   href?: string;
   active?: boolean;
+  /** Affiche le libellé en toutes lettres à côté de l'icône plutôt qu'une simple bulle
+   * icône seule — style Pixieset ("Favoris" / "PARTAGER" en clair dans la barre du haut,
+   * retour d'Adriel le 13/09/2026, captures de leur interface à l'appui). Par défaut false
+   * pour ne pas changer les usages existants (icônes seules sur les vignettes, menu mobile). */
+  showLabel?: boolean;
+  /** "pill" (défaut, avec showLabel) : pastille bordée icône+texte (ex. "Partager", façon
+   * bouton "Voir la galerie"). "plain" : pas de bordure, juste icône+texte inline (ex.
+   * "Favoris" chez Pixieset — un simple lien, pas une action encadrée). Sans effet si
+   * showLabel est absent (bulle ronde icône seule, comportement historique). */
+  variant?: "pill" | "plain";
+  /** Couleur de bordure/texte pour la variante "pill" avec libellé (typiquement
+   * palette.accent) — sans elle, retombe sur la couleur de texte courante. */
+  accentColor?: string;
 }) {
   // Bordure visible dès que l'icône pilote un état actif (filtre "Mes favoris"/"Mes
   // remarques" activé, etc.) — pour que le client voie immédiatement laquelle est "en
   // cours" au lieu de devoir deviner à partir de la seule opacité.
-  const className = `flex h-8 w-8 items-center justify-center rounded-full border transition-colors hover:bg-black/5 ${
-    active ? "border-current opacity-100" : "border-transparent opacity-70 hover:opacity-100"
-  }`;
+  const className = !showLabel
+    ? `flex h-8 w-8 items-center justify-center rounded-full border transition-colors hover:bg-black/5 ${
+        active ? "border-current opacity-100" : "border-transparent opacity-70 hover:opacity-100"
+      }`
+    : variant === "plain"
+      ? `flex items-center gap-1.5 whitespace-nowrap text-xs transition-opacity hover:opacity-100 ${
+          active ? "opacity-100" : "opacity-70"
+        }`
+      : `flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-[11px] uppercase tracking-widest transition-opacity hover:opacity-80 ${
+          active ? "opacity-100" : "opacity-90"
+        }`;
+  const style =
+    showLabel && variant === "pill" && accentColor ? { borderColor: accentColor, color: accentColor } : undefined;
+  const content = showLabel ? (
+    <>
+      {children}
+      <span>{label}</span>
+    </>
+  ) : (
+    children
+  );
   if (href) {
     return (
-      <Link href={href} title={label} aria-label={label} className={className}>
-        {children}
+      <Link href={href} title={showLabel ? undefined : label} aria-label={label} className={className} style={style}>
+        {content}
       </Link>
     );
   }
   return (
-    <button onClick={onClick} title={label} aria-label={label} className={className}>
-      {children}
+    <button onClick={onClick} title={showLabel ? undefined : label} aria-label={label} className={className} style={style}>
+      {content}
     </button>
   );
 }
