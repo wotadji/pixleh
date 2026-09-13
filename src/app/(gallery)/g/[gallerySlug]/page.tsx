@@ -211,6 +211,15 @@ export default async function GalleryEntryPage({
   // avant, voir /invite/[guestSlug]).
   const printProducts = mode === "guest" ? [] : await getActivePrintCatalog();
 
+  // Crédits prestataires (générique de fin, pied de galerie publique) — voir GalleryCredit
+  // dans schema.prisma. $queryRaw plutôt que l'API Prisma typée : modèle trop récent pour le
+  // Prisma Client généré du sandbox (même limitation que GalleryPreset/GalleryClientAccess,
+  // voir le commentaire sur ces modèles) — retour d'Adriel du 12/09/2026 ("Crédits ... ne
+  // s'affiche pas ... dans la galerie").
+  const credits = await prisma.$queryRaw<
+    { id: string; role: string; name: string; url: string | null }[]
+  >`SELECT "id", "role", "name", "url" FROM "GalleryCredit" WHERE "galleryId" = ${gallery.id} ORDER BY "position" ASC`;
+
   return (
     <GalleryView
       gallery={{
@@ -266,6 +275,7 @@ export default async function GalleryEntryPage({
       // Collections privées (12/08/2026, demande d'Adriel) : même périmètre qu'allowRemarks
       // ci-dessus — mode "client" uniquement (jamais invité), voir GalleryView.tsx.
       enableClientCollections={mode === "client"}
+      credits={credits}
     />
   );
 }

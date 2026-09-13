@@ -102,6 +102,12 @@ export default async function GuestGalleryPage({
       ? gallery.coverPhotoId
       : guestPhotos[0]?.id ?? null;
 
+  // Crédits prestataires (générique de fin, pied de galerie publique) — voir le même
+  // commentaire dans /g/[gallerySlug]/page.tsx (chantier Réglages du 12/09/2026).
+  const credits = await prisma.$queryRaw<
+    { id: string; role: string; name: string; url: string | null }[]
+  >`SELECT "id", "role", "name", "url" FROM "GalleryCredit" WHERE "galleryId" = ${gallery.id} ORDER BY "position" ASC`;
+
   return (
     <GalleryView
       gallery={{
@@ -135,6 +141,7 @@ export default async function GuestGalleryPage({
       initialPrintSelection={[]}
       printProducts={[]}
       allowRemarks={false}
+      credits={credits}
     />
   );
 }
