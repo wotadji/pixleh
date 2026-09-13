@@ -2233,12 +2233,16 @@ export function GalleryManager({
               ))}
             </div>
 
+            {/* Occupation de l'espace façon concurrence (retour d'Adriel le 13/09/2026,
+                captures à l'appui) : les deux colonnes ci-dessous remplissent chacune toute
+                la largeur/hauteur disponible (plus de centrage `max-w-6xl` avec marges mortes
+                de part et d'autre) — `items-stretch` égalise leur hauteur sur la plus grande
+                des deux au lieu de caler chacune sur son propre contenu (`items-start`). */}
             <form onSubmit={saveSettings} className="flex-1 overflow-y-auto p-6 lg:p-10">
-              <div className="mx-auto max-w-6xl">
-                <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[1fr_380px] lg:gap-12">
+              <div className="grid grid-cols-1 items-stretch gap-8 lg:grid-cols-[1fr_380px] lg:gap-12">
                   {/* Aperçu live — à GAUCHE, toujours visible quel que soit le sous-onglet
                       actif (référence Picstudio), pas seulement pour la Présentation. */}
-                  <div className="min-w-0 lg:sticky lg:top-24 lg:order-1">
+                  <div className="min-w-0 lg:sticky lg:top-24 lg:order-1 lg:self-start">
                     <DesignLivePreview
                       design={design}
                       title={gallery.title}
@@ -3226,7 +3230,6 @@ export function GalleryManager({
                       </div>
                     )}
                   </div>
-                </div>
               </div>
             </form>
           </main>
@@ -4153,7 +4156,7 @@ function DesignLivePreview({
       </div>
       <div
         className={`mx-auto overflow-hidden rounded-xl border border-neutral-800 shadow-xl transition-all ${
-          isMobile ? "max-w-[320px]" : "max-w-3xl"
+          isMobile ? "max-w-[320px]" : "w-full"
         }`}
       >
         {coverContent}
