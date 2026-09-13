@@ -18,7 +18,7 @@ export const galleryDesignSchema = z.object({
     .optional(),
   gridStyle: z.enum(["vertical", "horizontal"]).optional(),
   thumbnailSize: z.enum(["regular", "large"]).optional(),
-  gridSpacing: z.enum(["regular", "large"]).optional(),
+  gridSpacing: z.enum(["regular", "large", "xlarge"]).optional(),
   navigationStyle: z.enum(["icon", "iconText"]).optional(),
   columnsPerRow: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]).optional(),
   coverFocalX: z.number().min(0).max(1).optional(),

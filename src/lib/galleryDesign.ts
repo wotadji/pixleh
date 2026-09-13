@@ -29,7 +29,7 @@ export type ColorKey =
 
 export type GridStyle = "vertical" | "horizontal";
 export type ThumbnailSize = "regular" | "large";
-export type GridSpacing = "regular" | "large";
+export type GridSpacing = "regular" | "large" | "xlarge";
 export type NavigationStyle = "icon" | "iconText";
 /** Nombre de colonnes affichées sur la plus grande largeur d'écran (desktop). */
 export type GridColumns = 2 | 3 | 4 | 5 | 6;
@@ -149,7 +149,11 @@ export const DEFAULT_GALLERY_DESIGN: GalleryDesign = {
   coverMode: "hero",
   showCoverTitle: true,
   coverTitleScale: "md",
-  coverTitleCase: "uppercase",
+  // "normal" (pas "uppercase") : ce champ n'était jusqu'ici jamais réellement appliqué au
+  // rendu (voir GalleryCover/DesignLivePreview, corrigé le 13/09/2026) — mettre "uppercase"
+  // par défaut aurait changé la casse du titre de TOUTES les galeries déjà publiées dès la
+  // mise en prod de ce correctif, sans que le studio n'ait rien demandé.
+  coverTitleCase: "normal",
   coverVideoUrl: null,
   layoutStyle: "masonry",
   sectionsNavMode: "overview",
@@ -407,6 +411,7 @@ export function gridColsClass(columnsPerRow: GridColumns) {
 }
 
 export function gridGapClass(gridSpacing: GridSpacing) {
+  if (gridSpacing === "xlarge") return "gap-5 p-5";
   return gridSpacing === "large" ? "gap-2 p-2" : "gap-px p-px";
 }
 
@@ -445,9 +450,11 @@ export function masonryColumnCount(columnsPerRow: GridColumns, viewportWidth: nu
 }
 
 export function masonryGapClass(gridSpacing: GridSpacing) {
+  if (gridSpacing === "xlarge") return "gap-5 p-5";
   return gridSpacing === "large" ? "gap-2 p-2" : "gap-px p-px";
 }
 
 export function masonryItemSpacingClass(gridSpacing: GridSpacing) {
+  if (gridSpacing === "xlarge") return "mb-5";
   return gridSpacing === "large" ? "mb-2" : "mb-px";
 }
