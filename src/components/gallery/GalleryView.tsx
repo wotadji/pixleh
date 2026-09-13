@@ -1507,8 +1507,56 @@ function GalleryCover({
     </Link>
   ) : null;
 
-  // Isolé dans une fonction pour pouvoir envelopper le résultat ci-dessous (mode
-  // "bandeau" : même mise en page, hauteur simplement bridée) sans dupliquer les 9 cas.
+  // Mode "bandeau" : bannière compacte pleine largeur, occupation de l'espace façon
+  // Pixieset (retour d'Adriel le 13/09/2026, captures à l'appui) — l'ancienne implémentation
+  // se contentait de rogner (overflow-hidden) le haut du rendu "hero" complet, ce qui coupait
+  // le titre/bouton au milieu pour la plupart des 9 styles (ex: "editorial", dont le bloc
+  // titre à lui seul dépasse largement 220px) au lieu de produire une bannière courte et
+  // propre. Ici on ignore volontairement les 9 mises en page "hero" et on rend une bannière
+  // dédiée, unique : image courte pleine largeur, puis une barre titre compacte juste en
+  // dessous (jamais en surimpression) — l'alignement (gauche/centré/droite) suit tout de
+  // même la composition choisie pour garder un minimum de personnalisation.
+  function renderBandeauCover(): JSX.Element {
+    const align = design === "left" ? "left" : design === "right" ? "right" : "center";
+    return (
+      <div className="w-full">
+        <div
+          className="relative h-40 w-full bg-neutral-800 bg-cover bg-center sm:h-56 md:h-64"
+          style={bg}
+        >
+          {!loaded && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <Spinner className="text-white/70" />
+            </div>
+          )}
+          {studioBadge}
+        </div>
+        <div
+          className={`flex flex-col items-center gap-2 border-b px-4 py-3 sm:flex-row sm:gap-4 sm:px-6 ${
+            align === "left" ? "sm:justify-start" : align === "right" ? "sm:justify-end" : "sm:justify-center"
+          }`}
+          style={{ backgroundColor: palette.bg, borderColor: `${palette.accent}30` }}
+        >
+          <h1
+            className={`text-center text-sm uppercase tracking-[0.15em] sm:text-base ${font.className}`}
+            style={{ color: palette.text, fontFamily: font.stack }}
+          >
+            {renderTitle()}
+          </h1>
+          <button
+            onClick={onViewGallery}
+            className="shrink-0 border px-4 py-1.5 text-[11px] uppercase tracking-widest transition-colors hover:bg-black/5"
+            style={{ borderColor: `${palette.text}40`, color: palette.text }}
+          >
+            Voir la galerie
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Isolé dans une fonction pour les 9 styles "hero" (mode par défaut) — non utilisée en
+  // mode "bandeau", voir renderBandeauCover ci-dessus.
   function renderCoverContent(): JSX.Element | null {
   switch (design) {
     case "frame":
@@ -1825,14 +1873,8 @@ function GalleryCover({
   }
   }
 
-  const coverContent = renderCoverContent();
-  // Mode "bandeau" (compact) : on garde exactement la même mise en page que "hero" pour
-  // chaque style de couverture (aucune duplication), on borne juste sa hauteur visible —
-  // plus simple et plus cohérent qu'une mise en page dédiée par style.
-  if (coverMode === "bandeau") {
-    return <div className="max-h-[220px] w-full overflow-hidden">{coverContent}</div>;
-  }
-  return coverContent;
+  if (coverMode === "bandeau") return renderBandeauCover();
+  return renderCoverContent();
 }
 
 /** Petit indicateur de chargement réutilisé partout (couverture, visionneuse...). */

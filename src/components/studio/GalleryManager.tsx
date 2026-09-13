@@ -3905,8 +3905,38 @@ function DesignLivePreview({
     );
   }
 
+  // Mode "bandeau" : bannière compacte pleine largeur — même logique que renderBandeauCover
+  // dans GalleryCover (GalleryView.tsx, rendu public), voir le commentaire détaillé là-bas
+  // (corrigé le 13/09/2026, retour d'Adriel avec captures comparant à la concurrence :
+  // l'ancien "max-h-[110px] overflow-hidden" rognait le rendu "hero" complet au lieu de
+  // produire une vraie bannière courte, ce qui coupait le titre/bouton pour la plupart des
+  // 9 styles). On ignore volontairement le style de couverture choisi (comme côté public) et
+  // on ne garde que l'alignement gauche/centré/droite pour un minimum de personnalisation.
   let coverContent: JSX.Element | null = null;
-  if (design.coverMode !== "none") {
+  if (design.coverMode === "bandeau") {
+    const align = design.coverStyle === "left" ? "left" : design.coverStyle === "right" ? "right" : "center";
+    coverContent = (
+      <div className="w-full">
+        <div className="h-24 w-full bg-neutral-300 bg-cover bg-center sm:h-32" style={bg} />
+        <div
+          className={`flex flex-col items-center gap-2 border-b px-3 py-2.5 text-xs sm:flex-row sm:gap-3 ${
+            align === "left" ? "sm:justify-start" : align === "right" ? "sm:justify-end" : "sm:justify-center"
+          }`}
+          style={{ backgroundColor: palette.bg, borderColor: `${palette.accent}30` }}
+        >
+          <span className={`text-center uppercase tracking-[0.15em] ${font.className}`} style={{ color: palette.text, fontFamily: font.stack }}>
+            {renderTitle()}
+          </span>
+          <span
+            className="shrink-0 border px-2.5 py-1 text-[9px] uppercase tracking-widest"
+            style={{ borderColor: `${palette.text}40`, color: palette.text }}
+          >
+            {t("design.previewViewGallery")}
+          </span>
+        </div>
+      </div>
+    );
+  } else if (design.coverMode !== "none") {
   switch (design.coverStyle) {
     case "left":
       // Même structure que le vrai rendu public (GalleryCover "left") : panneau uni à
@@ -4074,12 +4104,6 @@ function DesignLivePreview({
       );
       break;
   }
-  }
-
-  // Mode "bandeau" (compact) : même mise en page que "hero", hauteur simplement bridée —
-  // voir le même commentaire dans GalleryCover (GalleryView.tsx) pour le détail.
-  if (coverContent && design.coverMode === "bandeau") {
-    coverContent = <div className="max-h-[110px] w-full overflow-hidden">{coverContent}</div>;
   }
 
   // Classes littérales (voir GRID_COLS_CLASSES dans galleryDesign.ts pour la même
