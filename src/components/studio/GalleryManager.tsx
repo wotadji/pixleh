@@ -237,6 +237,18 @@ export function GalleryManager({
   // groupées (déplacer vers un set, supprimer) qui remplace la barre d'outils normale tant
   // qu'au moins une photo est sélectionnée.
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
+  // Sélection par rectangle glissé à la souris + réordonnancement par glisser-déposer des
+  // vignettes (demande d'Adriel le 14/09/2026, façon concurrence : "Tracez un rectangle
+  // pour sélectionner plusieurs photos, puis glissez la sélection pour la déplacer").
+  const photoGridRef = useRef<HTMLDivElement | null>(null);
+  const photoTileRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const marqueeOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const marqueeBaseSelectionRef = useRef<Set<string>>(new Set());
+  const lastSelectedPhotoIndexRef = useRef<number | null>(null);
+  const [isMarqueeActive, setIsMarqueeActive] = useState(false);
+  const [marqueeRect, setMarqueeRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [draggedPhotoId, setDraggedPhotoId] = useState<string | null>(null);
+  const [dragOverPhotoId, setDragOverPhotoId] = useState<string | null>(null);
   // Visionneuse plein écran (zoom) : clic sur une vignette de la grille Photos ouvre la photo
   // en grand plutôt que de la (dé)sélectionner (retour d'Adriel, 21/08/2026 — la sélection se
   // fait désormais uniquement via la case à cocher qui apparaît au survol de la vignette).
@@ -782,6 +794,134 @@ export function GalleryManager({
       if (allSelected) return new Set();
       return new Set(filteredPhotos.map((p) => p.id));
     });
+  }
+
+  /** Sélection par plage (Shift+clic) entre la dernière vignette cliquée et celle-ci, dans
+   * l'ordre affiché (filteredPhotos) — s'ajoute à la sélection en cours. */
+  function selectRangeTo(photoId: string) {
+    const idx = filteredPhotos.findIndex((p) => p.id === photoId);
+    if (idx === -1) return;
+    const anchor = lastSelectedPhotoIndexRef.current;
+    if (anchor === null) {
+      toggleSelectPhoto(photoId);
+      lastSelectedPhotoIndexRef.current = idx;
+      return;
+    }
+    const [start, end] = anchor < idx ? [anchor, idx] : [idx, anchor];
+    const range = filteredPhotos.slice(start, end + 1).map((p) => p.id);
+    setSelectedPhotoIds((prev) => new Set([...prev, ...range]));
+    lastSelectedPhotoIndexRef.current = idx;
+  }
+
+  function registerPhotoTileRef(photoId: string) {
+    return (el: HTMLDivElement | null) => {
+      if (el) photoTileRefs.current.set(photoId, el);
+      else photoTileRefs.current.delete(photoId);
+    };
+  }
+
+  /** Démarre une sélection par rectangle glissé — uniquement si le clic commence sur une
+   * zone vide de la grille (pas sur une vignette), sinon c'est le glisser-déposer de
+   * réordonnancement qui prend le relais (voir `draggable` sur chaque vignette). */
+  function handlePhotoGridMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("[data-photo-tile]")) return;
+    const container = photoGridRef.current;
+    if (!container) return;
+    const containerRect = container.getBoundingClientRect();
+    const originX = e.clientX - containerRect.left + container.scrollLeft;
+    const originY = e.clientY - containerRect.top + container.scrollTop;
+    marqueeOriginRef.current = { x: originX, y: originY };
+    marqueeBaseSelectionRef.current = e.shiftKey ? new Set(selectedPhotoIds) : new Set();
+    if (!e.shiftKey) setSelectedPhotoIds(new Set());
+    setMarqueeRect({ x: originX, y: originY, w: 0, h: 0 });
+    setIsMarqueeActive(true);
+  }
+
+  // Suit la souris pendant une sélection par rectangle (écouteurs sur window pour continuer
+  // à suivre même si le curseur sort de la grille), et sélectionne en direct les vignettes
+  // qui intersectent le rectangle tracé.
+  useEffect(() => {
+    if (!isMarqueeActive) return;
+    function onMove(e: MouseEvent) {
+      const container = photoGridRef.current;
+      const origin = marqueeOriginRef.current;
+      if (!container || !origin) return;
+      const containerRect = container.getBoundingClientRect();
+      const currentX = e.clientX - containerRect.left + container.scrollLeft;
+      const currentY = e.clientY - containerRect.top + container.scrollTop;
+      const rect = {
+        x: Math.min(origin.x, currentX),
+        y: Math.min(origin.y, currentY),
+        w: Math.abs(currentX - origin.x),
+        h: Math.abs(currentY - origin.y),
+      };
+      setMarqueeRect(rect);
+      const intersecting = new Set<string>();
+      photoTileRefs.current.forEach((el, id) => {
+        const r = el.getBoundingClientRect();
+        const relX = r.left - containerRect.left + container.scrollLeft;
+        const relY = r.top - containerRect.top + container.scrollTop;
+        const hit = relX < rect.x + rect.w && relX + r.width > rect.x && relY < rect.y + rect.h && relY + r.height > rect.y;
+        if (hit) intersecting.add(id);
+      });
+      setSelectedPhotoIds(new Set([...marqueeBaseSelectionRef.current, ...intersecting]));
+    }
+    function onUp() {
+      setIsMarqueeActive(false);
+      setMarqueeRect(null);
+      marqueeOriginRef.current = null;
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [isMarqueeActive]);
+
+  /** Glisser-déposer : déplace la vignette lâchée (ou tout le groupe sélectionné si la
+   * vignette glissée en fait partie) juste avant `targetPhotoId`, met à jour l'ordre
+   * localement puis le persiste en base (Photo.position) — bascule aussi le tri sur
+   * "Manuel", seul mode où cet ordre a un sens. */
+  async function handlePhotoDrop(targetPhotoId: string) {
+    const draggedIds =
+      draggedPhotoId && selectedPhotoIds.has(draggedPhotoId) && selectedPhotoIds.size > 1
+        ? filteredPhotos.filter((p) => selectedPhotoIds.has(p.id)).map((p) => p.id)
+        : draggedPhotoId
+          ? [draggedPhotoId]
+          : [];
+    setDraggedPhotoId(null);
+    setDragOverPhotoId(null);
+    if (draggedIds.length === 0 || draggedIds.includes(targetPhotoId)) return;
+
+    const draggedSet = new Set(draggedIds);
+    const remaining = filteredPhotos.filter((p) => !draggedSet.has(p.id));
+    const targetIndex = remaining.findIndex((p) => p.id === targetPhotoId);
+    const movedPhotos = filteredPhotos.filter((p) => draggedSet.has(p.id));
+    const reordered =
+      targetIndex === -1
+        ? [...remaining, ...movedPhotos]
+        : [...remaining.slice(0, targetIndex), ...movedPhotos, ...remaining.slice(targetIndex)];
+    const affectedIds = new Set(reordered.map((p) => p.id));
+
+    let cursor = 0;
+    const newLocalPhotos = localPhotos.map((p) => (affectedIds.has(p.id) ? reordered[cursor++] : p));
+    setLocalPhotos(newLocalPhotos);
+
+    if (sortBy !== "manual") {
+      changeSortOrder("manual");
+    }
+    try {
+      await fetch(`/api/galleries/${gallery.id}/photos/reorder`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoIds: newLocalPhotos.map((p) => p.id) }),
+      });
+    } catch {
+      // Best-effort : en cas d'échec réseau, l'ordre reste correct côté client jusqu'au
+      // prochain rechargement — pas bloquant pour un simple réordonnancement visuel.
+    }
   }
 
   async function bulkDeleteSelected() {
@@ -2190,22 +2330,64 @@ export function GalleryManager({
                      compactes qu'avant (6 colonnes max → 10). Espace entre les vignettes
                      agrandi le 14/09/2026 (gap-1 → gap-3, padding du conteneur assorti).
                      3e mode "gridLarge" ajouté le 14/09/2026 : moins de colonnes pour des
-                     vignettes bien plus grandes, coins arrondis sur toutes les vignettes. */
+                     vignettes bien plus grandes, coins arrondis sur toutes les vignettes.
+                     Sélection par rectangle glissé (marqueeRect) le 14/09/2026 : mousedown
+                     sur une zone vide de la grille démarre le tracé (voir
+                     handlePhotoGridMouseDown), overlay rendu ci-dessous en position absolue. */
                   <div
-                    className={`grid gap-3 p-3 ${
+                    ref={photoGridRef}
+                    onMouseDown={handlePhotoGridMouseDown}
+                    className={`relative grid select-none gap-3 p-3 ${
                       photoViewMode === "gridLarge"
                         ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
                         : "grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10"
                     }`}
                   >
+                    {marqueeRect && (
+                      <div
+                        className="pointer-events-none absolute z-20 border border-brand-500 bg-brand-500/10"
+                        style={{ left: marqueeRect.x, top: marqueeRect.y, width: marqueeRect.w, height: marqueeRect.h }}
+                      />
+                    )}
                     {filteredPhotos.map((photo) => {
                       const selected = selectedPhotoIds.has(photo.id);
                       return (
                         <div
                           key={photo.id}
-                          onClick={() => setLightboxPhotoId(photo.id)}
-                          className={`group relative aspect-square cursor-pointer overflow-hidden rounded-lg bg-gray-100 ${
+                          ref={registerPhotoTileRef(photo.id)}
+                          data-photo-tile
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.effectAllowed = "move";
+                            if (!selectedPhotoIds.has(photo.id)) setSelectedPhotoIds(new Set([photo.id]));
+                            setDraggedPhotoId(photo.id);
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = "move";
+                            if (dragOverPhotoId !== photo.id) setDragOverPhotoId(photo.id);
+                          }}
+                          onDragLeave={() => setDragOverPhotoId((id) => (id === photo.id ? null : id))}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            handlePhotoDrop(photo.id);
+                          }}
+                          onDragEnd={() => {
+                            setDraggedPhotoId(null);
+                            setDragOverPhotoId(null);
+                          }}
+                          onClick={(e) => {
+                            if (e.shiftKey) {
+                              selectRangeTo(photo.id);
+                              return;
+                            }
+                            lastSelectedPhotoIndexRef.current = filteredPhotos.findIndex((p) => p.id === photo.id);
+                            setLightboxPhotoId(photo.id);
+                          }}
+                          className={`group relative aspect-square cursor-pointer overflow-hidden rounded-lg bg-gray-100 transition-opacity ${
                             selected ? "ring-2 ring-inset ring-brand-500" : ""
+                          } ${draggedPhotoId === photo.id ? "opacity-40" : ""} ${
+                            dragOverPhotoId === photo.id && draggedPhotoId !== photo.id ? "ring-2 ring-brand-400" : ""
                           }`}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2223,6 +2405,7 @@ export function GalleryManager({
                             onClick={(e) => {
                               e.stopPropagation();
                               toggleSelectPhoto(photo.id);
+                              lastSelectedPhotoIndexRef.current = filteredPhotos.findIndex((p) => p.id === photo.id);
                             }}
                             title={t("gm.selectPhoto")}
                             aria-label={t("gm.selectPhoto")}
@@ -2307,12 +2490,6 @@ export function GalleryManager({
                                 {t("gm.tagSocial")}
                               </button>
                             </div>
-                            <button
-                              onClick={() => deletePhoto(photo.id)}
-                              className="self-end rounded bg-black/60 px-2 py-0.5 text-xs text-white hover:bg-red-600"
-                            >
-                              {t("gm.delete")}
-                            </button>
                           </div>
                         </div>
                       );
