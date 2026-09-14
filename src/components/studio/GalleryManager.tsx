@@ -1866,7 +1866,7 @@ export function GalleryManager({
               {/* En-tête en tout premier (demande d'Adriel le 14/09/2026, façon
                   concurrence) : "Toutes les photos" et les sessions suivent juste en
                   dessous, dans une seule liste. */}
-              <div className="mb-1 flex items-center justify-between px-2">
+              <div className="mb-4 flex items-center justify-between px-2">
                 <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
                   {t("gm.setsLabel")}
                   {gallery.collections.length > 0 && (
