@@ -1878,7 +1878,7 @@ export function GalleryManager({
                   onClick={() => setPhotosPanelOpen(false)}
                   title={t("gm.hidePhotosPanel")}
                   aria-label={t("gm.hidePhotosPanel")}
-                  className="rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
+                  className="flex h-6 w-6 items-center justify-center rounded-full border border-gray-300 text-gray-400 hover:border-gray-400 hover:bg-gray-200 hover:text-gray-600"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <path d="M15 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
