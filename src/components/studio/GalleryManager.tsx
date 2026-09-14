@@ -2368,7 +2368,11 @@ export function GalleryManager({
                           draggable
                           onDragStart={(e) => {
                             e.dataTransfer.effectAllowed = "move";
-                            if (!selectedPhotoIds.has(photo.id)) setSelectedPhotoIds(new Set([photo.id]));
+                            // Ne sélectionne PAS la photo glissée (retour d'Adriel le
+                            // 14/09/2026) : glisser-déposer ne doit faire que réordonner,
+                            // pas sélectionner. handlePhotoDrop gère déjà les deux cas :
+                            // déplacer tout le groupe si la photo glissée fait partie d'une
+                            // sélection existante, sinon ne déplacer qu'elle seule.
                             setDraggedPhotoId(photo.id);
                           }}
                           onDragOver={(e) => {
