@@ -115,17 +115,15 @@ export function DashboardSidebar({
       } ${open ? "translate-x-0" : ""}`}
     >
       <div className={`mb-5 flex items-center px-1 ${collapsed ? "md:justify-center" : "justify-between"}`}>
-        {/* Logo trop petit dans tout le panel photographe, pas seulement en mode replié
-            (retour d'Adriel le 15/09/2026) — taille de base remontée de 24 à 32.
-            En mode icônes desktop (galerie ouverte, sidebar repliée à 76px), le mot
-            "pixleh" n'a pas la place de s'afficher entier et se coupait en "pix" : on
-            masque le wordmark en CSS (md:hidden, comme le reste des libellés de cette
-            sidebar) pour ne garder que le mark (façon favicon), et on l'agrandit encore
-            un peu plus (scale-125, via md: pour ne pas affecter le tiroir mobile) car
-            il occupe alors toute la largeur du rail à lui seul. */}
-        <span className={collapsed ? "md:scale-125" : ""}>
-          <PixlehLogo size={32} wordmarkClassName={collapsed ? "md:hidden" : ""} />
-        </span>
+        {/* Logo resté trop petit dans tout le panel photographe malgré les précédents
+            ajustements (retour d'Adriel le 15/09/2026) — le mark utilise maintenant
+            directement /icon.svg (le favicon, cf. PixlehLogo) au lieu d'un SVG inline
+            dupliqué, avec une taille de base montée à 40px, bien visible même dans le
+            rail d'icônes de 76px (galerie ouverte, sidebar repliée). Le mot "pixleh"
+            n'y a pas la place de s'afficher entier et se coupait en "pix" : on le masque
+            en CSS (md:hidden, comme le reste des libellés de cette sidebar) pour ne
+            garder que le mark à partir du breakpoint desktop. */}
+        <PixlehLogo size={40} wordmarkClassName={collapsed ? "md:hidden" : ""} />
         <button
           type="button"
           onClick={onClose}
