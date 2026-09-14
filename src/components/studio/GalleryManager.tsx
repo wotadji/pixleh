@@ -2518,8 +2518,11 @@ export function GalleryManager({
             d'outils normale en haut de la grille. */}
         {activeTab === "photos" && selectedPhotoIds.size > 0 && (
           <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
-            <div className="pointer-events-auto flex items-center gap-4 rounded-full bg-gray-900 px-5 py-2.5 text-white shadow-2xl">
-              <div className="flex items-center gap-3 whitespace-nowrap text-sm">
+            {/* Agrandi + fond semi-transparent avec flou (demande d'Adriel le 14/09/2026) :
+                bg-gray-900/80 + backdrop-blur au lieu d'un noir plein, pour laisser deviner
+                les photos derrière tout en gardant le texte lisible. */}
+            <div className="pointer-events-auto flex items-center gap-5 rounded-full bg-gray-900/80 px-7 py-4 text-white shadow-2xl backdrop-blur-md">
+              <div className="flex items-center gap-3 whitespace-nowrap text-base">
                 <span className="font-semibold">{selectedPhotoIds.size}</span>
                 <span className="text-white/60">{t("gm.photosCountLabel")}</span>
                 <button
@@ -2530,7 +2533,7 @@ export function GalleryManager({
                   {t("gm.selectAll")}
                 </button>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 {assignableCollections.length > 0 && (
                   <div className="relative">
                     <button
@@ -2539,14 +2542,14 @@ export function GalleryManager({
                       onClick={() => setBulkMoveMenuOpen((v) => !v)}
                       title={t("gm.moveToSet")}
                       aria-label={t("gm.moveToSet")}
-                      className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-60"
+                      className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-60"
                     >
                       <IconFolderMove />
                     </button>
                     {bulkMoveMenuOpen && (
                       <>
                         <div className="fixed inset-0 z-10" onClick={() => setBulkMoveMenuOpen(false)} />
-                        <div className="absolute bottom-11 left-1/2 z-20 w-52 -translate-x-1/2 rounded-lg border border-gray-200 bg-white py-1 text-left shadow-lg">
+                        <div className="absolute bottom-14 left-1/2 z-20 w-52 -translate-x-1/2 rounded-lg border border-gray-200 bg-white py-1 text-left shadow-lg">
                           <button
                             type="button"
                             onClick={() => bulkMoveSelected("")}
@@ -2575,20 +2578,20 @@ export function GalleryManager({
                   onClick={() => setBulkDeleteConfirm(true)}
                   title={t("gm.delete")}
                   aria-label={t("gm.delete")}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 disabled:opacity-60"
+                  className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 disabled:opacity-60"
                 >
                   <IconTrashCircle />
                 </button>
               </div>
-              <div className="h-6 w-px bg-white/20" />
+              <div className="h-8 w-px bg-white/20" />
               <button
                 type="button"
                 onClick={clearSelection}
                 title={t("gm.clearSelection")}
                 aria-label={t("gm.clearSelection")}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-white/60 hover:bg-white/10 hover:text-white"
+                className="flex h-10 w-10 items-center justify-center rounded-full text-white/60 hover:bg-white/10 hover:text-white"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
                 </svg>
               </button>
@@ -5025,14 +5028,14 @@ function IconGridView() {
 /** Icônes du pop-up flottant de sélection multiple (demande d'Adriel le 14/09/2026). */
 function IconFolderMove() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" strokeLinejoin="round" />
     </svg>
   );
 }
 function IconTrashCircle() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path
         d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0 1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12"
         strokeLinecap="round"
