@@ -115,18 +115,16 @@ export function DashboardSidebar({
       } ${open ? "translate-x-0" : ""}`}
     >
       <div className={`mb-5 flex items-center px-1 ${collapsed ? "md:justify-center" : "justify-between"}`}>
-        {/* En mode icônes desktop (galerie ouverte, sidebar repliée à 76px), le mot
-            "pixleh" n'a pas la place de s'afficher entier et se coupait en "pix"
-            (retour d'Adriel le 15/09/2026) — on masque le wordmark en CSS (md:hidden,
-            comme le reste des libellés de cette sidebar) pour ne garder que le mark
-            (façon favicon) à partir du breakpoint desktop, tout en gardant le logo
-            complet sur mobile où la sidebar reste toujours en pleine largeur. Le mark
-            seul étant beaucoup plus petit visuellement que l'icône + le mot, on
-            l'agrandit (scale-150, en CSS via md: comme le reste de ce composant pour
-            ne pas affecter le tiroir mobile) — retour d'Adriel : "le logo est invisible
-            du moins trop petit". */}
-        <span className={collapsed ? "md:scale-150" : ""}>
-          <PixlehLogo size={24} wordmarkClassName={collapsed ? "md:hidden" : ""} />
+        {/* Logo trop petit dans tout le panel photographe, pas seulement en mode replié
+            (retour d'Adriel le 15/09/2026) — taille de base remontée de 24 à 32.
+            En mode icônes desktop (galerie ouverte, sidebar repliée à 76px), le mot
+            "pixleh" n'a pas la place de s'afficher entier et se coupait en "pix" : on
+            masque le wordmark en CSS (md:hidden, comme le reste des libellés de cette
+            sidebar) pour ne garder que le mark (façon favicon), et on l'agrandit encore
+            un peu plus (scale-125, via md: pour ne pas affecter le tiroir mobile) car
+            il occupe alors toute la largeur du rail à lui seul. */}
+        <span className={collapsed ? "md:scale-125" : ""}>
+          <PixlehLogo size={32} wordmarkClassName={collapsed ? "md:hidden" : ""} />
         </span>
         <button
           type="button"

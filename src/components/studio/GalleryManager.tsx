@@ -2541,6 +2541,7 @@ export function GalleryManager({
                   {t("gm.selectAll")}
                 </button>
               </div>
+              <span className="h-7 w-px bg-white/15" />
               <div className="flex items-center gap-3">
                 {assignableCollections.length > 0 && (
                   <div className="relative">
