@@ -301,6 +301,10 @@ export function GalleryManager({
   const [videoUploadMode, setVideoUploadMode] = useState<"link" | "upload">("link");
   const [videoUploadTitle, setVideoUploadTitle] = useState("");
   const [videoUploading, setVideoUploading] = useState(false);
+  // Pourcentage d'envoi de la vidéo en cours (demande d'Adriel le 15/09/2026) — calculé à
+  // partir de xhr.upload.onprogress via le même helper xhrPostFormData que l'upload photo
+  // (voir plus haut), le seul moyen d'obtenir une progression en octets réels.
+  const [videoUploadPercent, setVideoUploadPercent] = useState(0);
   // Renommage d'une vidéo déjà ajoutée à la liste (titre uniquement, voir PATCH
   // /api/galleries/[id]/videos/[videoId]) — même principe que le renommage d'un set.
   const [editingVideoId, setEditingVideoId] = useState<string | null>(null);
@@ -1255,24 +1259,33 @@ export function GalleryManager({
 
   // Upload direct d'un fichier vidéo — livraison du montage final par le studio/vidéaste,
   // à la différence du lien externe : le client pourra ensuite la télécharger comme une
-  // photo (voir VideoSection côté GalleryView). Pas de barre de progression détaillée
-  // (comme pour l'upload photo, voir uploadFiles) : juste un état "en cours" pendant le
-  // transfert, qui peut être long pour un gros fichier.
+  // photo (voir VideoSection côté GalleryView). Barre de progression en % (demande
+  // d'Adriel le 15/09/2026), via xhrPostFormData/xhr.upload.onprogress comme pour l'upload
+  // photo — un fichier vidéo peut être volumineux et long à envoyer.
   async function uploadVideoFile(file: File) {
     if (videoUploading) return;
     setVideoUploading(true);
+    setVideoUploadPercent(0);
     setVideoError(null);
     try {
       const body = new FormData();
       body.append("file", file);
       if (videoUploadTitle.trim()) body.append("title", videoUploadTitle.trim());
-      const res = await fetch(`/api/galleries/${gallery.id}/videos/upload`, { method: "POST", body });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setVideoError(typeof data?.error === "string" ? data.error : t("gm.httpError"));
+      const controller = new AbortController();
+      const { ok, data } = await xhrPostFormData(
+        `/api/galleries/${gallery.id}/videos/upload`,
+        body,
+        controller.signal,
+        (loadedBytes) => {
+          if (file.size > 0) setVideoUploadPercent(Math.min(100, Math.round((loadedBytes / file.size) * 100)));
+        }
+      );
+      const parsed = (data ?? {}) as { error?: unknown; video?: unknown };
+      if (!ok) {
+        setVideoError(typeof parsed.error === "string" ? parsed.error : t("gm.httpError"));
         return;
       }
-      setVideos((list) => [...(list || []), data.video]);
+      setVideos((list) => [...(list || []), parsed.video as VideoDTO]);
       setVideoUploadTitle("");
     } catch {
       setVideoError(t("gm.networkError"));
@@ -3914,9 +3927,24 @@ export function GalleryManager({
                     >
                       <input {...getVideoInputProps()} disabled={videoUploading} />
                       <IconUpload />
-                      <p className="text-sm text-gray-600">
-                        {isVideoDragActive ? t("gm.dropHere") : t("video.dropHere")}
-                      </p>
+                      {/* Pourcentage d'envoi en cours (demande d'Adriel le 15/09/2026),
+                          calculé via xhr.upload.onprogress dans uploadVideoFile — même
+                          principe que la barre de progression de l'upload photo. */}
+                      {videoUploading ? (
+                        <div className="w-full max-w-xs">
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+                            <div
+                              className="h-full rounded-full bg-brand-500 transition-[width] duration-300 ease-out"
+                              style={{ width: `${videoUploadPercent}%` }}
+                            />
+                          </div>
+                          <p className="mt-1.5 text-sm font-medium text-gray-600">{videoUploadPercent}%</p>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-600">
+                          {isVideoDragActive ? t("gm.dropHere") : t("video.dropHere")}
+                        </p>
+                      )}
                       <button
                         type="button"
                         onClick={openVideoDialog}
