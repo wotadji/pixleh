@@ -1694,16 +1694,13 @@ export function GalleryManager({
                 </p>
               )}
 
-              <div className="mt-3 flex items-center justify-between px-2">
+              <div className="mt-3 px-2">
                 <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
                   {t("gm.setsLabel")}
                   {gallery.collections.length > 0 && (
                     <span className="text-gray-300">({gallery.collections.length})</span>
                   )}
                 </p>
-                <button onClick={openAddSetModal} className="text-xs text-brand-600 hover:underline">
-                  {t("gm.addSet")}
-                </button>
               </div>
               {/* Ligne de séparation après chaque session (demande d'Adriel le 13/09/2026) :
                   `divide-y` place un trait fin entre les sessions sans en ajouter un après la
@@ -1807,6 +1804,15 @@ export function GalleryManager({
                 );
               })}
               </div>
+              {/* Bouton d'ajout déplacé en bas de la liste des sessions (demande d'Adriel le
+                  14/09/2026, façon concurrence) — plus dans l'en-tête, à la suite de la
+                  dernière session existante. */}
+              <button
+                onClick={openAddSetModal}
+                className="mt-2 flex w-full items-center justify-center rounded-lg border border-dashed border-gray-300 px-3 py-2 text-xs font-medium text-gray-500 hover:border-brand-400 hover:text-brand-600"
+              >
+                {t("gm.addSet")}
+              </button>
             </aside>
             )}
 
@@ -2170,8 +2176,9 @@ export function GalleryManager({
                   ) : (
                   /* Vignettes plus petites, façon concurrence (demande d'Adriel le
                      13/09/2026) : plus de colonnes à chaque palier pour des miniatures plus
-                     compactes qu'avant (6 colonnes max → 10). */
-                  <div className="grid grid-cols-4 gap-1 p-1 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10">
+                     compactes qu'avant (6 colonnes max → 10). Espace entre les vignettes
+                     agrandi le 14/09/2026 (gap-1 → gap-3, padding du conteneur assorti). */
+                  <div className="grid grid-cols-4 gap-3 p-3 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10">
                     {filteredPhotos.map((photo) => {
                       const selected = selectedPhotoIds.has(photo.id);
                       return (
