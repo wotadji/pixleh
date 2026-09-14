@@ -2054,156 +2054,93 @@ export function GalleryManager({
                       vignettes) — une barre d'actions groupées (déplacer vers un set,
                       supprimer) qui prend sa place. */}
                   <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-gray-200 bg-gray-50/95 px-3 py-2 backdrop-blur-sm">
-                    {selectedPhotoIds.size > 0 ? (
-                      <>
-                        <div className="flex items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={clearSelection}
-                            className="flex h-6 w-6 items-center justify-center rounded-full text-lg leading-none text-gray-500 hover:bg-gray-200 hover:text-gray-800"
-                            aria-label={t("gm.clearSelection")}
-                          >
-                            ×
-                          </button>
-                          <p className="text-xs font-medium text-gray-700">
-                            {selectedPhotoIds.size} {t("gm.selectedCountLabel")}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {assignableCollections.length > 0 && (
-                            <div className="relative">
+                    {/* Barre normale toujours visible en haut (compteur + vue + tri) —
+                        les actions groupées sur la sélection sont désormais dans le pop-up
+                        flottant en bas de l'écran (voir plus bas, demande d'Adriel du
+                        14/09/2026, façon concurrence), plus dans cette barre du haut. */}
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={filteredPhotos.length > 0 && filteredPhotos.every((p) => selectedPhotoIds.has(p.id))}
+                        onChange={toggleSelectAllFiltered}
+                        className="h-4 w-4 rounded-sm border-gray-300"
+                        aria-label={t("gm.selectAll")}
+                      />
+                      <p className="text-xs text-gray-500">
+                        {filteredPhotos.length} {t("gm.photosCountLabel")}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                    {/* Toggle grille/liste (demande d'Adriel le 13/09/2026) — même charte
+                        que la bascule vue de /admin/guests. */}
+                    <div className="flex items-center rounded-lg border border-gray-200 p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setPhotoViewMode("grid")}
+                        title={t("gm.viewGrid")}
+                        aria-label={t("gm.viewGrid")}
+                        className={`rounded-md p-1.5 ${photoViewMode === "grid" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+                      >
+                        <IconGridView />
+                      </button>
+                      {/* 3e mode : grille agrandie, vignettes plus grandes (demande
+                          d'Adriel le 14/09/2026). */}
+                      <button
+                        type="button"
+                        onClick={() => setPhotoViewMode("gridLarge")}
+                        title={t("gm.viewGridLarge")}
+                        aria-label={t("gm.viewGridLarge")}
+                        className={`rounded-md p-1.5 ${photoViewMode === "gridLarge" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+                      >
+                        <IconGridLarge />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPhotoViewMode("list")}
+                        title={t("gm.viewList")}
+                        aria-label={t("gm.viewList")}
+                        className={`rounded-md p-1.5 ${photoViewMode === "list" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+                      >
+                        <IconListView />
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setSortMenuOpen((v) => !v)}
+                        title={`${t("gm.sortBy")}: ${SORT_OPTIONS.find((o) => o.key === sortBy)?.label}`}
+                        className="btn-secondary flex items-center gap-1.5 text-xs"
+                      >
+                        <IconSort />
+                        {/* Libellé complet masqué sur mobile (place limitée dans la barre
+                            d'outils grille) — icône seule + tooltip, comme les boutons du
+                            header (demande d'Adriel, 11/08/2026). */}
+                        <span className="hidden sm:inline">
+                          {t("gm.sortBy")}: {SORT_OPTIONS.find((o) => o.key === sortBy)?.label}
+                        </span>
+                        <span className="text-gray-400">▾</span>
+                      </button>
+                      {sortMenuOpen && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setSortMenuOpen(false)} />
+                          <div className="absolute right-0 top-9 z-20 w-60 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                            {SORT_OPTIONS.map((o) => (
                               <button
+                                key={o.key}
                                 type="button"
-                                disabled={bulkActing}
-                                onClick={() => setBulkMoveMenuOpen((v) => !v)}
-                                className="btn-secondary flex items-center gap-1.5 text-xs"
+                                onClick={() => changeSortOrder(o.key)}
+                                className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-gray-50 ${
+                                  sortBy === o.key ? "font-medium text-brand-600" : "text-gray-700"
+                                }`}
                               >
-                                {t("gm.moveToSet")}
-                                <span className="text-gray-400">▾</span>
+                                {o.label}
                               </button>
-                              {bulkMoveMenuOpen && (
-                                <>
-                                  <div className="fixed inset-0 z-10" onClick={() => setBulkMoveMenuOpen(false)} />
-                                  <div className="absolute right-0 top-9 z-20 w-52 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
-                                    <button
-                                      type="button"
-                                      onClick={() => bulkMoveSelected("")}
-                                      className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50"
-                                    >
-                                      {t("gm.noSetOption")}
-                                    </button>
-                                    {assignableCollections.map((c) => (
-                                      <button
-                                        key={c.id}
-                                        type="button"
-                                        onClick={() => bulkMoveSelected(c.id)}
-                                        className="block w-full truncate px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50"
-                                      >
-                                        {c.title}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          )}
-                          <button
-                            type="button"
-                            disabled={bulkActing}
-                            onClick={() => setBulkDeleteConfirm(true)}
-                            className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
-                          >
-                            {t("gm.delete")}
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="checkbox"
-                            checked={filteredPhotos.length > 0 && filteredPhotos.every((p) => selectedPhotoIds.has(p.id))}
-                            onChange={toggleSelectAllFiltered}
-                            className="h-4 w-4 rounded-sm border-gray-300"
-                            aria-label={t("gm.selectAll")}
-                          />
-                          <p className="text-xs text-gray-500">
-                            {filteredPhotos.length} {t("gm.photosCountLabel")}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                        {/* Toggle grille/liste (demande d'Adriel le 13/09/2026) — même charte
-                            que la bascule vue de /admin/guests. */}
-                        <div className="flex items-center rounded-lg border border-gray-200 p-0.5">
-                          <button
-                            type="button"
-                            onClick={() => setPhotoViewMode("grid")}
-                            title={t("gm.viewGrid")}
-                            aria-label={t("gm.viewGrid")}
-                            className={`rounded-md p-1.5 ${photoViewMode === "grid" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
-                          >
-                            <IconGridView />
-                          </button>
-                          {/* 3e mode : grille agrandie, vignettes plus grandes (demande
-                              d'Adriel le 14/09/2026). */}
-                          <button
-                            type="button"
-                            onClick={() => setPhotoViewMode("gridLarge")}
-                            title={t("gm.viewGridLarge")}
-                            aria-label={t("gm.viewGridLarge")}
-                            className={`rounded-md p-1.5 ${photoViewMode === "gridLarge" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
-                          >
-                            <IconGridLarge />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setPhotoViewMode("list")}
-                            title={t("gm.viewList")}
-                            aria-label={t("gm.viewList")}
-                            className={`rounded-md p-1.5 ${photoViewMode === "list" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
-                          >
-                            <IconListView />
-                          </button>
-                        </div>
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() => setSortMenuOpen((v) => !v)}
-                            title={`${t("gm.sortBy")}: ${SORT_OPTIONS.find((o) => o.key === sortBy)?.label}`}
-                            className="btn-secondary flex items-center gap-1.5 text-xs"
-                          >
-                            <IconSort />
-                            {/* Libellé complet masqué sur mobile (place limitée dans la barre
-                                d'outils grille) — icône seule + tooltip, comme les boutons du
-                                header (demande d'Adriel, 11/08/2026). */}
-                            <span className="hidden sm:inline">
-                              {t("gm.sortBy")}: {SORT_OPTIONS.find((o) => o.key === sortBy)?.label}
-                            </span>
-                            <span className="text-gray-400">▾</span>
-                          </button>
-                          {sortMenuOpen && (
-                            <>
-                              <div className="fixed inset-0 z-10" onClick={() => setSortMenuOpen(false)} />
-                              <div className="absolute right-0 top-9 z-20 w-60 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
-                                {SORT_OPTIONS.map((o) => (
-                                  <button
-                                    key={o.key}
-                                    type="button"
-                                    onClick={() => changeSortOrder(o.key)}
-                                    className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-gray-50 ${
-                                      sortBy === o.key ? "font-medium text-brand-600" : "text-gray-700"
-                                    }`}
-                                  >
-                                    {o.label}
-                                  </button>
-                                ))}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                        </div>
-                      </>
-                    )}
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    </div>
                   </div>
 
                   {photoViewMode === "list" ? (
@@ -2500,6 +2437,90 @@ export function GalleryManager({
               )}
               </div>
             </main>
+          </div>
+        )}
+
+        {/* Pop-up flottant en bas de l'écran dès qu'au moins une photo est sélectionnée
+            (demande d'Adriel le 14/09/2026, façon concurrence, cf. capture fournie) —
+            remplace l'ancienne barre d'actions groupées qui prenait la place de la barre
+            d'outils normale en haut de la grille. */}
+        {activeTab === "photos" && selectedPhotoIds.size > 0 && (
+          <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
+            <div className="pointer-events-auto flex items-center gap-4 rounded-full bg-gray-900 px-5 py-2.5 text-white shadow-2xl">
+              <div className="flex items-center gap-3 whitespace-nowrap text-sm">
+                <span className="font-semibold">{selectedPhotoIds.size}</span>
+                <span className="text-white/60">{t("gm.photosCountLabel")}</span>
+                <button
+                  type="button"
+                  onClick={toggleSelectAllFiltered}
+                  className="text-brand-300 hover:text-brand-200 hover:underline"
+                >
+                  {t("gm.selectAll")}
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                {assignableCollections.length > 0 && (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      disabled={bulkActing}
+                      onClick={() => setBulkMoveMenuOpen((v) => !v)}
+                      title={t("gm.moveToSet")}
+                      aria-label={t("gm.moveToSet")}
+                      className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-60"
+                    >
+                      <IconFolderMove />
+                    </button>
+                    {bulkMoveMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setBulkMoveMenuOpen(false)} />
+                        <div className="absolute bottom-11 left-1/2 z-20 w-52 -translate-x-1/2 rounded-lg border border-gray-200 bg-white py-1 text-left shadow-lg">
+                          <button
+                            type="button"
+                            onClick={() => bulkMoveSelected("")}
+                            className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            {t("gm.noSetOption")}
+                          </button>
+                          {assignableCollections.map((c) => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => bulkMoveSelected(c.id)}
+                              className="block w-full truncate px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50"
+                            >
+                              {c.title}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  disabled={bulkActing}
+                  onClick={() => setBulkDeleteConfirm(true)}
+                  title={t("gm.delete")}
+                  aria-label={t("gm.delete")}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 disabled:opacity-60"
+                >
+                  <IconTrashCircle />
+                </button>
+              </div>
+              <div className="h-6 w-px bg-white/20" />
+              <button
+                type="button"
+                onClick={clearSelection}
+                title={t("gm.clearSelection")}
+                aria-label={t("gm.clearSelection")}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-white/60 hover:bg-white/10 hover:text-white"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
           </div>
         )}
 
@@ -4929,6 +4950,25 @@ function IconGridView() {
   );
 }
 
+/** Icônes du pop-up flottant de sélection multiple (demande d'Adriel le 14/09/2026). */
+function IconFolderMove() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconTrashCircle() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path
+        d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0 1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 function IconGridLarge() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
