@@ -120,8 +120,14 @@ export function DashboardSidebar({
             (retour d'Adriel le 15/09/2026) — on masque le wordmark en CSS (md:hidden,
             comme le reste des libellés de cette sidebar) pour ne garder que le mark
             (façon favicon) à partir du breakpoint desktop, tout en gardant le logo
-            complet sur mobile où la sidebar reste toujours en pleine largeur. */}
-        <PixlehLogo size={24} wordmarkClassName={collapsed ? "md:hidden" : ""} />
+            complet sur mobile où la sidebar reste toujours en pleine largeur. Le mark
+            seul étant beaucoup plus petit visuellement que l'icône + le mot, on
+            l'agrandit (scale-150, en CSS via md: comme le reste de ce composant pour
+            ne pas affecter le tiroir mobile) — retour d'Adriel : "le logo est invisible
+            du moins trop petit". */}
+        <span className={collapsed ? "md:scale-150" : ""}>
+          <PixlehLogo size={24} wordmarkClassName={collapsed ? "md:hidden" : ""} />
+        </span>
         <button
           type="button"
           onClick={onClose}
