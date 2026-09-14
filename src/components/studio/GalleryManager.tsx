@@ -2528,7 +2528,7 @@ export function GalleryManager({
             hauteur — px-8/gap-8 pour la largeur, hauteur gardée compacte (icônes 40px). */}
         {activeTab === "photos" && selectedPhotoIds.size > 0 && (
           <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
-            <div className="pointer-events-auto flex items-center gap-8 rounded-full border border-white/10 bg-gray-900 px-8 py-3 text-white shadow-2xl">
+            <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-white/10 bg-gray-900 px-8 py-3 text-white shadow-2xl">
               <div className="flex items-center gap-3 whitespace-nowrap text-sm">
                 <span className="font-semibold">{selectedPhotoIds.size}</span>
                 <span className="text-white/60">{t("gm.photosCountLabel")}</span>
