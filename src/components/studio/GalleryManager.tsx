@@ -1849,11 +1849,15 @@ export function GalleryManager({
                 onClick={() => setPhotosPanelOpen(true)}
                 title={t("gm.showPhotosPanel")}
                 aria-label={t("gm.showPhotosPanel")}
-                className="flex shrink-0 items-center justify-center gap-1.5 border-b border-gray-200 bg-gray-50 px-3 py-2 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 md:w-10 md:flex-col md:gap-2 md:border-b-0 md:border-r md:py-3"
+                className="group flex shrink-0 items-center justify-center gap-1.5 border-b border-gray-200 bg-gray-50 px-3 py-2 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 md:w-10 md:flex-col md:gap-2 md:border-b-0 md:border-r md:py-3"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                {/* Bordure ronde autour de la flèche (demande d'Adriel le 15/09/2026) —
+                    la distingue mieux comme bouton plutôt qu'une simple icône flottante. */}
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-gray-300 group-hover:border-gray-400">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
                 <span className="md:[writing-mode:vertical-rl]">{t("gm.setsLabel")}</span>
               </button>
             )}
