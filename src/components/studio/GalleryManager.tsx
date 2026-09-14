@@ -249,6 +249,11 @@ export function GalleryManager({
   const [marqueeRect, setMarqueeRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [draggedPhotoId, setDraggedPhotoId] = useState<string | null>(null);
   const [dragOverPhotoId, setDragOverPhotoId] = useState<string | null>(null);
+  // Glisser-déposer pour réordonner les sessions (demande d'Adriel le 14/09/2026, même
+  // principe que pour les photos) — pas d'état local pour gallery.collections (comme le
+  // reste des mutations de sets dans ce composant), on persiste puis router.refresh().
+  const [draggedCollectionId, setDraggedCollectionId] = useState<string | null>(null);
+  const [dragOverCollectionId, setDragOverCollectionId] = useState<string | null>(null);
   // Visionneuse plein écran (zoom) : clic sur une vignette de la grille Photos ouvre la photo
   // en grand plutôt que de la (dé)sélectionner (retour d'Adriel, 21/08/2026 — la sélection se
   // fait désormais uniquement via la case à cocher qui apparaît au survol de la vignette).
@@ -747,6 +752,37 @@ export function GalleryManager({
   async function deletePhoto(photoId: string) {
     await fetch(`/api/galleries/${gallery.id}/photos/${photoId}`, { method: "DELETE" });
     router.refresh();
+  }
+
+  /** Glisser-déposer d'une session (Collection) sur une autre pour réordonner la liste —
+   * demande d'Adriel le 14/09/2026. Comme le reste des mutations de sets dans ce composant
+   * (renommer, supprimer...), pas de mise à jour optimiste locale : on persiste le nouvel
+   * ordre puis on laisse router.refresh() rafraîchir gallery.collections depuis le serveur. */
+  async function handleCollectionDrop(targetCollectionId: string) {
+    const draggedId = draggedCollectionId;
+    setDraggedCollectionId(null);
+    setDragOverCollectionId(null);
+    if (!draggedId || draggedId === targetCollectionId) return;
+
+    const current = gallery.collections;
+    const dragged = current.find((c) => c.id === draggedId);
+    if (!dragged) return;
+    const without = current.filter((c) => c.id !== draggedId);
+    const targetIndex = without.findIndex((c) => c.id === targetCollectionId);
+    const reordered =
+      targetIndex === -1
+        ? [...without, dragged]
+        : [...without.slice(0, targetIndex), dragged, ...without.slice(targetIndex)];
+
+    try {
+      await fetch(`/api/galleries/${gallery.id}/collections/reorder`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ collectionIds: reordered.map((c) => c.id) }),
+      });
+    } finally {
+      router.refresh();
+    }
   }
 
   async function movePhoto(photoId: string, collectionId: string) {
@@ -1808,22 +1844,10 @@ export function GalleryManager({
             )}
             {photosPanelOpen && (
             <aside className="max-h-40 shrink-0 overflow-y-auto border-b border-gray-200 bg-gray-50 p-3 md:max-h-none md:w-56 md:border-b-0 md:border-r">
-              <button
-                onClick={() => setActiveSet(null)}
-                className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm ${
-                  activeSet === null ? "bg-brand-100 text-brand-700" : "hover:bg-gray-100"
-                }`}
-              >
-                <span>{t("gm.allPhotos")}</span>
-                <span className="text-xs text-gray-400">{localPhotos.length}</span>
-              </button>
-              {unsortedCount > 0 && gallery.collections.length > 0 && (
-                <p className="px-3 pb-1 text-xs text-gray-400">
-                  {unsortedCount} {t("gm.noSetPhotos")}
-                </p>
-              )}
-
-              <div className="mb-1 mt-3 flex items-center justify-between px-2">
+              {/* En-tête en tout premier (demande d'Adriel le 14/09/2026, façon
+                  concurrence) : "Toutes les photos" et les sessions suivent juste en
+                  dessous, dans une seule liste. */}
+              <div className="mb-1 flex items-center justify-between px-2">
                 <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
                   {t("gm.setsLabel")}
                   {gallery.collections.length > 0 && (
@@ -1843,10 +1867,32 @@ export function GalleryManager({
                 </button>
               </div>
               {/* Ligne de séparation après chaque session (demande d'Adriel le 13/09/2026) :
-                  `divide-y` place un trait fin entre les sessions sans en ajouter un après la
-                  dernière, plus propre qu'un `border-b` sur chaque ligne. Ce bloc entier est
-                  déjà masqué avec le reste du panneau via photosPanelOpen ci-dessus. */}
+                  `divide-y` place un trait fin entre les items sans en ajouter un après le
+                  dernier, plus propre qu'un `border-b` sur chaque ligne. Ce bloc entier est
+                  déjà masqué avec le reste du panneau via photosPanelOpen ci-dessus.
+                  "Toutes les photos" est maintenant le premier item de cette liste (avant,
+                  il était séparé au-dessus de l'en-tête) et partage le même style "pastille à
+                  bordure ronde" quand actif que les sessions ci-dessous (demande d'Adriel le
+                  14/09/2026, façon concurrence). */}
               <div className="mt-1 divide-y divide-gray-200">
+              <div className="pb-1">
+                <button
+                  onClick={() => setActiveSet(null)}
+                  className={`my-0.5 flex w-full items-center justify-between rounded-lg border-2 px-3 py-2 text-left text-sm ${
+                    activeSet === null
+                      ? "border-brand-500 bg-white font-medium text-brand-700"
+                      : "border-transparent hover:bg-gray-100"
+                  }`}
+                >
+                  <span>{t("gm.allPhotos")}</span>
+                  <span className="text-xs text-gray-400">{localPhotos.length}</span>
+                </button>
+                {unsortedCount > 0 && gallery.collections.length > 0 && (
+                  <p className="px-3 pb-1 pt-1 text-xs text-gray-400">
+                    {unsortedCount} {t("gm.noSetPhotos")}
+                  </p>
+                )}
+              </div>
               {gallery.collections.map((c) => {
                 // Portfolio/Réseaux sociaux : compte sur le tag (portfolioTagged/socialTagged),
                 // pas sur collectionId — voir togglePhotoTag et le commentaire sur ces champs
@@ -1857,11 +1903,37 @@ export function GalleryManager({
                     ? localPhotos.filter((p) => p.socialTagged).length
                     : localPhotos.filter((p) => p.collectionId === c.id).length;
                 return (
-                  <div key={c.id} className="group flex items-center">
+                  <div
+                    key={c.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = "move";
+                      setDraggedCollectionId(c.id);
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                      if (dragOverCollectionId !== c.id) setDragOverCollectionId(c.id);
+                    }}
+                    onDragLeave={() => setDragOverCollectionId((id) => (id === c.id ? null : id))}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      handleCollectionDrop(c.id);
+                    }}
+                    onDragEnd={() => {
+                      setDraggedCollectionId(null);
+                      setDragOverCollectionId(null);
+                    }}
+                    className={`group flex items-center ${draggedCollectionId === c.id ? "opacity-40" : ""} ${
+                      dragOverCollectionId === c.id && draggedCollectionId !== c.id ? "bg-brand-50" : ""
+                    }`}
+                  >
                     <button
                       onClick={() => setActiveSet(c.id)}
-                      className={`my-0.5 flex flex-1 items-center justify-between rounded-lg px-3 py-2 text-left text-sm ${
-                        activeSet === c.id ? "bg-brand-100 text-brand-700" : "hover:bg-gray-100"
+                      className={`my-0.5 flex flex-1 items-center justify-between rounded-lg border-2 px-3 py-2 text-left text-sm ${
+                        activeSet === c.id
+                          ? "border-brand-500 bg-white font-medium text-brand-700"
+                          : "border-transparent hover:bg-gray-100"
                       }`}
                     >
                       <span className="flex min-w-0 items-center gap-1.5">
