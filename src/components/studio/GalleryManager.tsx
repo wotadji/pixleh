@@ -994,6 +994,18 @@ export function GalleryManager({
     }
   }
 
+  // Télécharge les photos sélectionnées en ZIP (demande d'Adriel le 15/09/2026, pop-up
+  // flottant de sélection) — réutilise la route /download-all déjà utilisée par le
+  // panneau de téléchargement de la galerie publique (src/components/gallery/GalleryView.tsx),
+  // qui accepte un paramètre `ids` pour ne zipper qu'un sous-ensemble des photos. Le studio
+  // n'est jamais bloqué par allowDownload/downloadLimit (réservés aux clients/invités, voir
+  // la route), donc pas de vérification côté client ici.
+  function downloadSelectedPhotos() {
+    if (selectedPhotoIds.size === 0) return;
+    const ids = Array.from(selectedPhotoIds).join(",");
+    window.open(`/api/galleries/${gallery.id}/download-all?ids=${ids}`, "_blank");
+  }
+
   function openAddSetModal() {
     setSetModal({ mode: "add", value: "", visibility: ["CLIENT"] });
   }
@@ -2543,6 +2555,15 @@ export function GalleryManager({
               </div>
               <span className="h-7 w-px bg-white/15" />
               <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={downloadSelectedPhotos}
+                  title={t("gm.downloadSelected")}
+                  aria-label={t("gm.downloadSelected")}
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                >
+                  <IconDownloadCircle />
+                </button>
                 {assignableCollections.length > 0 && (
                   <div className="relative">
                     <button
@@ -5031,6 +5052,16 @@ function IconFolderMove() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+/** Bouton "Télécharger la sélection" du pop-up (demande d'Adriel le 15/09/2026). */
+function IconDownloadCircle() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 4v11" strokeLinecap="round" />
+      <path d="M7.5 11.5 12 16l4.5-4.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 19h14" strokeLinecap="round" />
     </svg>
   );
 }
