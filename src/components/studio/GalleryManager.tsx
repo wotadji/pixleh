@@ -2519,20 +2519,21 @@ export function GalleryManager({
         {/* Pop-up flottant en bas de l'écran dès qu'au moins une photo est sélectionnée
             (demande d'Adriel le 14/09/2026, façon concurrence, cf. capture fournie) —
             remplace l'ancienne barre d'actions groupées qui prenait la place de la barre
-            d'outils normale en haut de la grille. */}
+            d'outils normale en haut de la grille.
+            Retour d'Adriel (14/09/2026) : fond plein (pas de transparence/flou, moins
+            lisible sur une grille chargée) et élargir la barre plutôt que l'agrandir en
+            hauteur — px-8/gap-8 pour la largeur, hauteur gardée compacte (icônes 40px). */}
         {activeTab === "photos" && selectedPhotoIds.size > 0 && (
           <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
-            {/* Agrandi + fond semi-transparent avec flou (demande d'Adriel le 14/09/2026) :
-                bg-gray-900/80 + backdrop-blur au lieu d'un noir plein, pour laisser deviner
-                les photos derrière tout en gardant le texte lisible. */}
-            <div className="pointer-events-auto flex items-center gap-5 rounded-full bg-gray-900/80 px-7 py-4 text-white shadow-2xl backdrop-blur-md">
-              <div className="flex items-center gap-3 whitespace-nowrap text-base">
+            <div className="pointer-events-auto flex items-center gap-8 rounded-full border border-white/10 bg-gray-900 px-8 py-3 text-white shadow-2xl">
+              <div className="flex items-center gap-3 whitespace-nowrap text-sm">
                 <span className="font-semibold">{selectedPhotoIds.size}</span>
                 <span className="text-white/60">{t("gm.photosCountLabel")}</span>
+                <span className="h-4 w-px bg-white/15" />
                 <button
                   type="button"
                   onClick={toggleSelectAllFiltered}
-                  className="text-brand-300 hover:text-brand-200 hover:underline"
+                  className="font-medium text-brand-300 transition-colors hover:text-brand-200 hover:underline"
                 >
                   {t("gm.selectAll")}
                 </button>
@@ -2546,14 +2547,14 @@ export function GalleryManager({
                       onClick={() => setBulkMoveMenuOpen((v) => !v)}
                       title={t("gm.moveToSet")}
                       aria-label={t("gm.moveToSet")}
-                      className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-60"
+                      className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-500 text-white transition-colors hover:bg-brand-600 disabled:opacity-60"
                     >
                       <IconFolderMove />
                     </button>
                     {bulkMoveMenuOpen && (
                       <>
                         <div className="fixed inset-0 z-10" onClick={() => setBulkMoveMenuOpen(false)} />
-                        <div className="absolute bottom-14 left-1/2 z-20 w-52 -translate-x-1/2 rounded-lg border border-gray-200 bg-white py-1 text-left shadow-lg">
+                        <div className="absolute bottom-12 left-1/2 z-20 w-52 -translate-x-1/2 rounded-lg border border-gray-200 bg-white py-1 text-left shadow-lg">
                           <button
                             type="button"
                             onClick={() => bulkMoveSelected("")}
@@ -2582,20 +2583,20 @@ export function GalleryManager({
                   onClick={() => setBulkDeleteConfirm(true)}
                   title={t("gm.delete")}
                   aria-label={t("gm.delete")}
-                  className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 disabled:opacity-60"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white transition-colors hover:bg-red-600 disabled:opacity-60"
                 >
                   <IconTrashCircle />
                 </button>
               </div>
-              <div className="h-8 w-px bg-white/20" />
+              <div className="h-7 w-px bg-white/15" />
               <button
                 type="button"
                 onClick={clearSelection}
                 title={t("gm.clearSelection")}
                 aria-label={t("gm.clearSelection")}
-                className="flex h-10 w-10 items-center justify-center rounded-full text-white/60 hover:bg-white/10 hover:text-white"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-white/50 transition-colors hover:bg-white/10 hover:text-white"
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
                 </svg>
               </button>
