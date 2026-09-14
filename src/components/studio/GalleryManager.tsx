@@ -301,7 +301,6 @@ export function GalleryManager({
   const [videoUploadMode, setVideoUploadMode] = useState<"link" | "upload">("link");
   const [videoUploadTitle, setVideoUploadTitle] = useState("");
   const [videoUploading, setVideoUploading] = useState(false);
-  const videoFileInputRef = useRef<HTMLInputElement | null>(null);
   // Renommage d'une vidéo déjà ajoutée à la liste (titre uniquement, voir PATCH
   // /api/galleries/[id]/videos/[videoId]) — même principe que le renommage d'un set.
   const [editingVideoId, setEditingVideoId] = useState<string | null>(null);
@@ -735,6 +734,28 @@ export function GalleryManager({
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     onDrop,
     accept: { "image/*": [] },
+    noClick: true,
+    noKeyboard: true,
+  });
+
+  // Onglet Vidéo, mode "Uploader un fichier" : même système de dépose/sélection que la
+  // grille Photos ci-dessus (react-dropzone, zone cliquable + glisser-déposer), demande
+  // d'Adriel le 15/09/2026 — remplace l'ancien <input type="file"> natif du navigateur.
+  const onVideoDrop = useCallback((accepted: File[]) => {
+    const file = accepted[0];
+    if (file) uploadVideoFile(file);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const {
+    getRootProps: getVideoRootProps,
+    getInputProps: getVideoInputProps,
+    isDragActive: isVideoDragActive,
+    open: openVideoDialog,
+  } = useDropzone({
+    onDrop: onVideoDrop,
+    accept: { "video/*": [] },
+    multiple: false,
     noClick: true,
     noKeyboard: true,
   });
@@ -1253,7 +1274,6 @@ export function GalleryManager({
       }
       setVideos((list) => [...(list || []), data.video]);
       setVideoUploadTitle("");
-      if (videoFileInputRef.current) videoFileInputRef.current.value = "";
     } catch {
       setVideoError(t("gm.networkError"));
     } finally {
@@ -3883,19 +3903,30 @@ export function GalleryManager({
                       value={videoUploadTitle}
                       onChange={(e) => setVideoUploadTitle(e.target.value)}
                     />
-                    <input
-                      ref={videoFileInputRef}
-                      type="file"
-                      accept="video/*"
-                      disabled={videoUploading}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) uploadVideoFile(file);
-                      }}
-                      className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-full file:border-0 file:bg-gray-900 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white hover:file:bg-gray-700"
-                    />
+                    {/* Même zone de glisser-déposer que la grille Photos (voir getRootProps
+                        ci-dessus), plutôt que l'ancien <input type="file"> natif — demande
+                        d'Adriel le 15/09/2026 ("le meme systeme d'upload des images"). */}
+                    <div
+                      {...getVideoRootProps()}
+                      className={`relative flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
+                        isVideoDragActive ? "border-brand-400 bg-brand-50" : "border-gray-300 bg-gray-50"
+                      } ${videoUploading ? "pointer-events-none opacity-60" : ""}`}
+                    >
+                      <input {...getVideoInputProps()} disabled={videoUploading} />
+                      <IconUpload />
+                      <p className="text-sm text-gray-600">
+                        {isVideoDragActive ? t("gm.dropHere") : t("video.dropHere")}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={openVideoDialog}
+                        disabled={videoUploading}
+                        className="btn-secondary text-xs"
+                      >
+                        {videoUploading ? t("video.uploading") : t("video.chooseFile")}
+                      </button>
+                    </div>
                     {videoError && <p className="text-sm text-red-600">{videoError}</p>}
-                    {videoUploading && <p className="text-sm text-gray-500">{t("video.uploading")}</p>}
                   </div>
                 )}
               </div>
