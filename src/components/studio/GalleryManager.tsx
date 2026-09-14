@@ -226,7 +226,9 @@ export function GalleryManager({
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   // Affichage de la grille Photos : "grid" (vignettes carrées, historique) ou "list" (une
   // ligne par photo avec nom + métadonnées) — demande d'Adriel le 13/09/2026.
-  const [photoViewMode, setPhotoViewMode] = useState<"grid" | "list">("grid");
+  // 3 modes d'affichage de la grille Photos (demande d'Adriel le 14/09/2026) : grille
+  // compacte, grille agrandie (vignettes plus grandes) et liste.
+  const [photoViewMode, setPhotoViewMode] = useState<"grid" | "gridLarge" | "list">("grid");
   // Panneau latéral "Photos" (Toutes les photos + Sessions), onglet Photos — masqué par
   // défaut à l'ouverture d'une galerie (demande d'Adriel le 14/09/2026, façon concurrence) ;
   // un bouton permet de l'afficher/masquer en entier (pas seulement la liste des sessions).
@@ -2002,6 +2004,17 @@ export function GalleryManager({
                           >
                             <IconGridView />
                           </button>
+                          {/* 3e mode : grille agrandie, vignettes plus grandes (demande
+                              d'Adriel le 14/09/2026). */}
+                          <button
+                            type="button"
+                            onClick={() => setPhotoViewMode("gridLarge")}
+                            title={t("gm.viewGridLarge")}
+                            aria-label={t("gm.viewGridLarge")}
+                            className={`rounded-md p-1.5 ${photoViewMode === "gridLarge" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+                          >
+                            <IconGridLarge />
+                          </button>
                           <button
                             type="button"
                             onClick={() => setPhotoViewMode("list")}
@@ -2175,15 +2188,23 @@ export function GalleryManager({
                   /* Vignettes plus petites, façon concurrence (demande d'Adriel le
                      13/09/2026) : plus de colonnes à chaque palier pour des miniatures plus
                      compactes qu'avant (6 colonnes max → 10). Espace entre les vignettes
-                     agrandi le 14/09/2026 (gap-1 → gap-3, padding du conteneur assorti). */
-                  <div className="grid grid-cols-4 gap-3 p-3 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10">
+                     agrandi le 14/09/2026 (gap-1 → gap-3, padding du conteneur assorti).
+                     3e mode "gridLarge" ajouté le 14/09/2026 : moins de colonnes pour des
+                     vignettes bien plus grandes, coins arrondis sur toutes les vignettes. */
+                  <div
+                    className={`grid gap-3 p-3 ${
+                      photoViewMode === "gridLarge"
+                        ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
+                        : "grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10"
+                    }`}
+                  >
                     {filteredPhotos.map((photo) => {
                       const selected = selectedPhotoIds.has(photo.id);
                       return (
                         <div
                           key={photo.id}
                           onClick={() => setLightboxPhotoId(photo.id)}
-                          className={`group relative aspect-square cursor-pointer overflow-hidden bg-gray-100 ${
+                          className={`group relative aspect-square cursor-pointer overflow-hidden rounded-lg bg-gray-100 ${
                             selected ? "ring-2 ring-inset ring-brand-500" : ""
                           }`}
                         >
@@ -4731,6 +4752,14 @@ function IconGridView() {
   );
 }
 
+function IconGridLarge() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="3.5" y="3.5" width="7.5" height="17" rx="1.5" />
+      <rect x="13" y="3.5" width="7.5" height="17" rx="1.5" />
+    </svg>
+  );
+}
 function IconListView() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
