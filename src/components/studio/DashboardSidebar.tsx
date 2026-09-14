@@ -114,8 +114,14 @@ export function DashboardSidebar({
         collapsed ? "md:w-[76px] md:overflow-x-hidden md:p-3" : "md:w-64"
       } ${open ? "translate-x-0" : ""}`}
     >
-      <div className="mb-5 flex items-center justify-between px-1">
-        <PixlehLogo size={24} />
+      <div className={`mb-5 flex items-center px-1 ${collapsed ? "md:justify-center" : "justify-between"}`}>
+        {/* En mode icônes desktop (galerie ouverte, sidebar repliée à 76px), le mot
+            "pixleh" n'a pas la place de s'afficher entier et se coupait en "pix"
+            (retour d'Adriel le 15/09/2026) — on masque le wordmark en CSS (md:hidden,
+            comme le reste des libellés de cette sidebar) pour ne garder que le mark
+            (façon favicon) à partir du breakpoint desktop, tout en gardant le logo
+            complet sur mobile où la sidebar reste toujours en pleine largeur. */}
+        <PixlehLogo size={24} wordmarkClassName={collapsed ? "md:hidden" : ""} />
         <button
           type="button"
           onClick={onClose}

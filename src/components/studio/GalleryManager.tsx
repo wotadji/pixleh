@@ -1755,8 +1755,11 @@ export function GalleryManager({
               croire qu'on peut relancer un envoi par-dessus celui en cours, la barre de
               progression prenant le relais visuellement à la place du bouton. */}
           {!uploading && (
+            // Icône upload (au lieu du "+") + libellé sans "+" dans le dictionnaire —
+            // il y avait deux "+" visibles sur ce bouton (icône ET texte), retour
+            // d'Adriel le 15/09/2026, façon concurrence (cf. capture fournie).
             <button onClick={open} title={t("gm.addMedia")} className="btn-primary flex items-center gap-1.5 text-sm">
-              <IconAddMedia />
+              <IconUpload />
               <span className="hidden sm:inline">{t("gm.addMedia")}</span>
             </button>
           )}
@@ -4983,14 +4986,6 @@ function IconRefreshThumbs({ className }: { className?: string }) {
     >
       <path d="M3 12a9 9 0 0115.4-6.36M21 12a9 9 0 01-15.4 6.36" strokeLinecap="round" />
       <path d="M18.6 3.6v4.5h-4.5M5.4 20.4v-4.5h4.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconAddMedia() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 5v14M5 12h14" strokeLinecap="round" />
     </svg>
   );
 }

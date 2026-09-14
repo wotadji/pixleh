@@ -7,10 +7,15 @@ export function PixlehLogo({
   showWordmark = true,
   size = 28,
   className = "",
+  wordmarkClassName = "",
 }: {
   showWordmark?: boolean;
   size?: number;
   className?: string;
+  /** Classes additionnelles sur le texte "pixleh" (ex. `md:hidden` pour le masquer
+   * en CSS sans démonter le mark, quand un même composant doit rester intégral en
+   * mobile mais se replier en icône seule à partir d'un breakpoint desktop). */
+  wordmarkClassName?: string;
 }) {
   return (
     <span className={`inline-flex items-center gap-2 ${className}`}>
@@ -44,7 +49,7 @@ export function PixlehLogo({
         <circle cx="260" cy="245" r="25" fill="url(#pixlehGrad)" />
         <circle cx="305" cy="215" r="5" fill="url(#pixlehGrad)" />
       </svg>
-      {showWordmark && <span className="font-serif text-xl font-semibold">pixleh</span>}
+      {showWordmark && <span className={`font-serif text-xl font-semibold ${wordmarkClassName}`}>pixleh</span>}
     </span>
   );
 }
