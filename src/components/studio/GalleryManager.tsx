@@ -227,9 +227,10 @@ export function GalleryManager({
   // Affichage de la grille Photos : "grid" (vignettes carrées, historique) ou "list" (une
   // ligne par photo avec nom + métadonnées) — demande d'Adriel le 13/09/2026.
   const [photoViewMode, setPhotoViewMode] = useState<"grid" | "list">("grid");
-  // Panneau "Sessions" (sidebar Photos) repliable — replié par défaut (demande d'Adriel le
-  // 13/09/2026, façon concurrence) pour ne pas surcharger la barre latérale.
-  const [sessionsExpanded, setSessionsExpanded] = useState(false);
+  // Panneau latéral "Photos" (Toutes les photos + Sessions), onglet Photos — masqué par
+  // défaut à l'ouverture d'une galerie (demande d'Adriel le 14/09/2026, façon concurrence) ;
+  // un bouton permet de l'afficher/masquer en entier (pas seulement la liste des sessions).
+  const [photosPanelOpen, setPhotosPanelOpen] = useState(false);
   // Sélection multiple (grille Photos) : cases à cocher sur les vignettes + barre d'actions
   // groupées (déplacer vers un set, supprimer) qui remplace la barre d'outils normale tant
   // qu'au moins une photo est sélectionnée.
@@ -1644,11 +1645,40 @@ export function GalleryManager({
           // qu'un grand nombre de sets ne pousse pas toute la grille hors champ ; revient à
           // la disposition côte à côte d'origine à partir de md.
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden md:flex-row">
-            {/* Panneau Sets */}
+            {/* Panneau Sets/Sessions — masqué par défaut (voir photosPanelOpen), un seul
+                bouton affiche/masque tout le bloc (pas juste la liste des sessions). */}
+            {!photosPanelOpen && (
+              <button
+                type="button"
+                onClick={() => setPhotosPanelOpen(true)}
+                title={t("gm.showPhotosPanel")}
+                aria-label={t("gm.showPhotosPanel")}
+                className="flex shrink-0 items-center justify-center gap-1.5 border-b border-gray-200 bg-gray-50 px-3 py-2 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 md:w-10 md:flex-col md:gap-2 md:border-b-0 md:border-r md:py-3"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span className="md:[writing-mode:vertical-rl]">{t("gm.photosLabel")}</span>
+              </button>
+            )}
+            {photosPanelOpen && (
             <aside className="max-h-40 shrink-0 overflow-y-auto border-b border-gray-200 bg-gray-50 p-3 md:max-h-none md:w-56 md:border-b-0 md:border-r">
-              <p className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                {t("gm.photosLabel")}
-              </p>
+              <div className="mb-1 flex items-center justify-between px-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  {t("gm.photosLabel")}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setPhotosPanelOpen(false)}
+                  title={t("gm.hidePhotosPanel")}
+                  aria-label={t("gm.hidePhotosPanel")}
+                  className="rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M15 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </div>
               <button
                 onClick={() => setActiveSet(null)}
                 className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm ${
@@ -1665,37 +1695,20 @@ export function GalleryManager({
               )}
 
               <div className="mt-3 flex items-center justify-between px-2">
-                <button
-                  type="button"
-                  onClick={() => setSessionsExpanded((v) => !v)}
-                  className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-400 hover:text-gray-600"
-                  aria-expanded={sessionsExpanded}
-                >
-                  <svg
-                    width="10"
-                    height="10"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                    className={`shrink-0 transition-transform ${sessionsExpanded ? "rotate-90" : ""}`}
-                  >
-                    <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
+                <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
                   {t("gm.setsLabel")}
                   {gallery.collections.length > 0 && (
                     <span className="text-gray-300">({gallery.collections.length})</span>
                   )}
-                </button>
+                </p>
                 <button onClick={openAddSetModal} className="text-xs text-brand-600 hover:underline">
                   {t("gm.addSet")}
                 </button>
               </div>
-              {/* Replié par défaut (voir sessionsExpanded ci-dessus) — ligne de séparation
-                  après chaque session (demande d'Adriel le 13/09/2026) : `divide-y` place un
-                  trait fin entre les sessions sans en ajouter un après la dernière, plus
-                  propre qu'un `border-b` sur chaque ligne. */}
-              {sessionsExpanded && (
+              {/* Ligne de séparation après chaque session (demande d'Adriel le 13/09/2026) :
+                  `divide-y` place un trait fin entre les sessions sans en ajouter un après la
+                  dernière, plus propre qu'un `border-b` sur chaque ligne. Ce bloc entier est
+                  déjà masqué avec le reste du panneau via photosPanelOpen ci-dessus. */}
               <div className="mt-1 divide-y divide-gray-200">
               {gallery.collections.map((c) => {
                 // Portfolio/Réseaux sociaux : compte sur le tag (portfolioTagged/socialTagged),
@@ -1794,8 +1807,8 @@ export function GalleryManager({
                 );
               })}
               </div>
-              )}
             </aside>
+            )}
 
             {/* Grille de photos, sur fond clair (pas de fond noir derrière les images) */}
             <main

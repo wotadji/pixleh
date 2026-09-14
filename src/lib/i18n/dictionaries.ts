@@ -200,6 +200,8 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
 
     "gm.allPhotos": "Toutes les photos",
     "gm.photosLabel": "Photos",
+    "gm.showPhotosPanel": "Afficher le panneau",
+    "gm.hidePhotosPanel": "Masquer le panneau",
     "gm.setsLabel": "Sessions",
     "gm.addSet": "+ Ajouter une session",
     "gm.noSetPhotos": "photo(s) sans session",
@@ -1656,6 +1658,8 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
 
     "gm.allPhotos": "All photos",
     "gm.photosLabel": "Photos",
+    "gm.showPhotosPanel": "Show panel",
+    "gm.hidePhotosPanel": "Hide panel",
     "gm.setsLabel": "Sessions",
     "gm.addSet": "+ Add Session",
     "gm.noSetPhotos": "photo(s) without a session",
@@ -3106,6 +3110,8 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
 
     "gm.allPhotos": "Todas las fotos",
     "gm.photosLabel": "Fotos",
+    "gm.showPhotosPanel": "Mostrar panel",
+    "gm.hidePhotosPanel": "Ocultar panel",
     "gm.setsLabel": "Sesiones",
     "gm.addSet": "+ Añadir sesión",
     "gm.noSetPhotos": "foto(s) sin sesión",
@@ -4556,6 +4562,8 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
 
     "gm.allPhotos": "Todas as fotos",
     "gm.photosLabel": "Fotos",
+    "gm.showPhotosPanel": "Mostrar painel",
+    "gm.hidePhotosPanel": "Ocultar painel",
     "gm.setsLabel": "Sessões",
     "gm.addSet": "+ Adicionar sessão",
     "gm.noSetPhotos": "foto(s) sem sessão",
@@ -6006,6 +6014,8 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
 
     "gm.allPhotos": "所有照片",
     "gm.photosLabel": "照片",
+    "gm.showPhotosPanel": "显示面板",
+    "gm.hidePhotosPanel": "隐藏面板",
     "gm.setsLabel": "场次",
     "gm.addSet": "+ 添加场次",
     "gm.noSetPhotos": "张照片无场次",
@@ -7441,6 +7451,8 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
 
     "gm.allPhotos": "جميع الصور",
     "gm.photosLabel": "الصور",
+    "gm.showPhotosPanel": "إظهار اللوحة",
+    "gm.hidePhotosPanel": "إخفاء اللوحة",
     "gm.setsLabel": "الجلسات",
     "gm.addSet": "+ إضافة جلسة",
     "gm.noSetPhotos": "صورة بدون جلسة",
