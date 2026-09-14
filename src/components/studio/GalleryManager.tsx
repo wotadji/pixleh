@@ -1646,7 +1646,10 @@ export function GalleryManager({
           // la disposition côte à côte d'origine à partir de md.
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden md:flex-row">
             {/* Panneau Sets/Sessions — masqué par défaut (voir photosPanelOpen), un seul
-                bouton affiche/masque tout le bloc (pas juste la liste des sessions). */}
+                bouton affiche/masque tout le bloc (pas juste la liste des sessions).
+                En-tête façon référence d'Adriel le 14/09/2026 : le libellé "SESSIONS" et
+                l'icône « de masquage sont réunis sur une seule ligne (plus de ligne "Photos"
+                séparée au-dessus). */}
             {!photosPanelOpen && (
               <button
                 type="button"
@@ -1658,27 +1661,11 @@ export function GalleryManager({
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                <span className="md:[writing-mode:vertical-rl]">{t("gm.photosLabel")}</span>
+                <span className="md:[writing-mode:vertical-rl]">{t("gm.setsLabel")}</span>
               </button>
             )}
             {photosPanelOpen && (
             <aside className="max-h-40 shrink-0 overflow-y-auto border-b border-gray-200 bg-gray-50 p-3 md:max-h-none md:w-56 md:border-b-0 md:border-r">
-              <div className="mb-1 flex items-center justify-between px-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                  {t("gm.photosLabel")}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setPhotosPanelOpen(false)}
-                  title={t("gm.hidePhotosPanel")}
-                  aria-label={t("gm.hidePhotosPanel")}
-                  className="rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M15 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-              </div>
               <button
                 onClick={() => setActiveSet(null)}
                 className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm ${
@@ -1694,13 +1681,24 @@ export function GalleryManager({
                 </p>
               )}
 
-              <div className="mt-3 px-2">
+              <div className="mb-1 mt-3 flex items-center justify-between px-2">
                 <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
                   {t("gm.setsLabel")}
                   {gallery.collections.length > 0 && (
                     <span className="text-gray-300">({gallery.collections.length})</span>
                   )}
                 </p>
+                <button
+                  type="button"
+                  onClick={() => setPhotosPanelOpen(false)}
+                  title={t("gm.hidePhotosPanel")}
+                  aria-label={t("gm.hidePhotosPanel")}
+                  className="rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M15 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
               </div>
               {/* Ligne de séparation après chaque session (demande d'Adriel le 13/09/2026) :
                   `divide-y` place un trait fin entre les sessions sans en ajouter un après la
