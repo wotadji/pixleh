@@ -227,6 +227,9 @@ export function GalleryManager({
   // Affichage de la grille Photos : "grid" (vignettes carrées, historique) ou "list" (une
   // ligne par photo avec nom + métadonnées) — demande d'Adriel le 13/09/2026.
   const [photoViewMode, setPhotoViewMode] = useState<"grid" | "list">("grid");
+  // Panneau "Sessions" (sidebar Photos) repliable — replié par défaut (demande d'Adriel le
+  // 13/09/2026, façon concurrence) pour ne pas surcharger la barre latérale.
+  const [sessionsExpanded, setSessionsExpanded] = useState(false);
   // Sélection multiple (grille Photos) : cases à cocher sur les vignettes + barre d'actions
   // groupées (déplacer vers un set, supprimer) qui remplace la barre d'outils normale tant
   // qu'au moins une photo est sélectionnée.
@@ -1662,16 +1665,37 @@ export function GalleryManager({
               )}
 
               <div className="mt-3 flex items-center justify-between px-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <button
+                  type="button"
+                  onClick={() => setSessionsExpanded((v) => !v)}
+                  className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-400 hover:text-gray-600"
+                  aria-expanded={sessionsExpanded}
+                >
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    className={`shrink-0 transition-transform ${sessionsExpanded ? "rotate-90" : ""}`}
+                  >
+                    <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                   {t("gm.setsLabel")}
-                </p>
+                  {gallery.collections.length > 0 && (
+                    <span className="text-gray-300">({gallery.collections.length})</span>
+                  )}
+                </button>
                 <button onClick={openAddSetModal} className="text-xs text-brand-600 hover:underline">
                   {t("gm.addSet")}
                 </button>
               </div>
-              {/* Ligne de séparation après chaque set (demande d'Adriel le 13/09/2026) :
-                  `divide-y` place un trait fin entre les sets sans en ajouter un après le
-                  dernier, plus propre qu'un `border-b` sur chaque ligne. */}
+              {/* Replié par défaut (voir sessionsExpanded ci-dessus) — ligne de séparation
+                  après chaque session (demande d'Adriel le 13/09/2026) : `divide-y` place un
+                  trait fin entre les sessions sans en ajouter un après la dernière, plus
+                  propre qu'un `border-b` sur chaque ligne. */}
+              {sessionsExpanded && (
               <div className="mt-1 divide-y divide-gray-200">
               {gallery.collections.map((c) => {
                 // Portfolio/Réseaux sociaux : compte sur le tag (portfolioTagged/socialTagged),
@@ -1770,6 +1794,7 @@ export function GalleryManager({
                 );
               })}
               </div>
+              )}
             </aside>
 
             {/* Grille de photos, sur fond clair (pas de fond noir derrière les images) */}
@@ -2130,7 +2155,10 @@ export function GalleryManager({
                       })}
                     </div>
                   ) : (
-                  <div className="grid grid-cols-3 gap-1 p-1 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
+                  /* Vignettes plus petites, façon concurrence (demande d'Adriel le
+                     13/09/2026) : plus de colonnes à chaque palier pour des miniatures plus
+                     compactes qu'avant (6 colonnes max → 10). */
+                  <div className="grid grid-cols-4 gap-1 p-1 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10">
                     {filteredPhotos.map((photo) => {
                       const selected = selectedPhotoIds.has(photo.id);
                       return (
