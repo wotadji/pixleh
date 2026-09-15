@@ -8,6 +8,13 @@ name: Deploy
 # Authentification par mot de passe (pas par clé) : le panel SSH de l'hébergeur
 # (cloudlogin.co) ne propose que "Générer un mot de passe", pas de gestion de clés
 # SSH — voir SSH_PASSWORD dans les secrets du repo GitHub.
+#
+# runs-on: self-hosted (pas ubuntu-latest) — incident du 15/09/2026 : le pare-feu de
+# l'hébergeur bloque activement (connection reset pendant le handshake SSH) les IP des
+# runners GitHub-hosted, alors que l'IP personnelle d'Adriel passe très bien sur le
+# port 2222. Le job tourne donc sur son Mac (runner self-hosted installé via
+# Settings → Actions → Runners), dont l'IP est autorisée. Voir aussi l'étape sshpass
+# ci-dessous, adaptée pour macOS (apt-get n'existe pas sur ce runner).
 on:
   workflow_run:
     workflows: ["CI"]
@@ -23,7 +30,7 @@ on:
 jobs:
   deploy:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,7 +69,10 @@ jobs:
         env:
           SSHPASS: ${{ secrets.SSH_PASSWORD }}
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+          # Runner self-hosted (macOS, voir commentaire en tête de fichier) : pas d'apt-get
+          # ici. sshpass n'est plus dans le core Homebrew (retiré pour raisons de sécurité,
+          # cf. politique du projet) — on utilise le tap tiers habituel.
+          command -v sshpass >/dev/null 2>&1 || brew install hudochenkov/sshpass/sshpass
           sshpass -e rsync -avzr --delete \
             --exclude=".git" \
             --exclude=".github" \
