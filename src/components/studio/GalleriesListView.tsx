@@ -29,7 +29,9 @@ interface GalleryRow {
 // "mostLiked" viendra plus tard, une fois qu'un système de likes visiteurs existera
 // (actuellement seuls les favoris côté client existent, pas de compteur public de likes).
 type SortOrder = "newest" | "oldest" | "mostPhotos";
-type ViewMode = "grid" | "list";
+// "compact" = affichage 6 galeries par ligne (demande d'Adriel le 18/09/2026 : "ajouter un
+// affichage a 6 items par row"), entre la grille normale (4 max) et la liste.
+type ViewMode = "grid" | "compact" | "list";
 interface DateRange {
   from: number;
   to: number;
@@ -472,7 +474,7 @@ export function GalleriesListView({
   // Se souvient du dernier mode d'affichage choisi (grille/liste) d'une visite à l'autre.
   useEffect(() => {
     const saved = window.localStorage.getItem(VIEW_STORAGE_KEY);
-    if (saved === "grid" || saved === "list") setViewMode(saved);
+    if (saved === "grid" || saved === "compact" || saved === "list") setViewMode(saved);
   }, []);
 
   function changeView(mode: ViewMode) {
@@ -711,6 +713,21 @@ export function GalleriesListView({
               </button>
               <button
                 type="button"
+                onClick={() => changeView("compact")}
+                title={t("galleries.viewCompact")}
+                className={`rounded-lg p-1.5 ${viewMode === "compact" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-white"}`}
+              >
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                  <rect x="1.5" y="2" width="5" height="5" rx="1" fill="currentColor" />
+                  <rect x="7.5" y="2" width="5" height="5" rx="1" fill="currentColor" />
+                  <rect x="13.5" y="2" width="5" height="5" rx="1" fill="currentColor" />
+                  <rect x="1.5" y="8" width="5" height="5" rx="1" fill="currentColor" />
+                  <rect x="7.5" y="8" width="5" height="5" rx="1" fill="currentColor" />
+                  <rect x="13.5" y="8" width="5" height="5" rx="1" fill="currentColor" />
+                </svg>
+              </button>
+              <button
+                type="button"
                 onClick={() => changeView("list")}
                 title={t("galleries.viewList")}
                 className={`rounded-lg p-1.5 ${viewMode === "list" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-white"}`}
@@ -901,8 +918,14 @@ export function GalleriesListView({
         </div>
       )}
 
-      {sorted.length > 0 && viewMode === "grid" && (
-        <div className="mt-9 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
+      {sorted.length > 0 && (viewMode === "grid" || viewMode === "compact") && (
+        <div
+          className={`mt-9 grid gap-5 ${
+            viewMode === "compact"
+              ? "grid-cols-3 sm:grid-cols-4 lg:grid-cols-6"
+              : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
+          }`}
+        >
           {sorted.map((g) => {
             const src = coverUrl(studioId, g.id, g);
             const dateLabel = formatDate(g.eventDate || g.createdAt, locale);

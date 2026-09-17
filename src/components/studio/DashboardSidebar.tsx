@@ -59,15 +59,20 @@ export function DashboardSidebar({
     return pathname === href || pathname?.startsWith(`${href}/`);
   }
 
-  // Sidebar rétractable en icônes seules dans une galerie (12/09/2026, chantier UX/UI demandé
-  // par Adriel, inspiré de Picstudio : "quand on clique sur galerie le sidebar recule et cela
-  // crée plus d'espace"). Ne concerne QUE la page détail d'une galerie (/dashboard/galleries/
-  // [id] et ses sous-pages), pas la liste (/dashboard/galleries) ni le formulaire de création
-  // (/dashboard/galleries/new) — c'est là que la place manque le plus (grille de photos +
-  // panneau Réglages). `collapsed` ne doit produire son effet qu'à partir de md (voir classes
-  // `md:` ci-dessous) : sous md la sidebar est un tiroir plein écran temporaire, la place n'y
-  // est pas un problème, donc on y garde toujours les libellés complets.
-  const autoCollapsed = /^\/dashboard\/galleries\/(?!new(?:\/|$))[^/]+/.test(pathname ?? "");
+  // Sidebar rétractable en icônes seules (12/09/2026, chantier UX/UI demandé par Adriel,
+  // inspiré de Picstudio : "quand on clique sur galerie le sidebar recule et cela crée plus
+  // d'espace"), initialement limité à la page détail d'une galerie. Étendu le 18/09/2026
+  // (demande d'Adriel : "le meme comportement de sidebar sur tout les boutons de sidebar") à
+  // TOUTES les sections du dashboard : cliquer n'importe quel lien de la sidebar (Clients,
+  // Réservations, Contrats, Réglages...) replie maintenant la sidebar exactement comme le
+  // faisait déjà l'ouverture d'une galerie. Seules deux pages restent en sidebar dépliée :
+  // "/dashboard" (Vue d'ensemble, page d'atterrissage) et le formulaire de création de galerie
+  // (/dashboard/galleries/new), qui a besoin de toute la largeur. `collapsed` ne doit produire
+  // son effet qu'à partir de md (voir classes `md:` ci-dessous) : sous md la sidebar est un
+  // tiroir plein écran temporaire, la place n'y est pas un problème, donc on y garde toujours
+  // les libellés complets.
+  const autoCollapsed =
+    !!pathname && pathname !== "/dashboard" && !/^\/dashboard\/galleries\/new(\/|$)/.test(pathname);
   // Bouton manuel d'affichage/masquage (demande d'Adriel le 18/09/2026) : quand l'utilisateur
   // a explicitement choisi (manualCollapsed non nul), ce choix prime sur le repli automatique
   // ci-dessus, sur TOUTES les pages du dashboard (pas seulement dans une galerie).
