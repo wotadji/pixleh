@@ -21,8 +21,13 @@ html {
   overflow-x: hidden;
 }
 
+/* Mode sombre du panel studio (18/09/2026, voir ThemeProvider) : la classe "dark" n'est
+   jamais posée sur <html> en dehors du dashboard studio (ThemeProvider n'est monté que là),
+   donc ce fallback n'affecte ni le site marketing, ni l'espace client, ni les galeries
+   publiques. Sert de fond par défaut aux zones du dashboard qui n'ont pas encore reçu de
+   classes `dark:` dédiées (chantier progressif, voir commentaire dans ThemeProvider.tsx). */
 body {
-  @apply bg-white text-gray-900 antialiased;
+  @apply bg-white text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100;
 }
 
 .btn-primary {

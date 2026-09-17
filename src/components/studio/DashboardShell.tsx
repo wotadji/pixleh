@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { PixlehLogo } from "@/components/marketing/PixlehLogo";
 import { DashboardSidebar } from "@/components/studio/DashboardSidebar";
+import { ThemeProvider } from "@/components/studio/ThemeProvider";
+import { BreadcrumbProvider } from "@/components/studio/BreadcrumbContext";
 
 /**
  * Coquille cliente du dashboard : porte l'état ouvert/fermé du tiroir mobile (useState),
@@ -72,46 +74,53 @@ export function DashboardShell({
   }, [open]);
 
   return (
-    <>
-      {/* Barre du haut mobile/tablette — masquée à partir de md, où la sidebar statique
-          suffit (logo déjà dedans). */}
-      <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-3 md:hidden">
-        {/* Logo à l'extrême droite, bouton menu à gauche — demande d'Adriel le 12/08/2026
-            ("mettre le logo a l'extreme droite"), inverse l'ordre précédent (logo gauche /
-            menu droite). */}
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          aria-label={t("nav.openMenu")}
-          title={t("nav.openMenu")}
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
-        >
-          <IconMenu />
-        </button>
-        <PixlehLogo size={22} />
-      </div>
+    // ThemeProvider (mode sombre du panel, 18/09/2026) et BreadcrumbProvider (fil d'Ariane de
+    // DashboardTopBar) doivent englober toute l'ossature du dashboard — sidebar, barre du
+    // haut ET contenu des pages — pour que la classe "dark" posée sur <html> et le segment
+    // dynamique du fil d'Ariane (ex: titre de galerie, voir GalleryManager) soient visibles
+    // partout, pas seulement dans un sous-arbre.
+    <ThemeProvider>
+      <BreadcrumbProvider>
+        {/* Barre du haut mobile/tablette — masquée à partir de md, où la sidebar statique
+            suffit (logo déjà dedans). */}
+        <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-3 md:hidden dark:border-gray-800 dark:bg-gray-900">
+          {/* Logo à l'extrême droite, bouton menu à gauche — demande d'Adriel le 12/08/2026
+              ("mettre le logo a l'extreme droite"), inverse l'ordre précédent (logo gauche /
+              menu droite). */}
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            aria-label={t("nav.openMenu")}
+            title={t("nav.openMenu")}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+          >
+            <IconMenu />
+          </button>
+          <PixlehLogo size={22} />
+        </div>
 
-      {/* Fond semi-transparent — uniquement affiché (et cliquable pour fermer) quand le
-          tiroir est ouvert, sous md ; au-dessus de md la sidebar est statique donc `open`
-          n'a aucun effet visuel là-bas (voir classes md: sur DashboardSidebar). */}
-      {open && (
-        <div
-          className="fixed inset-0 z-40 bg-black/40 md:hidden"
-          onClick={() => setOpen(false)}
-          aria-hidden="true"
+        {/* Fond semi-transparent — uniquement affiché (et cliquable pour fermer) quand le
+            tiroir est ouvert, sous md ; au-dessus de md la sidebar est statique donc `open`
+            n'a aucun effet visuel là-bas (voir classes md: sur DashboardSidebar). */}
+        {open && (
+          <div
+            className="fixed inset-0 z-40 bg-black/40 md:hidden"
+            onClick={() => setOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+
+        <DashboardSidebar
+          {...sidebarProps}
+          open={open}
+          onClose={() => setOpen(false)}
+          manualCollapsed={manualCollapsed}
+          onToggleCollapsed={toggleCollapsed}
         />
-      )}
 
-      <DashboardSidebar
-        {...sidebarProps}
-        open={open}
-        onClose={() => setOpen(false)}
-        manualCollapsed={manualCollapsed}
-        onToggleCollapsed={toggleCollapsed}
-      />
-
-      {children}
-    </>
+        {children}
+      </BreadcrumbProvider>
+    </ThemeProvider>
   );
 }
 

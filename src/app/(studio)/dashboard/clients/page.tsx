@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { RichTextEditor } from "@/components/studio/RichTextEditor";
@@ -70,6 +70,7 @@ function isHtmlEmpty(html: string) {
 export default function ClientsPage() {
   const { t, locale } = useLanguage();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [clients, setClients] = useState<ClientDTO[]>([]);
   const [pageLoading, setPageLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("all");
@@ -124,6 +125,17 @@ export default function ClientsPage() {
   }
 
   useEffect(load, []);
+
+  // Ouverture directe d'une conversation depuis la recherche globale de la barre du haut
+  // (18/09/2026, voir DashboardTopBar : `?client=<id>`) — n'a d'effet qu'une fois la liste
+  // chargée, sinon `clients` serait encore vide et la sélection resterait sans effet visible.
+  useEffect(() => {
+    const clientId = searchParams.get("client");
+    if (clientId && clients.some((c) => c.id === clientId)) {
+      setSelectedId(clientId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clients, searchParams]);
 
   if (pageLoading) return <PageSpinner />;
 

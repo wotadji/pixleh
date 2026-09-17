@@ -1,6 +1,11 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  // Mode sombre du panel studio (18/09/2026, demande d'Adriel : bouton "apparence" dans la
+  // nouvelle barre du haut fixe) — piloté par une classe "dark" posée sur <html> par
+  // ThemeProvider (src/components/studio/ThemeProvider.tsx), plutôt que le défaut "media" qui
+  // suivrait uniquement les préférences OS sans bouton pour l'utilisateur.
+  darkMode: "class",
   content: [
     "./src/app/**/*.{ts,tsx}",
     "./src/components/**/*.{ts,tsx}",

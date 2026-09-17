@@ -3,6 +3,7 @@ import { getStudioSession } from "@/lib/access";
 import { getQuotaStatus } from "@/lib/quotas";
 import { prisma } from "@/lib/prisma";
 import { DashboardShell } from "@/components/studio/DashboardShell";
+import { DashboardTopBar } from "@/components/studio/DashboardTopBar";
 import { PendingPlanCheckout } from "@/components/studio/PendingPlanCheckout";
 import { CheckoutConfirm } from "@/components/studio/CheckoutConfirm";
 import { DashboardFooter } from "@/components/studio/DashboardFooter";
@@ -40,7 +41,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const profileIncomplete = !studio?.logoUrl || !studio?.settings?.contactEmail;
 
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
+    <div className="flex min-h-screen flex-col md:flex-row dark:bg-gray-950">
       <DashboardShell
         studioName={studio?.name || ""}
         studioSlug={session.user.studioSlug}
@@ -50,7 +51,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
         missingLogo={!studio?.logoUrl}
         missingContactEmail={!studio?.settings?.contactEmail}
       >
-        <div className="flex flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Barre du haut fixe (18/09/2026, demande d'Adriel) : fil d'Ariane + recherche
+              globale + apparence + langue — desktop uniquement (voir classes md: dans le
+              composant), au-dessus de <main>. */}
+          <DashboardTopBar />
           <main className="flex-1 p-4 md:p-8">
             <OnboardingGuide studioId={session.user.studioId} />
             <PendingPlanCheckout />

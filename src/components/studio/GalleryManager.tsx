@@ -10,6 +10,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { MultiSearchableSelect } from "@/components/ui/MultiSearchableSelect";
 import { CoverFocalPointModal } from "@/components/studio/CoverFocalPointModal";
+import { useSetBreadcrumbExtra } from "@/components/studio/BreadcrumbContext";
 import {
   COVER_STYLES,
   COVER_MODES,
@@ -354,6 +355,11 @@ export function GalleryManager({
   // au bouton d'afficher soleil/lune correctement même si le thème courant n'est pas
   // littéralement la clé "light" ou "dark" (ex: "ivory" ou "anthracite").
   const isDarkAppearance = BACKGROUND_THEMES.find((b) => b.key === design.backgroundTheme)?.group === "dark";
+
+  // Fournit le titre de la galerie au fil d'Ariane de la barre du haut fixe (18/09/2026, voir
+  // DashboardTopBar) — sans ça, la barre ne pourrait afficher que "Galeries" générique sur
+  // cette page, faute de connaître quelle galerie est ouverte.
+  useSetBreadcrumbExtra(gallery.title);
   const [coverPhotoId, setCoverPhotoId] = useState<string | null>(gallery.coverPhotoId);
   const [coverPickerOpen, setCoverPickerOpen] = useState(false);
   const [focalPointModalOpen, setFocalPointModalOpen] = useState(false);
