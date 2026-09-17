@@ -30,6 +30,27 @@ export function DashboardShell({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
+  // Bouton manuel d'affichage/masquage de la sidebar en mode icônes (demande d'Adriel le
+  // 18/09/2026 : "on dois mettre un bouton d'affichage et de masquage du sidebar"), en plus
+  // du repli automatique déjà en place dans une galerie (voir `collapsed` dans
+  // DashboardSidebar). `null` = pas de préférence manuelle, on suit le comportement
+  // automatique par page ; `true`/`false` = l'utilisateur a explicitement choisi et ce choix
+  // prime sur l'automatique, sur toutes les pages. Persisté en localStorage pour survivre à
+  // la navigation/aux rechargements — lu après le montage (useEffect) pour éviter un
+  // mismatch d'hydratation SSR (localStorage est indisponible côté serveur).
+  const [manualCollapsed, setManualCollapsed] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem("pixleh:sidebarCollapsed");
+    if (stored === "1") setManualCollapsed(true);
+    else if (stored === "0") setManualCollapsed(false);
+  }, []);
+
+  function toggleCollapsed(next: boolean) {
+    setManualCollapsed(next);
+    window.localStorage.setItem("pixleh:sidebarCollapsed", next ? "1" : "0");
+  }
+
   // Ferme le tiroir automatiquement à chaque changement de page (navigation via un lien de
   // la sidebar) — évite de devoir refermer soi-même le tiroir après avoir cliqué un lien.
   useEffect(() => {
@@ -77,7 +98,13 @@ export function DashboardShell({
         />
       )}
 
-      <DashboardSidebar {...sidebarProps} open={open} onClose={() => setOpen(false)} />
+      <DashboardSidebar
+        {...sidebarProps}
+        open={open}
+        onClose={() => setOpen(false)}
+        manualCollapsed={manualCollapsed}
+        onToggleCollapsed={toggleCollapsed}
+      />
 
       {children}
     </>

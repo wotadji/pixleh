@@ -18,6 +18,8 @@ export function DashboardSidebar({
   missingContactEmail = false,
   open = false,
   onClose,
+  manualCollapsed = null,
+  onToggleCollapsed,
 }: {
   /** Nom du studio (Studio.name), affiché sous "pixleh" — remplace le nom de l'utilisateur
    * connecté (30/07/2026, demande d'Adriel) : le studio peut avoir plusieurs membres (OWNER/
@@ -39,6 +41,12 @@ export function DashboardSidebar({
    * responsivité dashboard). */
   open?: boolean;
   onClose?: () => void;
+  /** Préférence manuelle explicite (bouton d'affichage/masquage, demande d'Adriel le
+   * 18/09/2026) — `null` = pas de préférence, on suit `autoCollapsed` (repli automatique
+   * dans une galerie, voir plus bas) ; `true`/`false` prime sur l'automatique, sur toutes
+   * les pages. Portée par DashboardShell (useState + localStorage). */
+  manualCollapsed?: boolean | null;
+  onToggleCollapsed?: (next: boolean) => void;
 }) {
   const { t } = useLanguage();
   const pathname = usePathname();
@@ -59,7 +67,11 @@ export function DashboardSidebar({
   // panneau Réglages). `collapsed` ne doit produire son effet qu'à partir de md (voir classes
   // `md:` ci-dessous) : sous md la sidebar est un tiroir plein écran temporaire, la place n'y
   // est pas un problème, donc on y garde toujours les libellés complets.
-  const collapsed = /^\/dashboard\/galleries\/(?!new(?:\/|$))[^/]+/.test(pathname ?? "");
+  const autoCollapsed = /^\/dashboard\/galleries\/(?!new(?:\/|$))[^/]+/.test(pathname ?? "");
+  // Bouton manuel d'affichage/masquage (demande d'Adriel le 18/09/2026) : quand l'utilisateur
+  // a explicitement choisi (manualCollapsed non nul), ce choix prime sur le repli automatique
+  // ci-dessus, sur TOUTES les pages du dashboard (pas seulement dans une galerie).
+  const collapsed = manualCollapsed ?? autoCollapsed;
 
   // `onboarding` : identifiant ciblé par OnboardingGuide (voir data-onboarding-target
   // ci-dessous) pour dessiner une flèche vers CE lien précis pendant l'étape correspondante
@@ -114,7 +126,11 @@ export function DashboardSidebar({
         collapsed ? "md:w-[76px] md:overflow-x-hidden md:p-3" : "md:w-64"
       } ${open ? "translate-x-0" : ""}`}
     >
-      <div className={`mb-5 flex items-center px-1 ${collapsed ? "md:justify-center" : "justify-between"}`}>
+      <div
+        className={`mb-5 flex items-center px-1 ${
+          collapsed ? "md:flex-col md:gap-2 md:justify-center" : "justify-between"
+        }`}
+      >
         {/* Logo resté trop petit dans tout le panel photographe malgré les précédents
             ajustements (retour d'Adriel le 15/09/2026) — le mark utilise maintenant
             directement /icon.svg (le favicon, cf. PixlehLogo) au lieu d'un SVG inline
@@ -132,6 +148,20 @@ export function DashboardSidebar({
           className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 md:hidden"
         >
           <IconClose />
+        </button>
+        {/* Bouton manuel d'affichage/masquage de la sidebar (demande d'Adriel le 18/09/2026)
+            — desktop uniquement (md:flex, caché en base) : sous md la sidebar est un tiroir
+            plein écran temporaire fermé par IconClose ci-dessus, pas besoin d'un second
+            bouton. En mode replié, le conteneur passe en colonne (voir classes plus haut)
+            pour que ce bouton se place sous le logo plutôt que de déborder du rail 76px. */}
+        <button
+          type="button"
+          onClick={() => onToggleCollapsed?.(!collapsed)}
+          aria-label={collapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
+          title={collapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
+          className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gray-300 text-gray-400 hover:border-gray-400 hover:bg-gray-100 hover:text-gray-600 md:flex"
+        >
+          <IconSidebarToggle collapsed={collapsed} />
         </button>
       </div>
 
@@ -273,6 +303,21 @@ export function DashboardSidebar({
         <LanguageSwitcher />
       </div>
     </aside>
+  );
+}
+
+/** Chevron du bouton manuel d'affichage/masquage — pointe vers la droite (déplier) quand
+ * `collapsed` est vrai, vers la gauche (replier) sinon, comme les boutons équivalents du
+ * panneau Sections dans GalleryManager (même style visuel : pastille ronde bordée). */
+function IconSidebarToggle({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+      {collapsed ? (
+        <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+      ) : (
+        <path d="M15 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+      )}
+    </svg>
   );
 }
 
