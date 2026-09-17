@@ -42,9 +42,12 @@ export function DashboardSidebar({
   open?: boolean;
   onClose?: () => void;
   /** Préférence manuelle explicite (bouton d'affichage/masquage, demande d'Adriel le
-   * 18/09/2026) — `null` = pas de préférence, on suit `autoCollapsed` (repli automatique
-   * dans une galerie, voir plus bas) ; `true`/`false` prime sur l'automatique, sur toutes
-   * les pages. Portée par DashboardShell (useState + localStorage). */
+   * 18/09/2026) — `null` = pas de préférence, on suit `autoCollapsed` (repli automatique,
+   * désormais actif sur toutes les pages du dashboard, voir plus bas) ; `true`/`false` prime
+   * sur l'automatique le temps de rester sur la page courante. Portée par DashboardShell
+   * (useState, remis à `null` à chaque changement de page — pas de persistance entre pages,
+   * corrigé le 18/09/2026 après retour d'Adriel : un choix manuel figé en localStorage
+   * masquait complètement le repli automatique sur toutes les autres pages). */
   manualCollapsed?: boolean | null;
   onToggleCollapsed?: (next: boolean) => void;
 }) {

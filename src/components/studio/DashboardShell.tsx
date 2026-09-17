@@ -32,23 +32,27 @@ export function DashboardShell({
 
   // Bouton manuel d'affichage/masquage de la sidebar en mode icônes (demande d'Adriel le
   // 18/09/2026 : "on dois mettre un bouton d'affichage et de masquage du sidebar"), en plus
-  // du repli automatique déjà en place dans une galerie (voir `collapsed` dans
-  // DashboardSidebar). `null` = pas de préférence manuelle, on suit le comportement
-  // automatique par page ; `true`/`false` = l'utilisateur a explicitement choisi et ce choix
-  // prime sur l'automatique, sur toutes les pages. Persisté en localStorage pour survivre à
-  // la navigation/aux rechargements — lu après le montage (useEffect) pour éviter un
-  // mismatch d'hydratation SSR (localStorage est indisponible côté serveur).
+  // du repli automatique désormais actif sur toutes les pages du dashboard (voir `collapsed`
+  // dans DashboardSidebar). `null` = pas de préférence manuelle, on suit le comportement
+  // automatique de la page courante ; `true`/`false` = l'utilisateur a explicitement basculé
+  // et ce choix prime sur l'automatique — mais SEULEMENT le temps de rester sur cette page.
+  //
+  // Corrigé le 18/09/2026 (retour d'Adriel : "quand je clique sur Clients par exemple la
+  // sidebar ne se masque pas") : la version précédente persistait ce choix en localStorage
+  // indéfiniment, sur toutes les pages — un seul clic sur "déplier" restait donc collé pour
+  // toujours, masquant complètement le nouveau repli automatique par page et donnant
+  // l'impression que celui-ci ne fonctionnait plus du tout. Le choix manuel est maintenant
+  // remis à zéro à chaque navigation (voir l'effet ci-dessous, déclenché par `pathname`) :
+  // il permet de déplier/replier ponctuellement la page affichée, sans jamais figer le
+  // comportement des autres pages.
   const [manualCollapsed, setManualCollapsed] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const stored = window.localStorage.getItem("pixleh:sidebarCollapsed");
-    if (stored === "1") setManualCollapsed(true);
-    else if (stored === "0") setManualCollapsed(false);
-  }, []);
+    setManualCollapsed(null);
+  }, [pathname]);
 
   function toggleCollapsed(next: boolean) {
     setManualCollapsed(next);
-    window.localStorage.setItem("pixleh:sidebarCollapsed", next ? "1" : "0");
   }
 
   // Ferme le tiroir automatiquement à chaque changement de page (navigation via un lien de
