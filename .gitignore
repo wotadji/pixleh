@@ -11,3 +11,7 @@ secrets/
 .DS_Store
 next-env.d.ts
 tsconfig.tsbuildinfo
+# Runner GitHub Actions self-hosted (installé par erreur dans ce dossier le 18/09/2026 —
+# il tourne très bien ici mais ne doit jamais être versionné : gros binaires, spécifique
+# à la machine d'Adriel).
+actions-runner/
