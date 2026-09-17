@@ -718,12 +718,16 @@ export function GalleriesListView({
                 className={`rounded-lg p-1.5 ${viewMode === "compact" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-white"}`}
               >
                 <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-                  <rect x="1.5" y="2" width="5" height="5" rx="1" fill="currentColor" />
-                  <rect x="7.5" y="2" width="5" height="5" rx="1" fill="currentColor" />
-                  <rect x="13.5" y="2" width="5" height="5" rx="1" fill="currentColor" />
-                  <rect x="1.5" y="8" width="5" height="5" rx="1" fill="currentColor" />
-                  <rect x="7.5" y="8" width="5" height="5" rx="1" fill="currentColor" />
-                  <rect x="13.5" y="8" width="5" height="5" rx="1" fill="currentColor" />
+                  {/* Grille 3x2 centrée dans le viewBox 20x20 : carrés de 5, espacement de 1,
+                      marges (20 - (5*3+1*2))/2 = 1.5 en largeur et (20 - (5*2+1))/2 = 4.5 en
+                      hauteur — corrige le déséquilibre vertical repéré par Adriel (les
+                      carrés du milieu n'étaient pas centrés, marge du bas 7 vs 2 en haut). */}
+                  <rect x="1.5" y="4.5" width="5" height="5" rx="1" fill="currentColor" />
+                  <rect x="7.5" y="4.5" width="5" height="5" rx="1" fill="currentColor" />
+                  <rect x="13.5" y="4.5" width="5" height="5" rx="1" fill="currentColor" />
+                  <rect x="1.5" y="10.5" width="5" height="5" rx="1" fill="currentColor" />
+                  <rect x="7.5" y="10.5" width="5" height="5" rx="1" fill="currentColor" />
+                  <rect x="13.5" y="10.5" width="5" height="5" rx="1" fill="currentColor" />
                 </svg>
               </button>
               <button
