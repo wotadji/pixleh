@@ -35,6 +35,7 @@ import { sortPhotos, resolvePhotoSortKey, formatFileSize, type PhotoSortKey } fr
 import { formatDuration } from "@/lib/videoEmbed";
 import { generateGalleryCode as generateGalleryPassword } from "@/lib/galleryCode";
 import { shareOrDownloadImage } from "@/lib/shareImage";
+import { rejectRawFileReason } from "@/lib/rawFileUpload";
 
 /**
  * Hash SHA-256 (hex) d'un fichier, calculé côté navigateur via Web Crypto — utilisé pour
@@ -65,6 +66,16 @@ interface PhotoDTO {
    * vers", qui n'en propose plus que les vrais sets. Voir togglePhotoTag. */
   portfolioTagged: boolean;
   socialTagged: boolean;
+}
+
+/** Fichier RAW/original sauvegardé par le studio (voir modèle GalleryRawFile) — jamais
+ * exposé au client/invité, pas de thumb/preview (voir bouton "Fichiers"). */
+interface RawFileDTO {
+  id: string;
+  filename: string;
+  sizeBytes: number;
+  mimeType: string | null;
+  createdAt: string;
 }
 
 /** Remarque de modification laissée par le client sur une photo (lien /g, jamais /invite). */
@@ -356,6 +367,17 @@ export function GalleryManager({
   // est renseigné, l'upload est en pause en attendant que le studio choisisse Ignorer /
   // Écraser / Conserver dans la modale correspondante.
   const [duplicateConfirm, setDuplicateConfirm] = useState<{ files: File[]; count: number } | null>(null);
+
+  // Fichiers RAW/originaux (bouton "Fichiers", demande d'Adriel le 18/09/2026 : "on va
+  // mettre un boutton fichiers pour permettre d'ajouter les images des formats traditionnel
+  // et aussi des fichier raw") — voir modèle GalleryRawFile, toujours privé (jamais exposé au
+  // client/invité), séparé de la grille Photos (pas de miniature/aperçu possible pour un RAW).
+  const [rawFilesOpen, setRawFilesOpen] = useState(false);
+  const [rawFiles, setRawFiles] = useState<RawFileDTO[] | null>(null);
+  const [rawFileUploading, setRawFileUploading] = useState(false);
+  const [rawFileProgress, setRawFileProgress] = useState<string | null>(null);
+  const [rawFileError, setRawFileError] = useState<string | null>(null);
+  const [rawFileDeleting, setRawFileDeleting] = useState<string | null>(null);
 
   // ---- Onglets (Photos / Vidéo / Remarques / Réglages) ----
   const [activeTab, setActiveTab] = useState<MainTab>("photos");
@@ -780,6 +802,99 @@ export function GalleryManager({
     onDrop: onVideoDrop,
     accept: { "video/*": [] },
     multiple: false,
+    noClick: true,
+    noKeyboard: true,
+  });
+
+  // ---- Fichiers RAW/originaux (bouton "Fichiers") ----
+  /** Charge la liste à l'ouverture de la modale — pas de préchargement au montage du composant
+   * (fichiers privés, potentiellement nombreux et lourds, inutile tant que le studio n'a pas
+   * ouvert le panneau). */
+  async function loadRawFiles() {
+    setRawFileError(null);
+    try {
+      const res = await fetch(`/api/galleries/${gallery.id}/raw-files`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || t("gm.networkError"));
+      setRawFiles(Array.isArray(data.files) ? data.files : []);
+    } catch (e) {
+      setRawFileError(e instanceof Error ? e.message : t("gm.networkError"));
+      setRawFiles([]);
+    }
+  }
+
+  function openRawFilesModal() {
+    setRawFilesOpen(true);
+    loadRawFiles();
+  }
+
+  /** Envoi séquentiel (pas de pool parallèle comme les photos — les RAW pèsent souvent
+   * 20-100 Mo pièce, mieux vaut ne pas saturer la connexion du studio avec plusieurs en vol
+   * en même temps) avec pré-validation locale via rejectRawFileReason. */
+  async function uploadRawFiles(files: File[]) {
+    if (files.length === 0) return;
+    setRawFileUploading(true);
+    setRawFileError(null);
+    let uploaded = 0;
+    const errors: string[] = [];
+    for (const file of files) {
+      const reason = rejectRawFileReason(file);
+      if (reason === "unsupportedType") {
+        errors.push(`${file.name} — ${t("gm.rawUnsupportedType")}`);
+        continue;
+      }
+      if (reason === "tooLarge") {
+        errors.push(`${file.name} — ${t("gm.rawTooLarge")}`);
+        continue;
+      }
+      setRawFileProgress(`${uploaded + 1} / ${files.length} — ${file.name}`);
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await fetch(`/api/galleries/${gallery.id}/raw-files`, { method: "POST", body: formData });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          errors.push(`${file.name} — ${data?.error || t("gm.networkError")}`);
+          continue;
+        }
+        uploaded += 1;
+        if (data.file) setRawFiles((prev) => [data.file, ...(prev || [])]);
+      } catch {
+        errors.push(`${file.name} — ${t("gm.networkError")}`);
+      }
+    }
+    setRawFileUploading(false);
+    setRawFileProgress(null);
+    if (errors.length > 0) setRawFileError(errors.join(" — "));
+    router.refresh();
+  }
+
+  async function deleteRawFile(fileId: string) {
+    setRawFileDeleting(fileId);
+    try {
+      await fetch(`/api/galleries/${gallery.id}/raw-files/${fileId}`, { method: "DELETE" });
+      setRawFiles((prev) => (prev || []).filter((f) => f.id !== fileId));
+      router.refresh();
+    } finally {
+      setRawFileDeleting(null);
+    }
+  }
+
+  const onRawFilesDrop = useCallback((accepted: File[]) => {
+    if (accepted.length > 0) uploadRawFiles(accepted);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const {
+    getRootProps: getRawFilesRootProps,
+    getInputProps: getRawFilesInputProps,
+    isDragActive: isRawFilesDragActive,
+    open: openRawFilesDialog,
+  } = useDropzone({
+    onDrop: onRawFilesDrop,
+    // Pas de restriction `accept` MIME : les navigateurs ne connaissent presque jamais le
+    // type MIME des formats RAW (voir le commentaire de rejectRawFileReason dans
+    // rawFileUpload.ts) — toute la validation se fait après coup sur l'extension.
     noClick: true,
     noKeyboard: true,
   });
@@ -1899,6 +2014,17 @@ export function GalleryManager({
           >
             <IconShareLink />
             <span className="hidden sm:inline">{copied ? t("gm.linkCopied") : t("gm.share")}</span>
+          </button>
+          {/* Fichiers RAW/originaux — bouton dédié (demande d'Adriel le 18/09/2026), toujours
+              visible même pendant un upload de photos (flux totalement indépendant, voir
+              rawFilesOpen/uploadRawFiles). */}
+          <button
+            onClick={openRawFilesModal}
+            title={t("gm.rawFiles")}
+            className="btn-secondary flex items-center gap-1.5 text-sm"
+          >
+            <IconFiles />
+            <span className="hidden sm:inline">{t("gm.rawFiles")}</span>
           </button>
           {/* Masqué pendant l'upload (demandé par Adriel le 11/08/2026) : évite de laisser
               croire qu'on peut relancer un envoi par-dessus celui en cours, la barre de
@@ -4469,6 +4595,81 @@ export function GalleryManager({
         </div>
       </Modal>
 
+      {/* Fichiers RAW/originaux (bouton "Fichiers") — toujours privé, jamais de miniature
+          (voir modèle GalleryRawFile) : simple liste nom/taille/télécharger/supprimer plutôt
+          qu'une grille comme les photos. */}
+      <Modal
+        open={rawFilesOpen}
+        onClose={() => setRawFilesOpen(false)}
+        title={t("gm.rawFiles")}
+        widthClassName="max-w-lg"
+      >
+        <p className="mb-3 text-xs text-gray-500">{t("gm.rawFilesHint")}</p>
+
+        <div
+          {...getRawFilesRootProps()}
+          className={`mb-4 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors ${
+            isRawFilesDragActive ? "border-brand-400 bg-brand-50" : "border-gray-200 hover:border-gray-300"
+          }`}
+        >
+          <input {...getRawFilesInputProps()} />
+          <p className="text-sm text-gray-600">{t("gm.rawFilesDropHint")}</p>
+          <button type="button" onClick={openRawFilesDialog} className="btn-secondary text-sm">
+            {t("gm.rawFilesChooseFiles")}
+          </button>
+        </div>
+
+        {rawFileUploading && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
+            <Spinner size={14} />
+            <span>{rawFileProgress}</span>
+          </div>
+        )}
+
+        {rawFileError && (
+          <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{rawFileError}</p>
+        )}
+
+        {rawFiles === null ? (
+          <div className="flex items-center justify-center py-6">
+            <Spinner size={20} />
+          </div>
+        ) : rawFiles.length === 0 ? (
+          <p className="py-4 text-center text-sm text-gray-400">{t("gm.rawFilesEmpty")}</p>
+        ) : (
+          <ul className="max-h-[40vh] space-y-1.5 overflow-y-auto">
+            {rawFiles.map((f) => (
+              <li
+                key={f.id}
+                className="flex items-center justify-between gap-2 rounded-lg border border-gray-100 px-3 py-2 text-sm"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-gray-800">{f.filename}</p>
+                  <p className="text-xs text-gray-400">{formatFileSize(f.sizeBytes)}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <a
+                    href={`/api/galleries/${gallery.id}/raw-files/${f.id}/file`}
+                    title={t("gm.rawFilesDownload")}
+                    className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                  >
+                    <IconDownloadCircle />
+                  </a>
+                  <button
+                    onClick={() => deleteRawFile(f.id)}
+                    disabled={rawFileDeleting === f.id}
+                    title={t("gm.delete")}
+                    className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                  >
+                    {rawFileDeleting === f.id ? <Spinner size={14} /> : <IconTrashCircle />}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Modal>
+
       {focalPointModalOpen && activeCoverPhotoId && (
         <CoverFocalPointModal
           imageUrl={thumbUrl(activeCoverPhotoId)}
@@ -5158,6 +5359,16 @@ function IconSendToClient() {
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M22 2L11 13" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M22 2l-7 20-4-9-9-4 20-7z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Icône du bouton "Fichiers" (RAW/originaux) — dossier/archive, distincte de IconUpload
+ * pour ne pas la confondre avec "Ajouter des médias" (photos/vidéos classiques). */
+function IconFiles() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

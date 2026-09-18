@@ -39,15 +39,25 @@ export interface QuotaStatus {
  * studio existant que de le couper par accident sur un cas qui ne devrait pas arriver.
  */
 export async function getQuotaStatus(studioId: string): Promise<QuotaStatus> {
-  const [studio, galleryCount, photoSizeAgg, videoSizeAgg] = await Promise.all([
+  const [studio, galleryCount, photoSizeAgg, videoSizeAgg, rawFileSizeAgg] = await Promise.all([
     prisma.studio.findUnique({ where: { id: studioId }, include: { plan: true } }),
     prisma.gallery.count({ where: { studioId } }),
     prisma.photo.aggregate({ where: { gallery: { studioId } }, _sum: { sizeBytes: true } }),
     prisma.video.aggregate({ where: { gallery: { studioId } }, _sum: { sizeBytes: true } }),
+    // GalleryRawFile (18/09/2026, fichiers RAW) : $queryRaw plutôt que l'API Prisma typée —
+    // modèle trop récent pour le Prisma Client généré du sandbox (voir son commentaire dans
+    // schema.prisma). Même quota que photos/vidéos (choix d'Adriel le 18/09/2026 : "même
+    // quota que les photos/galeries").
+    prisma.$queryRaw<{ sum: bigint | null }[]>`
+      SELECT SUM("sizeBytes") AS sum FROM "GalleryRawFile"
+      WHERE "galleryId" IN (SELECT "id" FROM "Gallery" WHERE "studioId" = ${studioId})
+    `,
   ]);
 
   const plan = studio?.plan ?? null;
-  const storageUsedBytes = (photoSizeAgg._sum.sizeBytes || 0) + (videoSizeAgg._sum.sizeBytes || 0);
+  const rawFileBytes = Number(rawFileSizeAgg[0]?.sum ?? 0);
+  const storageUsedBytes =
+    (photoSizeAgg._sum.sizeBytes || 0) + (videoSizeAgg._sum.sizeBytes || 0) + rawFileBytes;
   const storageLimitGB = plan?.storageLimitGB ?? null;
   const storagePct = storageLimitGB ? (storageUsedBytes / (storageLimitGB * GB)) * 100 : null;
 

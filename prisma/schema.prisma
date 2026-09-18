@@ -598,6 +598,10 @@ model Gallery {
   /// Crédits prestataires (fleuriste, lieu, traiteur...) — voir GalleryCredit, onglet
   /// Réglages > Publication/Présentation > "Crédits".
   credits         GalleryCredit[]
+  /// Fichiers RAW/originaux sauvegardés par le studio (voir GalleryRawFile) — demande
+  /// d'Adriel le 18/09/2026 : "ajouter... la possibilité de sauvegarder les fichiers raw du
+  /// photographe".
+  rawFiles        GalleryRawFile[]
 
   @@index([studioId])
   @@index([clientId])
@@ -639,6 +643,40 @@ model GalleryCredit {
   url       String?
   position  Int      @default(0)
   createdAt DateTime @default(now())
+
+  @@index([galleryId])
+}
+
+/// Fichier RAW (ou tout original haute résolution) sauvegardé par le photographe dans une
+/// galerie, via le bouton "Fichiers" du panel studio (18/09/2026, demande d'Adriel : "un
+/// boutton fichiers pour permettre d'ajouter les images des formats traditionnel et aussi
+/// des fichier raw"). Volontairement séparé de Photo : contrairement à une photo, un fichier
+/// RAW n'a ni miniature ni aperçu web (la plupart des formats RAW propriétaires — CR2/CR3,
+/// NEF, ARW, ORF, RW2... — ne sont pas décodables par `sharp`, seule librairie de traitement
+/// d'image de ce projet, sans un décodeur dédié type libraw/dcraw absent ici), et n'est
+/// JAMAIS exposé au client ni à l'invité (toujours privé, réservé au studio — voir
+/// /api/galleries/[id]/raw-files, requireStudioSession uniquement, aucune route publique).
+/// Compte dans le même quota de stockage que Photo/Video (voir src/lib/quotas.ts).
+///
+/// $queryRaw/$executeRaw plutôt que l'API Prisma typée : ce modèle est trop récent pour le
+/// Prisma Client généré du sandbox (même limitation que GalleryCredit, voir son commentaire
+/// ci-dessous) — Adriel doit lancer `prisma generate && prisma db push` localement avant que
+/// cette table soit utilisable en production.
+model GalleryRawFile {
+  id         String   @id @default(cuid())
+  galleryId  String
+  gallery    Gallery  @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  /// Nom de fichier original tel qu'uploadé (ex: "IMG_1234.CR3"), pour le nom du fichier
+  /// téléchargé.
+  filename   String
+  /// Clé de stockage (voir src/lib/storage.ts, buildRawFileKey) — un seul fichier, pas de
+  /// variantes comme pour Photo (pas de thumb/preview possible).
+  storageKey String
+  sizeBytes  Int
+  /// Type MIME si connu (souvent vide/générique pour un RAW propriétaire — l'extension du
+  /// nom de fichier fait foi pour la validation, voir src/lib/rawFileUpload.ts).
+  mimeType   String?
+  createdAt  DateTime @default(now())
 
   @@index([galleryId])
 }

@@ -244,6 +244,16 @@ export function buildVideoKey(studioId: string, galleryId: string, videoId: stri
 }
 
 /**
+ * Clé de stockage d'un fichier RAW/original sauvegardé par le studio (voir modèle
+ * GalleryRawFile et /api/galleries/[id]/raw-files) — hors de l'arborescence des photos
+ * (`{photoId}/original.ext`) puisque ce n'est pas lié à une Photo existante : un fichier RAW
+ * peut être ajouté seul, sans JPEG associé dans la galerie.
+ */
+export function buildRawFileKey(studioId: string, galleryId: string, fileId: string, ext: string) {
+  return `studios/${studioId}/galleries/${galleryId}/raw/${fileId}.${ext}`;
+}
+
+/**
  * Clé de stockage du logo/photo de profil d'un studio — toujours la même par studio
  * (un seul logo actif à la fois, un nouvel upload remplace le précédent), au contraire
  * des photos de galerie qui ont chacune un id. Voir /api/settings/logo (écriture) et
