@@ -350,12 +350,6 @@ export function GalleryManager({
   const [settingsSubTab, setSettingsSubTab] = useState<SettingsSubTab>("publication");
   const [designSection, setDesignSection] = useState<DesignSection>("cover");
   const [design, setDesign] = useState<GalleryDesign>(() => resolveGalleryDesign(gallery.design));
-  // Bouton icône "apparence" à côté du statut (demande d'Adriel le 18/09/2026) : dérivé du
-  // groupe ("light"/"dark"/"brand") du thème de fond actuel dans BACKGROUND_THEMES — permet
-  // au bouton d'afficher soleil/lune correctement même si le thème courant n'est pas
-  // littéralement la clé "light" ou "dark" (ex: "ivory" ou "anthracite").
-  const isDarkAppearance = BACKGROUND_THEMES.find((b) => b.key === design.backgroundTheme)?.group === "dark";
-
   // Fournit le titre de la galerie au fil d'Ariane de la barre du haut fixe (18/09/2026, voir
   // DashboardTopBar) — sans ça, la barre ne pourrait afficher que "Galeries" générique sur
   // cette page, faute de connaître quelle galerie est ouverte.
@@ -1741,29 +1735,6 @@ export function GalleryManager({
               </div>
             )}
           </div>
-          {/* Bouton d'apparence du site (clair/sombre), à côté du statut — demande d'Adriel
-              le 18/09/2026 : "un boutton pour changer l'apparence du site (dark, light) ...
-              ce bouton dois etre juste une icone". Bascule directement `backgroundTheme`
-              entre le thème "light" et le thème "dark" de BACKGROUND_THEMES (Ambiance >
-              Le fond, onglet Réglages > Présentation), sans passer par ce panneau complet —
-              même logique/patch que les swatches de fond (voir plus bas dans ce fichier),
-              y compris la remise à null de backgroundCustomHex/backgroundCustomTextHex pour
-              sortir d'une éventuelle couleur personnalisée. */}
-          <button
-            type="button"
-            onClick={() =>
-              updateDesignFields({
-                backgroundTheme: isDarkAppearance ? "light" : "dark",
-                backgroundCustomHex: null,
-                backgroundCustomTextHex: null,
-              })
-            }
-            aria-label={isDarkAppearance ? t("gm.switchToLight") : t("gm.switchToDark")}
-            title={isDarkAppearance ? t("gm.switchToLight") : t("gm.switchToDark")}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gray-300 text-gray-500 hover:border-gray-400 hover:bg-gray-100 hover:text-gray-700"
-          >
-            <IconAppearanceToggle dark={isDarkAppearance} />
-          </button>
         </div>
         {/* `ml-auto` (au lieu de compter uniquement sur le `justify-between` du parent) :
             quand ce groupe de boutons passe à la ligne sur mobile (le `flex-wrap` du
@@ -5013,25 +4984,6 @@ function DesignLivePreview({
 /** Bouton icône d'apparence clair/sombre à côté du statut (demande d'Adriel le 18/09/2026) —
  * soleil quand le fond actuel est clair (clic → passer en sombre), lune quand il est sombre
  * (clic → repasser en clair), même paire d'icônes que les sélecteurs de thème habituels. */
-function IconAppearanceToggle({ dark }: { dark: boolean }) {
-  if (dark) {
-    return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11Z" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    );
-  }
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="12" cy="12" r="4.5" />
-      <path
-        d="M12 2.5v2.5M12 19v2.5M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2.5 12H5M19 12h2.5M4.2 19.8L6 18M18 6l1.8-1.8"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
 function IconPhotos() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
