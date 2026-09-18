@@ -250,6 +250,21 @@ export function GalleryManager({
   const [marqueeRect, setMarqueeRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [draggedPhotoId, setDraggedPhotoId] = useState<string | null>(null);
   const [dragOverPhotoId, setDragOverPhotoId] = useState<string | null>(null);
+  // Glisser-déposer tactile (tablette/mobile) via une poignée dédiée sur chaque vignette
+  // (retour d'Adriel le 18/09/2026 : "sur une tablette le drag and drop des images n'est pas
+  // fluide... même impossible") — le `draggable` HTML5 natif ci-dessous ne fonctionne quasiment
+  // jamais au toucher (Safari iPadOS/Chrome Android ne déclenchent pas `dragstart` de façon
+  // fiable sur un geste tactile), il ne sert donc en pratique qu'à la souris. Cette poignée
+  // utilise les Pointer Events à la place, qui unifient souris/tactile/stylet, avec une vignette
+  // fantôme qui suit le doigt pour matérialiser le transport (icône demandée par Adriel).
+  // Réutilise `draggedPhotoId`/`dragOverPhotoId` ci-dessus (même sémantique que le drag HTML5) ;
+  // `dragGhostPos` n'est renseigné que pour CE chemin tactile (le drag HTML5 a son propre rendu
+  // fantôme géré par le navigateur, pas besoin du nôtre).
+  const [dragGhostPos, setDragGhostPos] = useState<{ x: number; y: number } | null>(null);
+  const dragOverPhotoIdRef = useRef<string | null>(null);
+  // Conteneur qui défile réellement (voir `overflow-y-auto` plus bas) — nécessaire pour faire
+  // défiler automatiquement pendant un glisser-déposer tactile près des bords haut/bas.
+  const photosScrollRef = useRef<HTMLDivElement | null>(null);
   // Glisser-déposer pour réordonner les sessions (demande d'Adriel le 14/09/2026, même
   // principe que pour les photos) — pas d'état local pour gallery.collections (comme le
   // reste des mutations de sets dans ce composant), on persiste puis router.refresh().
@@ -989,6 +1004,90 @@ export function GalleryManager({
       // prochain rechargement — pas bloquant pour un simple réordonnancement visuel.
     }
   }
+
+  // Garde `dragOverPhotoIdRef` synchronisé avec l'état, pour que l'écouteur `pointerup` de
+  // l'effet ci-dessous (qui ne se réabonne qu'au démarrage/arrêt du glisser, pas à chaque
+  // survol — sinon on détacherait/rattacherait les écouteurs à chaque pixel parcouru) lise
+  // toujours la dernière vignette survolée sans dépendre d'une closure obsolète.
+  useEffect(() => {
+    dragOverPhotoIdRef.current = dragOverPhotoId;
+  }, [dragOverPhotoId]);
+
+  /** Démarre un glisser-déposer tactile (poignée dédiée, voir Pointer Events plus bas) sur
+   * `photoId` — pendant du `onDragStart` HTML5 mais qui fonctionne aussi au doigt/stylet. */
+  function handleDragHandlePointerDown(e: React.PointerEvent, photoId: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDraggedPhotoId(photoId);
+    setDragGhostPos({ x: e.clientX, y: e.clientY });
+  }
+
+  // Suit le pointeur pendant un glisser-déposer tactile (déclenché par la poignée ci-dessus,
+  // reconnaissable par `dragGhostPos` non nul — le drag HTML5 à la souris ne le renseigne
+  // jamais) : met à jour la vignette survolée + fait défiler automatiquement près des bords
+  // haut/bas du conteneur, puis déclenche `handlePhotoDrop` au relâchement — même logique
+  // finale que le glisser-déposer HTML5 (réutilise `handlePhotoDrop`).
+  useEffect(() => {
+    if (!draggedPhotoId || !dragGhostPos) return;
+    let scrollRaf = 0;
+    let scrollDelta = 0;
+
+    function autoScroll() {
+      const container = photosScrollRef.current;
+      if (container && scrollDelta !== 0) container.scrollTop += scrollDelta;
+      scrollRaf = requestAnimationFrame(autoScroll);
+    }
+    scrollRaf = requestAnimationFrame(autoScroll);
+
+    function onMove(e: PointerEvent) {
+      setDragGhostPos({ x: e.clientX, y: e.clientY });
+
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const tile = el?.closest("[data-photo-tile]") as HTMLElement | null;
+      const id = tile?.getAttribute("data-photo-id");
+      if (id && id !== dragOverPhotoIdRef.current) setDragOverPhotoId(id);
+
+      // Zone de 60px en haut/bas du conteneur scrollable : vitesse de défilement
+      // proportionnelle à la proximité du bord, comme la plupart des interfaces de type
+      // Trello/Notion — indispensable ici car une galerie peut contenir des centaines de
+      // photos qui dépassent largement la hauteur d'écran d'une tablette.
+      const container = photosScrollRef.current;
+      if (container) {
+        const rect = container.getBoundingClientRect();
+        const edge = 60;
+        if (e.clientY < rect.top + edge) {
+          scrollDelta = -Math.ceil((rect.top + edge - e.clientY) / 4);
+        } else if (e.clientY > rect.bottom - edge) {
+          scrollDelta = Math.ceil((e.clientY - (rect.bottom - edge)) / 4);
+        } else {
+          scrollDelta = 0;
+        }
+      }
+    }
+
+    function onUp() {
+      cancelAnimationFrame(scrollRaf);
+      const target = dragOverPhotoIdRef.current;
+      setDragGhostPos(null);
+      if (target) {
+        handlePhotoDrop(target);
+      } else {
+        setDraggedPhotoId(null);
+        setDragOverPhotoId(null);
+      }
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      cancelAnimationFrame(scrollRaf);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draggedPhotoId !== null && dragGhostPos !== null]);
 
   async function bulkDeleteSelected() {
     if (selectedPhotoIds.size === 0 || bulkActing) return;
@@ -2158,7 +2257,7 @@ export function GalleryManager({
                 </div>
               )}
 
-              <div className="absolute inset-0 overflow-y-auto">
+              <div ref={photosScrollRef} className="absolute inset-0 overflow-y-auto">
               {/* Bandeau d'explication du set "Réseaux sociaux" — visible uniquement quand ce
                   set est ouvert (voir activeSocialSet), demande d'Adriel, 12/08/2026. */}
               {activeSocialSet && (
@@ -2422,30 +2521,7 @@ export function GalleryManager({
                           key={photo.id}
                           ref={registerPhotoTileRef(photo.id)}
                           data-photo-tile
-                          draggable
-                          onDragStart={(e) => {
-                            e.dataTransfer.effectAllowed = "move";
-                            // Ne sélectionne PAS la photo glissée (retour d'Adriel le
-                            // 14/09/2026) : glisser-déposer ne doit faire que réordonner,
-                            // pas sélectionner. handlePhotoDrop gère déjà les deux cas :
-                            // déplacer tout le groupe si la photo glissée fait partie d'une
-                            // sélection existante, sinon ne déplacer qu'elle seule.
-                            setDraggedPhotoId(photo.id);
-                          }}
-                          onDragOver={(e) => {
-                            e.preventDefault();
-                            e.dataTransfer.dropEffect = "move";
-                            if (dragOverPhotoId !== photo.id) setDragOverPhotoId(photo.id);
-                          }}
-                          onDragLeave={() => setDragOverPhotoId((id) => (id === photo.id ? null : id))}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            handlePhotoDrop(photo.id);
-                          }}
-                          onDragEnd={() => {
-                            setDraggedPhotoId(null);
-                            setDragOverPhotoId(null);
-                          }}
+                          data-photo-id={photo.id}
                           onClick={(e) => {
                             if (e.shiftKey) {
                               selectRangeTo(photo.id);
@@ -2515,6 +2591,29 @@ export function GalleryManager({
                             ) : (
                               <IconShare />
                             )}
+                          </button>
+                          {/* Poignée de glisser-déposer (retour d'Adriel le 18/09/2026 : sur
+                              tablette, le drag-and-drop natif ci-dessus n'était pas fluide, voire
+                              impossible — Safari/Chrome tactiles ne déclenchent pas `dragstart` de
+                              façon fiable au doigt). Toujours visible par défaut (contrairement à
+                              la sélection/au partage ci-dessus qui n'apparaissent qu'au survol
+                              souris) car un écran tactile n'a pas d'état de survol pour la
+                              découvrir — seulement estompée au repos sur les appareils À souris
+                              (`@media(hover:hover)`), où le survol suffit à la révéler. Pilotée
+                              par Pointer Events (handleDragHandlePointerDown, souris/tactile/
+                              stylet unifiés) plutôt que l'API HTML5 `draggable` retirée du
+                              conteneur ci-dessus. */}
+                          <button
+                            type="button"
+                            draggable={false}
+                            onPointerDown={(e) => handleDragHandlePointerDown(e, photo.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            title={t("gm.dragToReorder")}
+                            aria-label={t("gm.dragToReorder")}
+                            style={{ touchAction: "none" }}
+                            className="absolute bottom-1.5 right-1.5 z-10 flex h-7 w-7 cursor-grab items-center justify-center rounded-full bg-black/50 text-white opacity-70 active:cursor-grabbing [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
+                          >
+                            <IconDragHandle />
                           </button>
                           <div
                             onClick={(e) => e.stopPropagation()}
@@ -2668,6 +2767,26 @@ export function GalleryManager({
                 </svg>
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Vignette fantôme qui suit le doigt/curseur pendant un glisser-déposer démarré
+            depuis la poignée tactile (voir handleDragHandlePointerDown) — matérialise le
+            transport de la photo, demande d'Adriel le 18/09/2026. `pointer-events-none` :
+            ne doit jamais intercepter les événements destinés à `elementFromPoint` (sinon on
+            se retrouverait toujours "au-dessus" de la fantôme elle-même). */}
+        {draggedPhotoId && dragGhostPos && (
+          <div
+            className="pointer-events-none fixed z-[100] -translate-x-1/2 -translate-y-1/2 rotate-3 overflow-hidden rounded-lg ring-2 ring-brand-400"
+            style={{ left: dragGhostPos.x, top: dragGhostPos.y, width: 72, height: 72, boxShadow: "0 12px 28px rgba(0,0,0,0.35)" }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={thumbUrl(draggedPhotoId)} alt="" className="h-full w-full object-cover opacity-90" />
+            {selectedPhotoIds.has(draggedPhotoId) && selectedPhotoIds.size > 1 && (
+              <span className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-xs font-semibold text-white ring-2 ring-white">
+                {selectedPhotoIds.size}
+              </span>
+            )}
           </div>
         )}
 
@@ -5062,6 +5181,21 @@ function IconShare() {
       <path d="M12 3v12" strokeLinecap="round" />
       <path d="M8 7l4-4 4 4" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Poignée de glisser-déposer (grille Photos, voir handleDragHandlePointerDown) — 6 points
+ * façon "grip", convention universellement reconnue pour "cet élément se déplace". */
+function IconDragHandle() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor">
+      <circle cx="6" cy="4" r="1.5" />
+      <circle cx="14" cy="4" r="1.5" />
+      <circle cx="6" cy="10" r="1.5" />
+      <circle cx="14" cy="10" r="1.5" />
+      <circle cx="6" cy="16" r="1.5" />
+      <circle cx="14" cy="16" r="1.5" />
     </svg>
   );
 }
