@@ -35,15 +35,155 @@ body {
 }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors;
+  @apply inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800;
 }
 
 .input {
-  @apply w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500;
+  @apply w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500;
 }
 
 .card {
-  @apply rounded-xl border border-gray-200 bg-white p-6 shadow-sm;
+  @apply rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900;
+}
+
+/* ===================== Retrofit mode sombre — pages non encore migrées =====================
+   Le contenu des pages du dashboard (tableaux, cartes, listes...) n'a pas encore reçu de
+   classes `dark:` dédiées au cas par cas (des dizaines de fichiers, chantier trop long pour
+   une seule passe — voir commentaire dans ThemeProvider.tsx). En attendant, ces règles
+   réinterceptent ici les classes Tailwind les plus utilisées dans le panel (fonds blancs/gris
+   clairs, textes gris foncés, bordures grises, pastilles de statut colorées) dès que la classe
+   "dark" est posée sur <html>, pour éviter le résultat bancal remonté par Adriel le 18/09/2026
+   ("le mode dark ne s'applique pas bien... la couleur doit s'adapter avec le mode dark") :
+   cartes blanches flottant sur fond sombre, ou pire, texte gris foncé sur fond sombre devenu
+   quasi illisible (ex: page Invités, où `text-gray-900` restait sombre alors que le fond du
+   body passait en `dark:bg-gray-950`).
+   Portée : uniquement quand "dark" est sur <html>, qui n'est JAMAIS posée hors du dashboard
+   studio (voir ThemeProvider.tsx) — aucun effet sur le site marketing, l'espace client, les
+   galeries publiques ni le panel admin (qui n'a pas de bouton apparence). Les aperçus de
+   design de galerie (DesignLivePreview, GalleryView) utilisent des couleurs en `style` inline
+   (palette choisie par le studio, pas des classes Tailwind) : la spécificité d'un style inline
+   est toujours supérieure à une classe CSS, donc ces règles ne peuvent pas les repeindre par
+   erreur.
+   `!important` : nécessaire pour primer de façon fiable sur les classes utilitaires
+   Tailwind d'origine (même spécificité qu'un simple sélecteur de classe), indépendamment de
+   l'ordre de génération du CSS par le plugin Tailwind. */
+
+/* Fonds neutres */
+html.dark .bg-white,
+html.dark .bg-gray-50 {
+  background-color: #111827 !important; /* gray-900 */
+}
+html.dark .bg-gray-100,
+html.dark .bg-gray-200 {
+  background-color: #1f2937 !important; /* gray-800 */
+}
+html.dark .hover\:bg-white:hover,
+html.dark .hover\:bg-gray-50:hover {
+  background-color: #1f2937 !important;
+}
+html.dark .hover\:bg-gray-100:hover {
+  background-color: #374151 !important; /* gray-700 */
+}
+
+/* Textes neutres */
+html.dark .text-gray-900,
+html.dark .text-gray-800 {
+  color: #f3f4f6 !important; /* gray-100 */
+}
+html.dark .text-gray-700,
+html.dark .text-gray-600 {
+  color: #d1d5db !important; /* gray-300 */
+}
+html.dark .text-gray-500,
+html.dark .text-gray-400 {
+  color: #9ca3af !important; /* gray-400 */
+}
+html.dark .hover\:text-gray-700:hover,
+html.dark .hover\:text-gray-800:hover,
+html.dark .hover\:text-gray-900:hover {
+  color: #f3f4f6 !important;
+}
+html.dark .placeholder-gray-400::placeholder {
+  color: #6b7280 !important;
+}
+
+/* Bordures et séparateurs */
+html.dark .border-gray-100,
+html.dark .border-gray-200 {
+  border-color: #1f2937 !important; /* gray-800 */
+}
+html.dark .border-gray-300 {
+  border-color: #374151 !important; /* gray-700 */
+}
+html.dark .hover\:border-gray-300:hover {
+  border-color: #4b5563 !important; /* gray-600 */
+}
+html.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1f2937 !important;
+}
+
+/* Pastilles de statut colorées (brouillon/publié, payé/impayé, en attente/approuvé...) —
+   fond très clair + texte saturé en mode normal ; en sombre, on garde le même équilibre
+   (léger voile de couleur + texte pastel de la même teinte) plutôt qu'un simple gris neutre,
+   pour ne pas perdre le code couleur (vert = OK, rouge = alerte, ambre = en attente). */
+html.dark .bg-red-50,
+html.dark .bg-red-100 {
+  background-color: rgba(239, 68, 68, 0.15) !important;
+}
+html.dark .text-red-500,
+html.dark .text-red-600,
+html.dark .text-red-700,
+html.dark .text-red-800 {
+  color: #fca5a5 !important; /* red-300 */
+}
+html.dark .bg-amber-50,
+html.dark .bg-amber-100 {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+}
+html.dark .text-amber-500,
+html.dark .text-amber-600,
+html.dark .text-amber-700,
+html.dark .text-amber-800 {
+  color: #fcd34d !important; /* amber-300 */
+}
+html.dark .bg-yellow-100 {
+  background-color: rgba(234, 179, 8, 0.15) !important;
+}
+html.dark .text-yellow-700 {
+  color: #fde047 !important; /* yellow-300 */
+}
+html.dark .bg-emerald-50,
+html.dark .bg-emerald-100 {
+  background-color: rgba(16, 185, 129, 0.15) !important;
+}
+html.dark .text-emerald-500,
+html.dark .text-emerald-600,
+html.dark .text-emerald-700,
+html.dark .text-emerald-800 {
+  color: #6ee7b7 !important; /* emerald-300 */
+}
+html.dark .bg-green-50,
+html.dark .bg-green-100,
+html.dark .bg-green-200 {
+  background-color: rgba(34, 197, 94, 0.15) !important;
+}
+html.dark .text-green-600,
+html.dark .text-green-700 {
+  color: #86efac !important; /* green-300 */
+}
+html.dark .bg-blue-50 {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+}
+html.dark .text-blue-600,
+html.dark .text-blue-700 {
+  color: #93c5fd !important; /* blue-300 */
+}
+html.dark .bg-rose-50 {
+  background-color: rgba(244, 63, 94, 0.15) !important;
+}
+html.dark .text-rose-600 {
+  color: #fda4af !important; /* rose-300 */
 }
 
 /* ===================== Hero mockup animé (accueil marketing) =====================
