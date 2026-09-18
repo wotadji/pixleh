@@ -606,6 +606,9 @@ model Gallery {
   /// d'Adriel le 18/09/2026 : "ajouter... la possibilité de sauvegarder les fichiers raw du
   /// photographe".
   rawFiles        GalleryRawFile[]
+  /// Dossiers d'organisation des fichiers RAW (voir GalleryRawFolder) — demande d'Adriel le
+  /// 18/09/2026 : "un espace comme s'il etait dans son ordinateur" (arborescence de dossiers).
+  rawFolders      GalleryRawFolder[]
 
   @@index([studioId])
   @@index([clientId])
@@ -670,8 +673,13 @@ model GalleryRawFile {
   id         String   @id @default(cuid())
   galleryId  String
   gallery    Gallery  @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  /// Dossier contenant ce fichier (voir GalleryRawFolder) — null = à la racine de l'espace
+  /// Fichiers de la galerie. Ajouté le 18/09/2026 (chantier "espace comme sur un ordinateur",
+  /// demande d'Adriel) pour permettre d'organiser les fichiers en dossiers.
+  folderId   String?
+  folder     GalleryRawFolder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
   /// Nom de fichier original tel qu'uploadé (ex: "IMG_1234.CR3"), pour le nom du fichier
-  /// téléchargé.
+  /// téléchargé — renommable ensuite (voir PATCH /api/galleries/[id]/raw-files/[fileId]).
   filename   String
   /// Clé de stockage (voir src/lib/storage.ts, buildRawFileKey) — un seul fichier, pas de
   /// variantes comme pour Photo (pas de thumb/preview possible).
@@ -683,6 +691,45 @@ model GalleryRawFile {
   createdAt  DateTime @default(now())
 
   @@index([galleryId])
+  @@index([folderId])
+}
+
+/// Dossier de l'espace "Fichiers" d'une galerie (voir GalleryRawFile) — 18/09/2026, demande
+/// d'Adriel : "je veux que le user puisse organiser son espace par la creation des dossiers
+/// la suppression, l'archivage des dossiers [...] un espace comme s'il etait dans son
+/// ordinateur". Arborescence libre (`parentId` auto-référencé, aucune limite de profondeur),
+/// comme des dossiers/sous-dossiers classiques.
+///
+/// `archived` : un dossier archivé (et tout son contenu) disparaît de la navigation normale
+/// de son dossier parent et apparaît uniquement dans la vue "Archives" (voir GET .../raw-files
+/// ?archived=1) — mais reste entièrement navigable/téléchargeable depuis là, à la différence
+/// d'une suppression qui est définitive. Volontairement indépendant du contenu (pas propagé
+/// aux sous-dossiers en base) : c'est la navigation/l'UI qui traite "être sous un dossier
+/// archivé" comme suffisant, inutile de dupliquer le flag sur toute la descendance.
+///
+/// $queryRaw/$executeRaw plutôt que l'API Prisma typée : modèle trop récent pour le Prisma
+/// Client généré du sandbox (même limitation que GalleryRawFile ci-dessus) — Adriel doit
+/// lancer `prisma generate && prisma db push` localement.
+model GalleryRawFolder {
+  id         String   @id @default(cuid())
+  galleryId  String
+  gallery    Gallery  @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  parentId   String?
+  /// onDelete: Cascade — supprimer un dossier supprime toute sa descendance (sous-dossiers ET
+  /// fichiers) au niveau base ; le nettoyage des fichiers réellement stockés (SFTP/local) se
+  /// fait avant coup côté route API (voir DELETE .../raw-files/folders/[folderId]), qui
+  /// collecte d'abord récursivement toutes les storageKey concernées.
+  parent     GalleryRawFolder?  @relation("GalleryRawFolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children   GalleryRawFolder[] @relation("GalleryRawFolderChildren")
+  name       String
+  archived   Boolean  @default(false)
+  archivedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  files      GalleryRawFile[]
+
+  @@index([galleryId])
+  @@index([parentId])
 }
 
 /// Statut d'un Transfert rapide (voir QuickTransfer). ACTIVE tant que le lien de

@@ -130,9 +130,18 @@ export function DashboardTopBar() {
     if (segments.length > 2) {
       const third = segments[2];
       if (breadcrumbExtra) {
-        crumbs.push({ label: breadcrumbExtra, href: pathname || "" });
+        // Segment intermédiaire (ex: titre de la galerie) — cliquable seulement s'il reste
+        // un 4e segment après lui (ex: .../galleries/[id]/files), sinon c'est déjà la page
+        // courante.
+        const hrefForExtra = segments.length > 3 ? `/dashboard/${sectionKey}/${third}` : pathname || "";
+        crumbs.push({ label: breadcrumbExtra, href: hrefForExtra });
       } else if (third === "new" && NEW_LABEL_KEYS[sectionKey]) {
         crumbs.push({ label: t(NEW_LABEL_KEYS[sectionKey]).replace(/^\+\s*/, ""), href: pathname || "" });
+      }
+      // 4e segment : pour l'instant seule la page "Fichiers" d'une galerie en a un
+      // (/dashboard/galleries/[id]/files, chantier dossiers RAW du 18/09/2026).
+      if (segments.length > 3 && segments[3] === "files") {
+        crumbs.push({ label: t("gm.rawFiles"), href: pathname || "" });
       }
     }
   }

@@ -17,6 +17,10 @@ export const maxDuration = 300;
  * réservé au studio (requireStudioSession uniquement, jamais de route publique équivalente
  * à /api/files/[...path] pour les photos). $queryRaw/$executeRaw : voir le commentaire du
  * modèle dans schema.prisma.
+ *
+ * `folderId` (query param GET, form field POST) — dossier courant de l'espace "Fichiers"
+ * (voir GalleryRawFolder). Absent/vide = racine de la galerie. Ajouté le 18/09/2026
+ * (chantier "espace comme sur un ordinateur", demande d'Adriel).
  */
 
 async function assertGalleryOwnership(galleryId: string, studioId: string) {
@@ -25,17 +29,75 @@ async function assertGalleryOwnership(galleryId: string, studioId: string) {
   return gallery;
 }
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+/** Vérifie que le dossier appartient bien à cette galerie (évite qu'un studio pointe vers le
+ * dossier d'une autre galerie/un autre studio via un id deviné). */
+async function assertFolderOwnership(folderId: string, galleryId: string) {
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM "GalleryRawFolder" WHERE "id" = ${folderId} AND "galleryId" = ${galleryId}
+  `;
+  if (rows.length === 0) throw new AccessError("Dossier introuvable", 404);
+}
+
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
     const session = await requireStudioSession();
     await assertGalleryOwnership(params.id, session.user.studioId);
 
-    const files = await prisma.$queryRaw<
-      { id: string; filename: string; sizeBytes: number; mimeType: string | null; createdAt: Date }[]
-    >`SELECT "id", "filename", "sizeBytes", "mimeType", "createdAt" FROM "GalleryRawFile"
-      WHERE "galleryId" = ${params.id} ORDER BY "createdAt" DESC`;
+    const { searchParams } = new URL(req.url);
+    const folderId = searchParams.get("folderId") || null;
+    const archivedView = searchParams.get("archived") === "1";
 
-    return NextResponse.json({ files });
+    if (folderId) await assertFolderOwnership(folderId, params.id);
+
+    if (archivedView) {
+      // Vue "Archives" : tous les dossiers archivés à la racine (peu importe leur parent),
+      // affichés à plat — voir GalleryRawFolder.archived dans schema.prisma. Pas de fichiers
+      // à la racine dans cette vue : on navigue dans un dossier archivé pour voir son contenu.
+      const folders = await prisma.$queryRaw<
+        { id: string; name: string; parentId: string | null; archived: boolean; archivedAt: Date | null; createdAt: Date }[]
+      >`SELECT "id", "name", "parentId", "archived", "archivedAt", "createdAt" FROM "GalleryRawFolder"
+        WHERE "galleryId" = ${params.id} AND "archived" = true ORDER BY "archivedAt" DESC`;
+      return NextResponse.json({ folders, files: [], folderId: null, archivedView: true });
+    }
+
+    const folders = folderId
+      ? await prisma.$queryRaw<
+          { id: string; name: string; parentId: string | null; archived: boolean; archivedAt: Date | null; createdAt: Date }[]
+        >`SELECT "id", "name", "parentId", "archived", "archivedAt", "createdAt" FROM "GalleryRawFolder"
+          WHERE "galleryId" = ${params.id} AND "parentId" = ${folderId} AND "archived" = false ORDER BY "name" ASC`
+      : await prisma.$queryRaw<
+          { id: string; name: string; parentId: string | null; archived: boolean; archivedAt: Date | null; createdAt: Date }[]
+        >`SELECT "id", "name", "parentId", "archived", "archivedAt", "createdAt" FROM "GalleryRawFolder"
+          WHERE "galleryId" = ${params.id} AND "parentId" IS NULL AND "archived" = false ORDER BY "name" ASC`;
+
+    const files = folderId
+      ? await prisma.$queryRaw<
+          { id: string; filename: string; sizeBytes: number; mimeType: string | null; createdAt: Date }[]
+        >`SELECT "id", "filename", "sizeBytes", "mimeType", "createdAt" FROM "GalleryRawFile"
+          WHERE "galleryId" = ${params.id} AND "folderId" = ${folderId} ORDER BY "createdAt" DESC`
+      : await prisma.$queryRaw<
+          { id: string; filename: string; sizeBytes: number; mimeType: string | null; createdAt: Date }[]
+        >`SELECT "id", "filename", "sizeBytes", "mimeType", "createdAt" FROM "GalleryRawFile"
+          WHERE "galleryId" = ${params.id} AND "folderId" IS NULL ORDER BY "createdAt" DESC`;
+
+    // Fil d'Ariane (breadcrumb) jusqu'à la racine, pour l'UI façon explorateur de fichiers.
+    let breadcrumb: { id: string; name: string }[] = [];
+    if (folderId) {
+      const chain = await prisma.$queryRaw<{ id: string; name: string; parentId: string | null }[]>`
+        WITH RECURSIVE ancestors AS (
+          SELECT "id", "name", "parentId" FROM "GalleryRawFolder" WHERE "id" = ${folderId}
+          UNION ALL
+          SELECT f."id", f."name", f."parentId" FROM "GalleryRawFolder" f
+          JOIN ancestors a ON f."id" = a."parentId"
+        )
+        SELECT "id", "name", "parentId" FROM ancestors
+      `;
+      // La CTE récursive remonte du dossier courant vers la racine : on inverse pour
+      // obtenir l'ordre racine → courant attendu par l'UI.
+      breadcrumb = chain.reverse().map((f) => ({ id: f.id, name: f.name }));
+    }
+
+    return NextResponse.json({ folders, files, folderId, breadcrumb });
   } catch (e) {
     return handleApiError(e);
   }
@@ -51,6 +113,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     if (typeof file === "string" || !file) {
       return NextResponse.json({ error: "Aucun fichier reçu" }, { status: 400 });
     }
+    const folderIdRaw = formData.get("folderId");
+    const folderId = typeof folderIdRaw === "string" && folderIdRaw.length > 0 ? folderIdRaw : null;
+    if (folderId) await assertFolderOwnership(folderId, gallery.id);
 
     const reason = rejectRawFileReason(file);
     if (reason === "unsupportedType") {
@@ -67,14 +132,17 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const fileId = randomUUID();
     const buffer = Buffer.from(await file.arrayBuffer());
     const ext = (path.extname(file.name).replace(".", "") || "raw").toLowerCase();
+    // Clé de stockage volontairement indépendante du dossier (fileId uniquement) : déplacer
+    // un fichier entre dossiers reste une simple mise à jour en base, jamais un déplacement
+    // physique sur le stockage (voir buildRawFileKey dans src/lib/storage.ts).
     const storageKey = buildRawFileKey(gallery.studioId, gallery.id, fileId, ext);
 
     const storage = getStorage();
     await storage.put(storageKey, buffer);
 
     await prisma.$executeRaw`
-      INSERT INTO "GalleryRawFile" ("id", "galleryId", "filename", "storageKey", "sizeBytes", "mimeType", "createdAt")
-      VALUES (${fileId}, ${gallery.id}, ${file.name}, ${storageKey}, ${buffer.length}, ${file.type || null}, NOW())
+      INSERT INTO "GalleryRawFile" ("id", "galleryId", "folderId", "filename", "storageKey", "sizeBytes", "mimeType", "createdAt")
+      VALUES (${fileId}, ${gallery.id}, ${folderId}, ${file.name}, ${storageKey}, ${buffer.length}, ${file.type || null}, NOW())
     `;
 
     return NextResponse.json(
@@ -85,6 +153,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           sizeBytes: buffer.length,
           mimeType: file.type || null,
           createdAt: new Date().toISOString(),
+          folderId,
         },
       },
       { status: 201 }
