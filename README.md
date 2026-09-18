@@ -176,6 +176,14 @@ passer une facture en retard au statut « En retard ».
    curl -s "https://votredomaine.com/api/cron/invoice-reminders?secret=VOTRE_CRON_SECRET"
    ```
 
+Ajoutez de la même façon une tâche quotidienne pour `/api/cron/quick-transfers-freeze` : elle
+gèle automatiquement (statut FROZEN, sans jamais supprimer les fichiers) les Transferts rapides
+dont les 14 jours de disponibilité sont dépassés (voir modèle `QuickTransfer`).
+
+```
+curl -s "https://votredomaine.com/api/cron/quick-transfers-freeze?secret=VOTRE_CRON_SECRET"
+```
+
 D'autres tâches de maintenance (ex : archivage automatique des galeries expirées) peuvent être
 ajoutées sur le même principe : une route API dédiée, appelée par `curl` depuis un cron, protégée
 par une clé secrète.

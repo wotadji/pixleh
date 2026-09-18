@@ -19,6 +19,9 @@ export const RESERVED_STUDIO_SLUGS = new Set([
   // (gallery)
   "g",
   "invite",
+  // (quick-transfer) — page publique de téléchargement d'un Transfert rapide, voir
+  // /t/[slug]/page.tsx (18/09/2026).
+  "t",
   // (marketing)
   "a-propos",
   "cgu",

@@ -77,6 +77,10 @@ model Studio {
   /// Modèles de réglages de galerie réutilisables (voir GalleryPreset) — chantier refonte
   /// panneau Réglages (12/09/2026), onglet Présentation > "Sauvegarder comme preset".
   galleryPresets GalleryPreset[]
+  /// Transferts rapides (façon WeTransfer, voir QuickTransfer) — 18/09/2026, demande
+  /// d'Adriel : "dans le sidebar ajouter la fonctionnalité transfert rapide permettant de
+  /// transferer des traveaux sans toute fois creer une galerie".
+  quickTransfers QuickTransfer[]
 }
 
 /// Palier tarifaire — entièrement gérable depuis le panel admin plateforme (/admin/plans,
@@ -679,6 +683,88 @@ model GalleryRawFile {
   createdAt  DateTime @default(now())
 
   @@index([galleryId])
+}
+
+/// Statut d'un Transfert rapide (voir QuickTransfer). ACTIVE tant que le lien de
+/// téléchargement fonctionne (dans les 14 jours suivant la création) ; FROZEN une fois ce
+/// délai dépassé — les fichiers sont CONSERVÉS (jamais supprimés automatiquement, voir le
+/// commentaire de QuickTransfer) mais le téléchargement public est bloqué. Basculé par la
+/// route cron /api/cron/quick-transfers-freeze, ET vérifié dynamiquement à chaque lecture
+/// (expiresAt) par sécurité si le cron n'a pas encore tourné.
+enum QuickTransferStatus {
+  ACTIVE
+  FROZEN
+}
+
+/// Transfert rapide façon WeTransfer (18/09/2026, demande d'Adriel : "dans le sidebar
+/// ajouter la fonctionnalité transfert rapide permettant de transferer des traveaux sans
+/// toute fois creer une galerie") — un lot de fichiers envoyé par le studio à un tiers via un
+/// simple lien de téléchargement PUBLIC (pas de session requise, voir /t/[slug]), sans passer
+/// par la création d'une galerie complète.
+///
+/// Cycle de vie : ACTIVE pendant 14 jours à partir de la création (`expiresAt` = `createdAt`
+/// + 14 jours), puis FROZEN automatiquement (voir QuickTransferStatus). Contrairement à une
+/// galerie qui expire, les fichiers d'un transfert gelé ne sont JAMAIS supprimés — ils
+/// restent sur le stockage du studio (comptent dans son quota, voir src/lib/quotas.ts) afin
+/// que le photographe puisse les récupérer plus tard. Le retour d'Adriel : "nous ne
+/// supprimons pas les images, nous les sauvegardons pour que si le photographe veux a
+/// nouveau ces images il dois payer en fonction de la taille des images un peu comme
+/// wetransfert" — SEUL le mécanisme de gel/statut est construit dans cette passe ; le
+/// paiement de récupération (Stripe) est explicitement reporté à une passe ultérieure
+/// (décision d'Adriel le 18/09/2026, voir tâche #557).
+///
+/// Toujours privé côté studio (accès protégé par requireStudioSession dans le panel), mais le
+/// lien /t/[slug] lui-même est public par nature : `slug` est un randomUUID() (128 bits
+/// d'entropie), donc pratiquement impossible à deviner — même logique que clientRef ailleurs
+/// dans ce projet (voir gallery-access/route.ts).
+///
+/// $queryRaw/$executeRaw plutôt que l'API Prisma typée : modèle trop récent pour le Prisma
+/// Client généré du sandbox (même limitation que GalleryCredit/GalleryRawFile ci-dessus) —
+/// Adriel doit lancer `prisma generate && prisma db push` localement avant que ces tables
+/// soient utilisables en production.
+model QuickTransfer {
+  id        String              @id @default(cuid())
+  studioId  String
+  studio    Studio              @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  /// Identifiant public imprévisible utilisé dans l'URL /t/[slug] — voir le commentaire
+  /// ci-dessus sur l'entropie du randomUUID().
+  slug      String              @unique
+  /// Titre optionnel affiché sur la page publique de téléchargement (ex: "Photos mariage
+  /// Julie & Marc") — purement indicatif, aucun impact sur le comportement.
+  title     String?
+  /// Message optionnel du studio à l'attention du destinataire, affiché sur la page publique.
+  message   String?
+  /// Email du destinataire — optionnel, purement informatif côté studio (liste des
+  /// transferts) : ce projet n'envoie PAS automatiquement d'email au destinataire dans cette
+  /// passe (pas de notifications.ts dédié), le studio partage lui-même le lien.
+  recipientEmail String?
+  status    QuickTransferStatus @default(ACTIVE)
+  createdAt DateTime            @default(now())
+  /// Calculé à la création = createdAt + 14 jours (voir POST /api/quick-transfers) — jamais
+  /// recalculé ensuite.
+  expiresAt DateTime
+  /// Renseigné par la route cron au moment où le statut bascule effectivement à FROZEN.
+  frozenAt  DateTime?
+  files     QuickTransferFile[]
+
+  @@index([studioId])
+}
+
+/// Fichier d'un Transfert rapide (voir QuickTransfer) — mêmes formats acceptés que le bouton
+/// "Fichiers" d'une galerie (traditionnels + RAW, voir src/lib/rawFileUpload.ts, réutilisé
+/// tel quel), même limite de taille (300 Mo/fichier).
+model QuickTransferFile {
+  id         String        @id @default(cuid())
+  transferId String
+  transfer   QuickTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  filename   String
+  /// Clé de stockage (voir src/lib/storage.ts, buildQuickTransferFileKey).
+  storageKey String
+  sizeBytes  Int
+  mimeType   String?
+  createdAt  DateTime      @default(now())
+
+  @@index([transferId])
 }
 
 /// Vidéo d'une galerie (film de mariage, teaser, clip...) — affichée dans un onglet

@@ -113,6 +113,10 @@ export function DashboardSidebar({
         // des produits d'impression bascule vers le panel Admin plateforme. Page/route non
         // supprimée, juste retirée de la nav — à réactiver ou retravailler plus tard.
         { href: "/dashboard/orders", label: t("nav.orders"), icon: <IconBag /> },
+        // "Transfert rapide" ajouté le 18/09/2026 (demande d'Adriel : "dans le sidebar
+        // ajouter la fonctionnalité transfert rapide permettant de transferer des traveaux
+        // sans toute fois creer une galerie") — voir modèle QuickTransfer.
+        { href: "/dashboard/quick-transfers", label: t("nav.quickTransfers"), icon: <IconSend /> },
         { href: "/dashboard/bookings", label: t("nav.bookings"), icon: <IconCalendar /> },
         { href: "/dashboard/contracts", label: t("nav.contracts"), icon: <IconContract /> },
         { href: "/dashboard/invoices", label: t("nav.invoices"), icon: <IconInvoice /> },
@@ -375,6 +379,18 @@ function IconGuest() {
       <circle cx="12" cy="8" r="3.5" />
       <path d="M4.5 20c0-4.1 3.4-7.5 7.5-7.5s7.5 3.4 7.5 7.5" strokeLinecap="round" />
       <path d="M9 9.5l1.5 1.5L15 7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Avion en papier — icône du lien "Transfert rapide" (18/09/2026), distincte de IconShareLink
+ * (utilisée dans GalleryManager pour le partage d'une galerie) pour bien marquer qu'il s'agit
+ * d'un envoi ponctuel de fichiers plutôt que d'un lien de galerie permanent. */
+function IconSend() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M22 2L11 13" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M22 2l-7 20-4-9-9-4 20-7z" strokeLinejoin="round" />
     </svg>
   );
 }

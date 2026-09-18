@@ -39,7 +39,7 @@ export interface QuotaStatus {
  * studio existant que de le couper par accident sur un cas qui ne devrait pas arriver.
  */
 export async function getQuotaStatus(studioId: string): Promise<QuotaStatus> {
-  const [studio, galleryCount, photoSizeAgg, videoSizeAgg, rawFileSizeAgg] = await Promise.all([
+  const [studio, galleryCount, photoSizeAgg, videoSizeAgg, rawFileSizeAgg, quickTransferSizeAgg] = await Promise.all([
     prisma.studio.findUnique({ where: { id: studioId }, include: { plan: true } }),
     prisma.gallery.count({ where: { studioId } }),
     prisma.photo.aggregate({ where: { gallery: { studioId } }, _sum: { sizeBytes: true } }),
@@ -52,12 +52,23 @@ export async function getQuotaStatus(studioId: string): Promise<QuotaStatus> {
       SELECT SUM("sizeBytes") AS sum FROM "GalleryRawFile"
       WHERE "galleryId" IN (SELECT "id" FROM "Gallery" WHERE "studioId" = ${studioId})
     `,
+    // QuickTransferFile (18/09/2026, Transfert rapide) : même logique — les fichiers d'un
+    // transfert ne sont jamais supprimés automatiquement (même gelé), ils continuent donc à
+    // occuper de l'espace et doivent compter dans le quota comme n'importe quel autre fichier.
+    prisma.$queryRaw<{ sum: bigint | null }[]>`
+      SELECT SUM("sizeBytes") AS sum FROM "QuickTransferFile"
+      WHERE "transferId" IN (SELECT "id" FROM "QuickTransfer" WHERE "studioId" = ${studioId})
+    `,
   ]);
 
   const plan = studio?.plan ?? null;
   const rawFileBytes = Number(rawFileSizeAgg[0]?.sum ?? 0);
+  const quickTransferBytes = Number(quickTransferSizeAgg[0]?.sum ?? 0);
   const storageUsedBytes =
-    (photoSizeAgg._sum.sizeBytes || 0) + (videoSizeAgg._sum.sizeBytes || 0) + rawFileBytes;
+    (photoSizeAgg._sum.sizeBytes || 0) +
+    (videoSizeAgg._sum.sizeBytes || 0) +
+    rawFileBytes +
+    quickTransferBytes;
   const storageLimitGB = plan?.storageLimitGB ?? null;
   const storagePct = storageLimitGB ? (storageUsedBytes / (storageLimitGB * GB)) * 100 : null;
 

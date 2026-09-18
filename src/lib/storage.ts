@@ -254,6 +254,16 @@ export function buildRawFileKey(studioId: string, galleryId: string, fileId: str
 }
 
 /**
+ * Clé de stockage d'un fichier de Transfert rapide (voir modèle QuickTransferFile et
+ * /api/quick-transfers) — hors de l'arborescence `galleries/...` puisqu'un transfert rapide
+ * n'est PAS rattaché à une galerie (demande d'Adriel le 18/09/2026 : "transferer des traveaux
+ * sans toute fois creer une galerie").
+ */
+export function buildQuickTransferFileKey(studioId: string, transferId: string, fileId: string, ext: string) {
+  return `studios/${studioId}/transfers/${transferId}/${fileId}.${ext}`;
+}
+
+/**
  * Clé de stockage du logo/photo de profil d'un studio — toujours la même par studio
  * (un seul logo actif à la fois, un nouvel upload remplace le précédent), au contraire
  * des photos de galerie qui ont chacune un id. Voir /api/settings/logo (écriture) et
