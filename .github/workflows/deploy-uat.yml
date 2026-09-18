@@ -66,40 +66,43 @@ jobs:
             ./ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_APP_PATH_UAT }}"
 
       - name: Installer les dépendances de prod, appliquer le schéma, redémarrer l'app
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          port: ${{ secrets.SSH_PORT }}
-          username: ${{ secrets.SSH_USER }}
-          password: ${{ secrets.SSH_PASSWORD }}
-          script: |
-            set -e
-            # Une session SSH non-interactive (comme celle-ci) ne charge pas le même
-            # PATH que le terminal Web SSH interactif du panel — sans ça, "node"/"npm"
-            # retombent sur une très vieille version par défaut du compte. On force
-            # explicitement le bon chemin (confirmé via `which node`/`which npm`).
-            # v20.0.0 (ancienne version par défaut du compte) ne satisfait pas la
-            # contrainte de "sharp" (^20.3.0 minimum) — utiliser v20.19.0, installée sur
-            # le serveur via `nvm install 20.19.0` (bug découvert le 29/07/2026 : upload
-            # d'image en échec, 502 Bad Gateway, "Could not load the sharp module").
-            export PATH="/home/.nvm/versions/node/v20.19.0/bin:$PATH"
-            cd "${{ secrets.SSH_APP_PATH_UAT }}"
-            node -v
-            npm -v
-            # Le "NodeJS Selector" du panel (Passenger-like) s'est révélé peu fiable :
-            # après un déploiement, il reste parfois bloqué en boucle de redémarrage
-            # ("Pausing for awhile") même quand le code est correct — touch tmp/restart.txt
-            # ne fait d'ailleurs rien ici (ce n'est pas vraiment Passenger). On gère donc
-            # le process nous-mêmes avec pm2, beaucoup plus fiable, indépendant du panel.
-            command -v pm2 >/dev/null 2>&1 || npm install -g pm2
-            # Arrêter le process AVANT de réinstaller les dépendances : sinon npm ci
-            # échoue (ENOTEMPTY) en essayant de remplacer des fichiers de node_modules
-            # encore ouverts par le process Node en cours d'exécution.
-            pm2 delete pixleh-uat 2>/dev/null || true
-            npm ci --omit=dev
-            npx prisma generate
-            npx prisma db push
-            export PORT="${{ secrets.SSH_APP_PORT_UAT }}"
-            export NODE_ENV=production
-            pm2 start server.js --name pixleh-uat
-            pm2 save
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          # appleboy/ssh-action est une "container action" (Docker) : impossible à exécuter
+          # sur un runner self-hosted macOS ("Container action is only supported on Linux",
+          # incident du 18/09/2026). Même correctif que deploy.yml : SSH direct en ligne de
+          # commande, script distant passé via heredoc à délimiteur quoté.
+          sshpass -e ssh -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash -s <<'REMOTE_SCRIPT'
+          set -e
+          # Une session SSH non-interactive (comme celle-ci) ne charge pas le même
+          # PATH que le terminal Web SSH interactif du panel — sans ça, "node"/"npm"
+          # retombent sur une très vieille version par défaut du compte. On force
+          # explicitement le bon chemin (confirmé via `which node`/`which npm`).
+          # v20.0.0 (ancienne version par défaut du compte) ne satisfait pas la
+          # contrainte de "sharp" (^20.3.0 minimum) — utiliser v20.19.0, installée sur
+          # le serveur via `nvm install 20.19.0` (bug découvert le 29/07/2026 : upload
+          # d'image en échec, 502 Bad Gateway, "Could not load the sharp module").
+          export PATH="/home/.nvm/versions/node/v20.19.0/bin:$PATH"
+          cd "${{ secrets.SSH_APP_PATH_UAT }}"
+          node -v
+          npm -v
+          # Le "NodeJS Selector" du panel (Passenger-like) s'est révélé peu fiable :
+          # après un déploiement, il reste parfois bloqué en boucle de redémarrage
+          # ("Pausing for awhile") même quand le code est correct — touch tmp/restart.txt
+          # ne fait d'ailleurs rien ici (ce n'est pas vraiment Passenger). On gère donc
+          # le process nous-mêmes avec pm2, beaucoup plus fiable, indépendant du panel.
+          command -v pm2 >/dev/null 2>&1 || npm install -g pm2
+          # Arrêter le process AVANT de réinstaller les dépendances : sinon npm ci
+          # échoue (ENOTEMPTY) en essayant de remplacer des fichiers de node_modules
+          # encore ouverts par le process Node en cours d'exécution.
+          pm2 delete pixleh-uat 2>/dev/null || true
+          npm ci --omit=dev
+          npx prisma generate
+          npx prisma db push
+          export PORT="${{ secrets.SSH_APP_PORT_UAT }}"
+          export NODE_ENV=production
+          pm2 start server.js --name pixleh-uat
+          pm2 save
+          REMOTE_SCRIPT

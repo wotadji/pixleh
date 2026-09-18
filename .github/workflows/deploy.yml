@@ -86,50 +86,58 @@ jobs:
             ./ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_APP_PATH }}"
 
       - name: Installer les dépendances de prod, appliquer le schéma, redémarrer l'app
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          port: ${{ secrets.SSH_PORT }}
-          username: ${{ secrets.SSH_USER }}
-          password: ${{ secrets.SSH_PASSWORD }}
-          script: |
-            set -e
-            # Une session SSH non-interactive (comme celle-ci) ne charge pas le même
-            # PATH que le terminal Web SSH interactif du panel — sans ça, "node"/"npm"
-            # retombent sur une très vieille version par défaut du compte. On force
-            # explicitement le bon chemin (confirmé via `which node`/`which npm` sur
-            # l'instance UAT — à revérifier si l'instance prod utilise un autre chemin).
-            # v20.0.0 (ancienne version par défaut du compte) ne satisfait pas la
-            # contrainte de "sharp" (^20.3.0 minimum) — utiliser v20.19.0.
-            export PATH="/home/.nvm/versions/node/v20.19.0/bin:$PATH"
-            cd "${{ secrets.SSH_APP_PATH }}"
-            node -v
-            npm -v
-            # Le "NodeJS Selector" du panel (Passenger-like) ne redémarre pas réellement
-            # l'app sur cet hébergement (Hepsia/cloudlogin) : touch tmp/restart.txt n'a
-            # aucun effet ici (bug découvert le 04/08/2026 lors du premier déploiement prod
-            # — l'app tournait toujours avec l'ancien code/l'ancien .env de l'UAT après un
-            # rsync réussi, provoquant des redirections vers l'ancien sous-domaine UAT lors
-            # du login). On gère donc le process nous-mêmes avec pm2, comme pour l'UAT.
-            command -v pm2 >/dev/null 2>&1 || npm install -g pm2
-            # L'instance Node.js unique de ce compte (limite du plan) a été réaffectée de
-            # l'UAT vers la prod le 04/08/2026 : on tue l'ancien process pixleh-uat s'il
-            # tourne encore (même port), en plus du process prod lui-même s'il existe déjà.
-            pm2 delete pixleh-uat 2>/dev/null || true
-            pm2 delete pixleh-prod 2>/dev/null || true
-            npm ci --omit=dev
-            npx prisma generate
-            # Le projet n'a pas d'historique de migrations Prisma (prisma/migrations
-            # n'existe pas) : le schéma a toujours été appliqué via `db push`, pas
-            # `migrate deploy`. En CI non interactif, `db push` échoue plutôt que
-            # d'appliquer silencieusement un changement destructeur — comportement voulu.
-            npx prisma db push
-            # server.js lit process.env.PORT AVANT que Next.js ne charge le .env (ligne 16,
-            # bien avant app.prepare()) — le PORT du .env est donc ignoré à ce stade. Il faut
-            # l'exporter explicitement ici, comme pour l'UAT (bug découvert le 04/08/2026 :
-            # sans ça, l'app retombe sur le port 3000 par défaut, EACCES sur ce compte, boucle
-            # de crash pm2).
-            export PORT="${{ secrets.SSH_APP_PORT }}"
-            export NODE_ENV=production
-            pm2 start server.js --name pixleh-prod
-            pm2 save
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          # appleboy/ssh-action est une "container action" (Docker) : impossible à exécuter
+          # sur un runner self-hosted macOS ("Container action is only supported on Linux",
+          # incident du 18/09/2026). On appelle SSH directement en ligne de commande, comme
+          # pour l'étape rsync ci-dessus — le script distant est passé via un heredoc à
+          # délimiteur quoté ('REMOTE_SCRIPT') pour que ce soit le shell DISTANT qui
+          # interprète les $VARIABLES (PATH, PORT...), pas le runner local. Les
+          # ${{ secrets.* }} sont substitués par GitHub Actions au niveau du YAML, avant
+          # que le shell (local ou distant) ne voie le texte — donc ça fonctionne malgré
+          # le heredoc quoté.
+          sshpass -e ssh -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash -s <<'REMOTE_SCRIPT'
+          set -e
+          # Une session SSH non-interactive (comme celle-ci) ne charge pas le même
+          # PATH que le terminal Web SSH interactif du panel — sans ça, "node"/"npm"
+          # retombent sur une très vieille version par défaut du compte. On force
+          # explicitement le bon chemin (confirmé via `which node`/`which npm` sur
+          # l'instance UAT — à revérifier si l'instance prod utilise un autre chemin).
+          # v20.0.0 (ancienne version par défaut du compte) ne satisfait pas la
+          # contrainte de "sharp" (^20.3.0 minimum) — utiliser v20.19.0.
+          export PATH="/home/.nvm/versions/node/v20.19.0/bin:$PATH"
+          cd "${{ secrets.SSH_APP_PATH }}"
+          node -v
+          npm -v
+          # Le "NodeJS Selector" du panel (Passenger-like) ne redémarre pas réellement
+          # l'app sur cet hébergement (Hepsia/cloudlogin) : touch tmp/restart.txt n'a
+          # aucun effet ici (bug découvert le 04/08/2026 lors du premier déploiement prod
+          # — l'app tournait toujours avec l'ancien code/l'ancien .env de l'UAT après un
+          # rsync réussi, provoquant des redirections vers l'ancien sous-domaine UAT lors
+          # du login). On gère donc le process nous-mêmes avec pm2, comme pour l'UAT.
+          command -v pm2 >/dev/null 2>&1 || npm install -g pm2
+          # L'instance Node.js unique de ce compte (limite du plan) a été réaffectée de
+          # l'UAT vers la prod le 04/08/2026 : on tue l'ancien process pixleh-uat s'il
+          # tourne encore (même port), en plus du process prod lui-même s'il existe déjà.
+          pm2 delete pixleh-uat 2>/dev/null || true
+          pm2 delete pixleh-prod 2>/dev/null || true
+          npm ci --omit=dev
+          npx prisma generate
+          # Le projet n'a pas d'historique de migrations Prisma (prisma/migrations
+          # n'existe pas) : le schéma a toujours été appliqué via `db push`, pas
+          # `migrate deploy`. En CI non interactif, `db push` échoue plutôt que
+          # d'appliquer silencieusement un changement destructeur — comportement voulu.
+          npx prisma db push
+          # server.js lit process.env.PORT AVANT que Next.js ne charge le .env (ligne 16,
+          # bien avant app.prepare()) — le PORT du .env est donc ignoré à ce stade. Il faut
+          # l'exporter explicitement ici, comme pour l'UAT (bug découvert le 04/08/2026 :
+          # sans ça, l'app retombe sur le port 3000 par défaut, EACCES sur ce compte, boucle
+          # de crash pm2).
+          export PORT="${{ secrets.SSH_APP_PORT }}"
+          export NODE_ENV=production
+          pm2 start server.js --name pixleh-prod
+          pm2 save
+          REMOTE_SCRIPT
